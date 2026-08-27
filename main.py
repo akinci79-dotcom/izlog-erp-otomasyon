@@ -254,6 +254,11 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             hedef_tutar = satis_fiyati_decimal.quantize(Decimal("0.01"))
 
+            # NOT: Aynı fatura no + aynı tutar birden fazla satırda görünebilir
+            # (örn. aynı faturanın farklı kalemleri aynı tutara sahip olabilir).
+            # Bu durum önemli değil: fatura no zaten eşleşiyorsa ve tutar da
+            # eşleşiyorsa, hangi satır olduğu fark etmez -- bu yüzden ilk
+            # eşleşen satır bulunur bulunmaz seçilir, kalan satırlara bakılmaz.
             aday_satirlar = lov_penceresi.locator(satir_bekleme_secici)
             aday_sayisi = aday_satirlar.count()
 
@@ -268,7 +273,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 incelenen_metinler.append(metin.replace("\n", " | "))
                 if _satirda_tutar_var_mi(metin, hedef_tutar):
                     hedef_satir = aday
-                    break
+                    break  # İlk eşleşme yeterli; duplikasyon sorun değil.
 
             if hedef_satir is None:
                 ornek = "\n".join(incelenen_metinler[:5])
