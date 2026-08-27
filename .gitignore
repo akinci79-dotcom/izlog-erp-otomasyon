@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+islem_listesi.xlsx
+yedek_islem_listesi_*.xlsx
+hata_*.png
