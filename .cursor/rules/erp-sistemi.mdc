@@ -86,9 +86,14 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   bazen YANLIŞ ekranı (Cari Seç) açmasıydı -- DXEditor29 düzeltmesiyle artık
   DOĞRU ekran (Fatura Kalemleri Listesi) açılıyor ve bu alan normal şekilde
   çalışıyor. Format: satır girişindeki TUTAR formatıyla AYNI -- noktasız,
-  virgül ondalıklı (örn. `426,00`, `formatli_tutar` değişkeni). Kod artık
-  fatura no (col2) + tutar (col6) filtrelerini BİRLİKTE dolduruyor, ardından
-  gelen sonuçlardan (kullanıcı teyidiyle) İLK satırı seçiyor. Python
+  virgül ondalıklı (örn. `426,00`, `formatli_tutar` değişkeni).   Kod artık
+  fatura no (col2) + tutar (col6) filtrelerini SIRAYLA dolduruyor (İKİSİNİ
+  BİRDEN doldurup tek Enter'a basmak İŞE YARAMIYOR -- DevExpress'in filtre
+  satırı her Enter'da postback tetikliyor ve henüz gönderilmemiş ikinci
+  kutunun değerini siliyor; bu kullanıcı tarafından canlı testte teyit
+  edildi). Doğru sıra: önce col2 doldur + Enter + bekle, SONRA col6 doldur +
+  Enter + bekle. Ardından gelen sonuçlardan (kullanıcı teyidiyle) İLK satırı
+  seçiyor. Python
   tarafındaki `_satirda_tutar_var_mi` doğrulaması artık sadece bir ihtiyat
   kontrolü (ERP filtresi beklenmedik davranırsa bile makul bir satır
   seçilsin diye) -- zorunlu değil.

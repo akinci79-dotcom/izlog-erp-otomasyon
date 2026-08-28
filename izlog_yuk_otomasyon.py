@@ -240,17 +240,21 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             lov_penceresi = aktif_sayfa.frames[-1]
             lov_penceresi.wait_for_selector("#myListPage_DXFREditorcol2_I", state="visible", timeout=20000)
 
-            # --- Fatura no + Tutar birlikte filtreleniyor ---
+            # --- Fatura no + Tutar SIRAYLA (art arda, tek seferde değil) filtreleniyor ---
             # Eskiden tutar kutusuna (#myListPage_DXFREditorcol6_I) hiç yazılmıyordu
-            # çünkü "3 nokta" bazen YANLIŞ ekranı (Cari Seç) açıyordu ve o ekranda
-            # tutar yazmak anlamsız/bozucuydu. DXEditor29 düzeltmesiyle "3 nokta"
-            # artık DOĞRU ekranı (Fatura Kalemleri Listesi) açıyor; bu ekranda
-            # tutar filtresi normal şekilde çalışıyor. Kullanıcı, doğru satırı
-            # bulmak için fatura no + tutarın BİRLİKTE filtrelenip gelen
-            # sonuçlardan İLKİNİN seçilmesi gerektiğini teyit etti. Tutar,
-            # satır girişindeki AYNI formatla yazılıyor (noktasız, virgül
-            # ondalıklı -- örn. "426,00").
+            # çünkü "3 nokta" bazen YANLIŞ ekranı (Cari Seç) açıyordu. DXEditor29
+            # düzeltmesiyle artık DOĞRU ekran (Fatura Kalemleri Listesi) açılıyor
+            # ve tutar filtresi normal şekilde çalışıyor -- AMA kullanıcı canlı
+            # testte önemli bir detay buldu: iki kutuyu doldurup TEK Enter'a
+            # basmak işe yaramıyor (DevExpress'in filtre satırı her Enter'da bir
+            # postback/yenileme tetikliyor; ikinci kutuya yazılan değer bu
+            # yenilemede siliniyordu). Doğru sıra: ÖNCE fatura no yaz + Enter
+            # (filtre uygulansın, bekle), SONRA tutarı (aynı format, noktasız
+            # virgül ondalıklı -- örn. "426,00") yaz + Enter.
             lov_penceresi.fill("#myListPage_DXFREditorcol2_I", fatura_no_str)
+            lov_penceresi.press("#myListPage_DXFREditorcol2_I", "Enter")
+            _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
+
             lov_penceresi.fill("#myListPage_DXFREditorcol6_I", formatli_tutar)
             lov_penceresi.press("#myListPage_DXFREditorcol6_I", "Enter")
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
