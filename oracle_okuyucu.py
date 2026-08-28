@@ -1,114 +1,173 @@
-"""
-Oracle veri katmanı.
-
-BU DOSYA BİR ŞABLONDUR (TODO içerir). `main.py` bu modülden şu iki fonksiyonu
-bekler:
-
-    kaynak_yuk_verilerini_getir(kaynak_yuk_no) -> dict
-        {
-            "PROJE_KODU": str,
-            "YUK_TARIHI": str,           # "GG.AA.YYYY" formatında
-            "SATIS_SATIRLARI": [
-                {
-                    "UCRET_TIPI": str,
-                    "OPERASYON_KODU": str,
-                    "SATIS_FIYATI": float | Decimal | str,
-                    "FATURA_NO": str | None,
-                    "FATURA_TARIHI": str | None,
-                },
-                ...
-            ],
-        }
-
-    yeni_kayitlari_veritabaninda_guncelle(yeni_yuk_numaralari, yeni_sevk_numaralari) -> None
-        Başarıyla oluşturulan Yük/Sevk numaralarını Oracle tarafında
-        (örn. bir "işlendi" bayrağı/iz tablosu güncellenerek) temizler.
-
-Gerçek SQL sorgularınızı ve tablo/şema adlarınızı bilmediğim için burada
-sadece bağlantı iskeleti ve TODO işaretli yer tutucular bulunuyor. Kendi
-şemanıza göre doldurmanız gerekir. Eğer elinizde bu dosyanın çalışan bir
-versiyonu varsa, onu bu şablonun üzerine kopyalamanız yeterli olacaktır.
-"""
 import oracledb
-
+from decimal import Decimal
 import ayarlar
 
+# ==========================================
+# ORACLE KALIN MOD (THICK MODE) BAŞLATICI
+# ==========================================
+oracledb.init_oracle_client(lib_dir=r"C:\instantclient\instantclient_19_32")
 
-def _baglanti_ac():
-    return oracledb.connect(
-        user=ayarlar.ORACLE_KULLANICI,
-        password=ayarlar.ORACLE_SIFRE,
-        dsn=ayarlar.ORACLE_DSN,
-    )
+def oto_kolon_kesfi(cursor, tablo_adi):
+    """
+    Sistemin hata vermesini engellemek için, Uyumsoft sözlük tablolarındaki
+    metin/açıklama kolonunun adını tahmin etmeden Oracle'dan dinamik olarak okur.
+    """
+    cursor.execute(f"SELECT * FROM {tablo_adi} WHERE 1=0")
+    kolonlar = [col[0].upper() for col in cursor.description]
 
+    if 'DESCRIPTION' in kolonlar: return 'DESCRIPTION'
+    if 'OPERATION_CODE' in kolonlar: return 'OPERATION_CODE'
+    if 'GOODS_PRICE_TYPE_CODE' in kolonlar: return 'GOODS_PRICE_TYPE_CODE'
+
+    for k in kolonlar:
+        if 'CODE' in k or 'DESC' in k or 'NAME' in k or 'AD' in k:
+            return k
+    return kolonlar[1]
 
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
-    """Kaynak yük numarasına göre proje/tarih/satış satırlarını Oracle'dan getirir."""
-    with _baglanti_ac() as conn:
-        cur = conn.cursor()
+    KULLANICI = ayarlar.DB_KULLANICI
+    SIFRE = ayarlar.DB_SIFRE
+    DSN = ayarlar.DB_DSN
 
-        # TODO: Gerçek tablo/kolon adlarınıza göre güncelleyin.
-        cur.execute(
-            """
-            SELECT proje_kodu, TO_CHAR(yuk_tarihi, 'DD.MM.YYYY') AS yuk_tarihi
-            FROM   yukler
-            WHERE  yuk_no = :yuk_no
-            """,
-            {"yuk_no": kaynak_yuk_no},
-        )
-        satir = cur.fetchone()
-        if not satir:
-            raise ValueError(f"Oracle'da '{kaynak_yuk_no}' numaralı yük bulunamadı.")
-        proje_kodu, yuk_tarihi = satir
+    baglanti = None
+    try:
+        baglanti = oracledb.connect(user=KULLANICI, password=SIFRE, dsn=DSN)
+        cursor = baglanti.cursor()
 
-        # TODO: Gerçek tablo/kolon adlarınıza göre güncelleyin.
-        cur.execute(
-            """
-            SELECT ucret_tipi, operasyon_kodu, satis_fiyati, fatura_no,
-                   TO_CHAR(fatura_tarihi, 'DD.MM.YYYY') AS fatura_tarihi
-            FROM   yuk_satis_satirlari
-            WHERE  yuk_no = :yuk_no
-            ORDER BY satir_no
-            """,
-            {"yuk_no": kaynak_yuk_no},
-        )
-        satis_satirlari = [
-            {
-                "UCRET_TIPI": row[0],
-                "OPERASYON_KODU": row[1],
-                "SATIS_FIYATI": row[2],
-                "FATURA_NO": row[3],
-                "FATURA_TARIHI": row[4],
-            }
-            for row in cur.fetchall()
-        ]
+        # --- 1. AŞAMA: Ana Yük Bilgileri ---
+        sql_ana_yuk = """
+            SELECT
+                TO_CHAR(Y.DOC_DATE, 'DD.MM.YYYY') as YUK_TARIHI,
+                P.PROJECT_CODE as PROJE_KODU
+            FROM LMST_L_GOODS Y
+            LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON Y.PROJECT_ID = P.PROJECT_ID
+            WHERE Y.REFERENCE_NO = :yuk_no
+        """
+        cursor.execute(sql_ana_yuk, {"yuk_no": kaynak_yuk_no})
+        ana_kayit = cursor.fetchone()
 
-    return {
-        "PROJE_KODU": proje_kodu,
-        "YUK_TARIHI": yuk_tarihi,
-        "SATIS_SATIRLARI": satis_satirlari,
-    }
+        if not ana_kayit:
+            raise ValueError(f"Kaynak yük veritabanında bulunamadı: {kaynak_yuk_no}")
 
+        yuk_tarihi, proje_kodu = ana_kayit
 
-def yeni_kayitlari_veritabaninda_guncelle(yeni_yuk_numaralari, yeni_sevk_numaralari):
-    """Başarıyla oluşturulan Yük/Sevk numaralarını Oracle tarafında işaretler."""
-    if not yeni_yuk_numaralari and not yeni_sevk_numaralari:
+        # --- 2. AŞAMA: Dinamik Yapay Zeka (Sözlük Kolonlarını Bulma) ---
+        op_kolonu = oto_kolon_kesfi(cursor, "LMSD_L_OP_DEFINITION")
+        price_kolonu = oto_kolon_kesfi(cursor, "LMSD_L_GOODSPRICE_TYPE")
+
+        # --- 3. AŞAMA: GERÇEK IT SQL'İ İLE FATURA BAĞLANTISI ---
+        sql_satis_satirlari = f"""
+            SELECT
+                OD.{op_kolonu} as OPERATION_CODE,
+                GT.{price_kolonu} as PRICE_TYPE,
+                OPDET.AMT AS SATIS_FIYATI,
+                INV.DOC_NO AS FATURA_NO,
+                TO_CHAR(INV.DOC_DATE, 'DD.MM.YYYY') AS FATURA_TARIHI
+            FROM LMST_L_GOODS_OP_DET OPDET
+            LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
+            LEFT JOIN LMSD_L_OP_DEFINITION OD ON OD.OPERATION_ID = OPDET.OPERATION_ID
+            LEFT JOIN LMSD_L_GOODSPRICE_TYPE GT ON GT.GOODS_PRICE_TYPE_ID = OPDET.OPERATION_PRICE_TYPE
+
+            -- GİZEM ÇÖZÜLDÜ: Fatura ID'si zaten OP_DET'in içindeymiş ve tablo PSMT_INVOICE_M imiş!
+            LEFT JOIN PSMT_INVOICE_M INV ON INV.INVOICE_M_ID = OPDET.INVOICE_M_ID
+
+            WHERE YK.REFERENCE_NO = :yuk_no
+              AND OPDET.PURCHASE_SALES_TYPE IN (2,4)
+        """
+        cursor.execute(sql_satis_satirlari, {"yuk_no": kaynak_yuk_no})
+        sutunlar = [col[0] for col in cursor.description]
+
+        satis_satirlari = []
+        for satir in cursor.fetchall():
+            veri = dict(zip(sutunlar, satir))
+
+            ham_fiyat = veri.get("SATIS_FIYATI", 0)
+            guvenli_fiyat = Decimal(str(ham_fiyat)) if ham_fiyat is not None else Decimal('0.00')
+
+            op_metni = veri.get("OPERATION_CODE")
+            if not op_metni: op_metni = "Navlun"
+
+            tip_metni = veri.get("PRICE_TYPE")
+            if not tip_metni: tip_metni = "Navlun"
+
+            satis_satirlari.append({
+                "OPERASYON_KODU": op_metni,
+                "UCRET_TIPI": tip_metni,
+                "SATIS_FIYATI": guvenli_fiyat,
+                "FATURA_NO": veri.get("FATURA_NO"),
+                "FATURA_TARIHI": veri.get("FATURA_TARIHI")
+            })
+
+        return {
+            "YUK_TARIHI": yuk_tarihi,
+            "PROJE_KODU": proje_kodu,
+            "SATIS_SATIRLARI": satis_satirlari
+        }
+
+    except Exception as e:
+        print(f"Oracle Veritabanı Hatası: {str(e)}")
+        raise e
+    finally:
+        if baglanti:
+            baglanti.close()
+
+# ==========================================
+# VERİTABANI İZ TEMİZLİĞİ (TOPLU GÜNCELLEME)
+# ==========================================
+def yeni_kayitlari_veritabaninda_guncelle(yuk_listesi, sevk_listesi):
+    if ayarlar.DRY_RUN:
+        print("DRY_RUN AKTİF: Veritabanı toplu güncellemeleri simüle edildi (Sorgu çalıştırılmadı).")
         return
 
-    with _baglanti_ac() as conn:
-        cur = conn.cursor()
+    KULLANICI = ayarlar.DB_KULLANICI
+    SIFRE = ayarlar.DB_SIFRE
+    DSN = ayarlar.DB_DSN
 
-        # TODO: Gerçek güncelleme mantığınıza göre değiştirin.
-        for yuk_no in yeni_yuk_numaralari:
-            cur.execute(
-                "UPDATE yukler SET aktarildi = 1 WHERE yuk_no = :yuk_no",
-                {"yuk_no": yuk_no},
-            )
+    hedef_kullanici = getattr(ayarlar, "HEDEF_KULLANICI_ID", None)
 
-        for sevk_no in yeni_sevk_numaralari:
-            cur.execute(
-                "UPDATE sevkler SET aktarildi = 1 WHERE sevk_no = :sevk_no",
-                {"sevk_no": sevk_no},
-            )
+    if not hedef_kullanici:
+        print("UYARI: ayarlar.py içinde 'HEDEF_KULLANICI_ID' bulunamadı, güncelleme atlanıyor.")
+        return
 
-        conn.commit()
+    baglanti = None
+    try:
+        baglanti = oracledb.connect(user=KULLANICI, password=SIFRE, dsn=DSN)
+        cursor = baglanti.cursor()
+
+        for yuk in yuk_listesi:
+            cursor.execute("""
+                UPDATE LMST_L_GOODS
+                SET CREATE_USER_ID = :kullanici_id
+                WHERE REFERENCE_NO = :yuk_no
+            """, {"kullanici_id": hedef_kullanici, "yuk_no": yuk})
+
+            # KRİTİK DÜZELTME: NULL yerine Uyumsoft'un orijinal sıfırlama değerleri
+            cursor.execute("""
+                UPDATE LMST_L_GOODS
+                SET UPDATE_DATE = TO_DATE('01.01.0001', 'DD.MM.YYYY'), UPDATE_USER_ID = 0
+                WHERE REFERENCE_NO = :yuk_no
+            """, {"yuk_no": yuk})
+
+        for sevk in sevk_listesi:
+            cursor.execute("""
+                UPDATE LMST_L_TRANSPORT
+                SET CREATE_USER_ID = :kullanici_id
+                WHERE TRANSPORT_NO = :sevk_no
+            """, {"kullanici_id": hedef_kullanici, "sevk_no": sevk})
+
+            cursor.execute("""
+                UPDATE LMST_L_TRANSPORT
+                SET UPDATE_DATE = TO_DATE('01.01.0001', 'DD.MM.YYYY'), UPDATE_USER_ID = 0
+                WHERE TRANSPORT_NO = :sevk_no
+            """, {"sevk_no": sevk})
+
+        baglanti.commit()
+        print(f"BAŞARILI: {len(yuk_listesi)} Yük ve {len(sevk_listesi)} Sevk için veritabanı ayak izi Uyumsoft standartlarında temizlendi.")
+
+    except Exception as e:
+        print(f"Toplu Güncelleme Oracle Hatası: {str(e)}")
+        if baglanti:
+            baglanti.rollback()
+    finally:
+        if baglanti:
+            baglanti.close()

@@ -5,23 +5,39 @@ alwaysApply: true
 
 # ERP Sistemi Bilgi Tabanı
 
-Bu dosya, Uyumsoft ERP sistemimizin yapısını ve `main.py`/`oracle_okuyucu.py`
-otomasyonunun nasıl çalıştığını kalıcı olarak belgelemek için var. Yeni bir
-otomasyon veya rapor talebi geldiğinde önce burayı oku; burada olmayan bir
-bilgi gerekiyorsa kullanıcıya sor ve öğrendiğin bilgiyi bu dosyaya ekle.
+Şirket: **İzlog Lojistik**. Bu dosya, Uyumsoft ERP sistemimizin yapısını ve
+`izlog_yuk_otomasyon.py` / `oracle_okuyucu.py` otomasyonunun nasıl çalıştığını
+kalıcı olarak belgelemek için var. Yeni bir otomasyon veya rapor talebi
+geldiğinde önce burayı oku; burada olmayan bir bilgi gerekiyorsa kullanıcıya
+sor ve öğrendiğin bilgiyi bu dosyaya ekle.
 
-Etiketleme kuralı: **[DOĞRULANMIŞ]** = gerçek ERP'ye karşı çalıştırılmış ve
-onaylanmış kod/bilgi. **[VARSAYIM/TODO]** = henüz teyit edilmemiş, tahmini
-veya şablon bilgi — kullanıcıdan teyit almadan bu bilgiye güvenilmemeli.
+Etiketleme kuralı: **[DOĞRULANMIŞ]** = gerçek ERP'ye/Oracle'a karşı
+çalıştırılmış ve kullanıcı tarafından onaylanmış kod/bilgi. **[VARSAYIM/TODO]**
+= henüz teyit edilmemiş, tahmini bilgi — kullanıcıdan teyit almadan bu bilgiye
+güvenilmemeli.
 
-## Genel Mimari
+## Genel Mimari [DOĞRULANMIŞ]
 
 - ERP: Uyumsoft, DevExpress (ASPxGridView / ASPxEditors) tabanlı web arayüzü.
-- Otomasyon: Python + Playwright (`main.py`), senkron API kullanılıyor.
-- Kaynak veri: Oracle (`oracle_okuyucu.py` üzerinden okunuyor).
-- İlerleme takibi: `islem_listesi.xlsx` (Excel checkpoint dosyası).
+  Giriş: `https://erp.izlog.com.tr/login.aspx`.
+- Otomasyon: Python + Playwright, senkron API. Ana dosya: `izlog_yuk_otomasyon.py`.
+  **Sadece İzlog'un Windows sunucusunda** çalışır (Oracle Instant Client Thick
+  Mode + sabit `C:\instantclient\instantclient_19_32` yolu nedeniyle).
+- Kaynak veri: Oracle (`oracle_okuyucu.py` üzerinden okunuyor, DSN:
+  `172.17.8.11:1521/UYUMSOFT`).
+- İlerleme takibi: `islem_listesi.xlsx` (Excel checkpoint dosyası,
+  `excel_olustur.py` ile şablonu oluşturuluyor).
 - Ana iş nesneleri: **Yük** (Load, referans no formatı `Y-...`) ve
   **Sevk** (Transport/Nakliye, referans no formatı `S-...`).
+- `ayarlar.py` içindeki `DRY_RUN = True` iken sistem sadece ERP'ye girer, yükü
+  arar ve satırı seçer; `Kopya`/`Kaydet`/`Sevk Oluştur` butonlarına KESİNLİKLE
+  basılmaz — hiçbir kayıt/veritabanı değişikliği yapılmaz. Gerçek çalıştırmalar
+  öncesi her zaman `DRY_RUN = True` ile test edilmeli.
+- Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
+  çağrılır: `CREATE_USER_ID` alanı `ayarlar.HEDEF_KULLANICI_ID`'ye çevrilir ve
+  `UPDATE_DATE`/`UPDATE_USER_ID` Uyumsoft'un orijinal sıfırlama değerlerine
+  (`01.01.0001` / `0`) döndürülür ("veritabanı iz temizliği"). `DRY_RUN`
+  aktifken bu adım tamamen atlanır.
 
 ## İş Akışı (Yük → Sevk) [DOĞRULANMIŞ]
 
@@ -54,17 +70,21 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
 - Fatura Seç (LOV) penceresi, `col2` → Fatura No filtresi.
 - Fatura Seç (LOV) penceresi, `col6` → Tutar filtresi —
   **⚠️ BU ALANA YAZMA.** Maskeli/formatlı DevExpress editörü; `.fill()` ile
-  yazılan değer doğru işlenmiyor ve akışı bozuyor (bkz. `main.py` içindeki
-  `_satirda_tutar_var_mi` — tutar, satır metni Python'da ayrıştırılarak
-  karşılaştırılıyor, hiçbir zaman bu kutuya yazılmıyor).
+  yazılan değer doğru işlenmiyor ve akışı bozuyor (bkz. `izlog_yuk_otomasyon.py`
+  içindeki `_satirda_tutar_var_mi` — tutar, satır metni Python'da ayrıştırılarak
+  karşılaştırılıyor, hiçbir zaman bu kutuya yazılmıyor; kod sadece `""` ile
+  temizliyor, asla değer yazmıyor).
 - LOV içindeki "Seç" butonu: `#btnChoose_CD`.
+- Aynı fatura no + aynı tutara sahip birden fazla satır grid'de görünebilir;
+  önemli değil, ilk eşleşen satır seçilir.
 
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
 - `#TabControl_dte_DocDate_I` — Belge tarihi. Maskeli alan; temizlemek için
-  `End` → 12x `Backspace` → `Home`, ardından `GGAAYYYY` (noktasız) `type()`
-  ile yazılıp `Enter` basılıyor. Bkz. `_tarih_alanini_temizle_ve_yaz()`.
+  `Home` → `Shift+End` (tümünü seç) → `Backspace`, ardından `GGAAYYYY`
+  (noktasız) `type()` ile yazılıp `Enter` + `Tab` basılıyor. Bkz.
+  `devexpress_tarih_yaz()` (`izlog_yuk_otomasyon.py`).
 - `#TabControl_chk_IsGoodsInWhouse_S_D` — "Depoda mı" checkbox'ı, "Yük Diğer
   Bilgiler" sekmesinde.
 - `#TabControl_bte_TractorSerialNoPlateNo_I` — Araç plakası (Sevk formunda).
@@ -100,39 +120,61 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
 
 ## Excel Checkpoint Yapısı — `islem_listesi.xlsx` [DOĞRULANMIŞ]
 
-| Sütun | İçerik |
-|---|---|
-| A | Kaynak Yük No |
-| B | Plaka |
-| C | Sevk Alış Fiyatı |
-| D | Proje (otomatik) |
-| E | Yük Tarihi (otomatik) |
-| F | Fatura No (otomatik) |
-| G | Fatura Tarihi (otomatik) |
-| H | Yeni Yük No (otomatik / checkpoint) |
-| I | Yeni Sevk No (otomatik) |
-| J | Durum: `BAŞARILI`, `DRY_RUN BAŞARILI`, `YÜK OLUŞTU`, `HATA_YUK`, `HATA_SEVK`, `HATA_BİLİNMEYEN` |
-| K | Hata mesajı |
+`excel_olustur.py` ile oluşturulur. Kolon başlıkları (1. satır) ve A-K sırası:
+
+| Sütun | Başlık | İçerik |
+|---|---|---|
+| A | `KAYNAK_YUK_NO` | Kaynak Yük No (örn. `Y-575733`) |
+| B | `PLAKA` | Araç plakası (örn. `06DFZ463`) |
+| C | `SEVK_ALIS_FIYATI` | Sevk alış fiyatı (örn. `73000`) |
+| D | `PROJE_KODU` | Proje kodu (otomatik doldurulur) |
+| E | `TARIH` | Yük tarihi (otomatik doldurulur) |
+| F | `FATURA_NO` | Fatura no (otomatik doldurulur) |
+| G | `FATURA_TARIHI` | Fatura tarihi (otomatik doldurulur) |
+| H | `YENI_YUK_NO` | Yeni Yük No (otomatik / checkpoint) |
+| I | `YENI_SEVK_NO` | Yeni Sevk No (otomatik doldurulur) |
+| J | `DURUM` | `BAŞARILI`, `DRY_RUN BAŞARILI`, `YÜK OLUŞTU`, `HATA_YUK`, `HATA_SEVK`, `HATA_BİLİNMEYEN` |
+| K | `HATA_ACIKLAMASI` | Hata mesajı |
 
 `BAŞARILI` ve `DRY_RUN BAŞARILI` durumundaki satırlar bir sonraki çalıştırmada
 atlanır. `YÜK OLUŞTU`/`HATA_SEVK` durumundaki satırlar, Yük tekrar
 oluşturulmadan doğrudan Sevk fazından devam eder.
 
-## Oracle Veri Katmanı [VARSAYIM/TODO — henüz teyit edilmedi]
+## Oracle Veri Katmanı [DOĞRULANMIŞ]
 
-`oracle_okuyucu.py` şu an bir **şablon**; aşağıdaki tablo/kolon adları
-TAHMİNİDİR ve gerçek şemayla değiştirilmelidir:
-- `yukler` tablosu: `proje_kodu`, `yuk_tarihi`, `yuk_no`.
-- `yuk_satis_satirlari` tablosu: `ucret_tipi`, `operasyon_kodu`,
-  `satis_fiyati`, `fatura_no`, `fatura_tarihi`, `yuk_no`, `satir_no`.
-- `sevkler` tablosu: `sevk_no`, `aktarildi`.
+Bağlantı: `oracledb` Thick Mode, Instant Client yolu `C:\instantclient\instantclient_19_32`
+(Windows sunucusuna özel; `oracle_okuyucu.py` modül yüklenirken bu init çağrısı
+otomatik çalışır). DSN: `172.17.8.11:1521/UYUMSOFT`, kullanıcı: `uyumsoft`
+(bkz. `ayarlar.py`: `DB_KULLANICI`, `DB_SIFRE`, `DB_DSN`).
 
-`kaynak_yuk_verilerini_getir(kaynak_yuk_no)` şu sözleşmeyi (contract)
-döndürmeli: `{"PROJE_KODU": str, "YUK_TARIHI": "GG.AA.YYYY", "SATIS_SATIRLARI":
-[{"UCRET_TIPI", "OPERASYON_KODU", "SATIS_FIYATI", "FATURA_NO", "FATURA_TARIHI"}, ...]}`.
+**Gerçek tablolar** (`kaynak_yuk_verilerini_getir()` içinde kullanılıyor):
+- `LMST_L_GOODS` — Yük ana tablosu. Kolonlar: `REFERENCE_NO` (Yük no, `Y-...`),
+  `DOC_DATE` (Yük tarihi), `PROJECT_ID`, `GOODS_ID`.
+- `LMSD_L_AGR_PROJ_TYPE` — Proje sözlüğü. `PROJECT_ID`, `PROJECT_CODE`.
+- `LMST_L_GOODS_OP_DET` — Yük satış/operasyon detay satırları. `GOODS_ID`,
+  `OPERATION_ID`, `OPERATION_PRICE_TYPE`, `AMT` (tutar), `INVOICE_M_ID`,
+  `PURCHASE_SALES_TYPE` (satış satırları için `IN (2,4)` filtresi kullanılıyor).
+- `LMSD_L_OP_DEFINITION` — Operasyon kodu sözlüğü. Açıklama kolonu **sabit
+  değil**; `oto_kolon_kesfi()` ile dinamik keşfediliyor (öncelik: `DESCRIPTION`
+  → `OPERATION_CODE` → `CODE`/`DESC`/`NAME`/`AD` içeren ilk kolon → `kolonlar[1]`).
+- `LMSD_L_GOODSPRICE_TYPE` — Ücret tipi sözlüğü. Açıklama kolonu aynı şekilde
+  `oto_kolon_kesfi()` ile dinamik bulunuyor (öncelik: `GOODS_PRICE_TYPE_CODE`).
+- `PSMT_INVOICE_M` — Fatura ana tablosu. `INVOICE_M_ID`, `DOC_NO` (Fatura no),
+  `DOC_DATE` (Fatura tarihi). `LMST_L_GOODS_OP_DET.INVOICE_M_ID` üzerinden
+  doğrudan bağlanıyor (ayrı bir detay tablosuna gerek yok).
+- `LMST_L_TRANSPORT` — Sevk tablosu. `TRANSPORT_NO` (Sevk no, `S-...`).
 
-**Rapor talebi geldiğinde**: Gerçek tablo/kolon adları henüz bilinmiyorsa
-SQL yazmadan önce kullanıcıya sor; tahmini isimlerle sorgu üretme.
+`kaynak_yuk_verilerini_getir(kaynak_yuk_no)` şu sözleşmeyi (contract) döndürür:
+`{"PROJE_KODU": str, "YUK_TARIHI": "GG.AA.YYYY", "SATIS_SATIRLARI":
+[{"OPERASYON_KODU", "UCRET_TIPI", "SATIS_FIYATI" (Decimal), "FATURA_NO", "FATURA_TARIHI"}, ...]}`.
+
+`yeni_kayitlari_veritabaninda_guncelle(yuk_listesi, sevk_listesi)`: başarılı
+Yük/Sevk kayıtlarının `CREATE_USER_ID`'sini `ayarlar.HEDEF_KULLANICI_ID`'ye
+çevirir, `UPDATE_DATE`/`UPDATE_USER_ID`'yi Uyumsoft'un orijinal sıfırlama
+değerlerine (`01.01.0001` / `0`) döndürür. `DRY_RUN` aktifken tamamen atlanır.
+
+**Fatura tablolarını keşfetmek için kullanılan yardımcı script**: `fatura_bul.py`
+(`all_objects` üzerinden `%INVOICE_M` / `FIND_INVOICE%` desenli tablo/görünüm arar).
 
 ## Bu Dosyayı Güncelleme
 

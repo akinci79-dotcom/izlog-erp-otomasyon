@@ -1,4 +1,4 @@
-# Uyumsoft ERP Yük/Sevk Otomasyonu
+# İzlog Lojistik — Uyumsoft ERP Yük/Sevk Otomasyonu
 
 Oracle'dan okunan "yük" verilerini, Excel listesi (`islem_listesi.xlsx`) üzerinden
 sırayla işleyip Uyumsoft ERP arayüzünde **Playwright** ile:
@@ -10,64 +10,91 @@ sırayla işleyip Uyumsoft ERP arayüzünde **Playwright** ile:
 İşlem durumu her satır için Excel'e (checkpoint olarak) yazılır; script yarıda
 kesilse veya hata alsa bile bir sonraki çalıştırmada kalınan yerden devam eder.
 
-## Kurulum
+> ⚠️ Bu otomasyon **Windows sunucusunda** çalışır (Oracle Instant Client Thick
+> Mode yolu `ayarlar.py`/`oracle_okuyucu.py` içinde `C:\instantclient\...`
+> olarak sabit). Linux/macOS'ta doğrudan çalışmaz.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+## Dosyalar
+
+| Dosya | Görevi |
+|---|---|
+| `izlog_yuk_otomasyon.py` | Ana otomasyon (Playwright + Excel döngüsü) |
+| `ayarlar.py` | ERP/Oracle bağlantı bilgileri, `DRY_RUN` anahtarı |
+| `oracle_okuyucu.py` | Oracle'dan yük/satış/fatura verisini çeken ve başarılı kayıtların "iz"ini temizleyen katman |
+| `excel_olustur.py` | `islem_listesi.xlsx` şablonunu sıfırdan oluşturur |
+| `fatura_bul.py` | Oracle şemasında fatura tablolarını keşfetmek için tek seferlik yardımcı script |
+
+## Kurulum (Windows sunucusu)
+
+```powershell
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-`.env.example` dosyasını `.env` olarak kopyalayıp ERP ve Oracle bilgilerinizi girin:
+Oracle Instant Client'ın `ayarlar.py`/`oracle_okuyucu.py` içinde belirtilen yolda
+(`C:\instantclient\instantclient_19_32`) kurulu olması gerekir.
+
+`ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek şifrelerinizle
+doldurun. **Bu dosyayı gerçek şifrelerle git'e commit etmeyin.**
+
+## Excel şablonu
 
 ```bash
-cp .env.example .env
+python excel_olustur.py
 ```
 
-> `oracle_okuyucu.py` bir **şablondur**: `TODO` işaretli sorguları kendi Oracle
-> şemanıza (tablo/kolon adları) göre doldurmanız gerekir.
-
-## Excel formatı (`islem_listesi.xlsx`)
+`islem_listesi.xlsx` şu kolonlarla oluşturulur:
 
 | Sütun | İçerik |
 |---|---|
-| A | Kaynak Yük No |
-| B | Plaka |
-| C | Sevk Alış Fiyatı |
-| D | Proje (otomatik doldurulur) |
-| E | Yük Tarihi (otomatik doldurulur) |
-| F | Fatura No (otomatik doldurulur) |
-| G | Fatura Tarihi (otomatik doldurulur) |
-| H | Yeni Yük No (otomatik doldurulur / checkpoint) |
-| I | Yeni Sevk No (otomatik doldurulur) |
-| J | Durum (`BAŞARILI`, `YÜK OLUŞTU`, `HATA_YUK`, `HATA_SEVK`, `DRY_RUN BAŞARILI`, ...) |
-| K | Hata Mesajı |
+| A | KAYNAK_YUK_NO |
+| B | PLAKA |
+| C | SEVK_ALIS_FIYATI |
+| D | PROJE_KODU (otomatik doldurulur) |
+| E | TARIH (otomatik doldurulur) |
+| F | FATURA_NO (otomatik doldurulur) |
+| G | FATURA_TARIHI (otomatik doldurulur) |
+| H | YENI_YUK_NO (otomatik / checkpoint) |
+| I | YENI_SEVK_NO (otomatik doldurulur) |
+| J | DURUM: `BAŞARILI`, `DRY_RUN BAŞARILI`, `YÜK OLUŞTU`, `HATA_YUK`, `HATA_SEVK`, `HATA_BİLİNMEYEN` |
+| K | HATA_ACIKLAMASI |
+
+İlk 3 sütuna test verisi girin (örn. `Y-575733`, `06DFZ463`, `73000`).
 
 ## Çalıştırma
 
-```bash
-python main.py
+```powershell
+python izlog_yuk_otomasyon.py
 ```
 
-- `DRY_RUN=1` ortam değişkeni ile hiçbir kayıt yapılmadan sadece doğrulama yapılabilir.
-- `HEADLESS=1` ile tarayıcı görünmez modda çalışır (ilk denemelerde `0` önerilir).
-- Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`) alınır
-  ve hata mesajı Excel'e yazılır; otomasyon güvenli şekilde bir sonraki satıra geçer.
+- **Önce `ayarlar.py` içinde `DRY_RUN = True` ile test edin.** Bu modda script
+  sadece ERP'ye giriş yapar, yükü arar ve satırı seçer; `Kopya`, `Kaydet` veya
+  `Sevk Oluştur` butonlarına **kesinlikle basmaz** — hiçbir kayıt/veritabanı
+  değişikliği yapılmaz.
+- Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın.
+- Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`)
+  alınır ve hata mesajı Excel'e yazılır; otomasyon güvenli şekilde bir
+  sonraki satıra geçer.
+- Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
+  ile veritabanında "iz temizliği" (create/update kullanıcı ve tarih alanlarının
+  Uyumsoft standardına sıfırlanması) yapılır. `DRY_RUN` aktifken bu adım da atlanır.
 
 ## Bu sürümde yapılan düzeltme
 
-Önceki sürümde, fatura seçim penceresinde (3 nokta ile açılan LOV) tutarı arama/filtre
-kutusuna (`#myListPage_DXFREditorcol6_I`) yazmaya çalışmak, bu alanın DevExpress'e özel
-maskeli/formatlı bir sayısal editör olması nedeniyle hataya yol açıyordu. Bu sürümde:
+Fatura seçim penceresinde (3 nokta ile açılan LOV), doğru satırı bulmak için
+tutarı grid formatına (`78.279,00`) birebir string eşleştirmesiyle (`has_text`)
+aramak kırılgandı — ERP'nin gösterdiği format ile üretilen string arasında ufak
+bir fark olduğunda satır bulunamıyor ve akış hata veriyordu. Bu sürümde:
 
-- Tutar hiçbir zaman bu kutuya yazılmıyor; sadece fatura no ile filtreleniyor.
-- Filtrelenen satırların metni Python tarafında ayrıştırılıp (`Decimal` ile) gerçek
-  tutarla karşılaştırılarak doğru satır bulunuyor (biçim farklılıklarına dayanıklı).
-- Eşleşme bulunamazsa, hangi satırların incelendiğini gösteren açıklayıcı bir hata
-  fırlatılıyor (teşhis kolaylığı için).
-
-Diğer küçük sağlamlaştırmalar: tarih alanı temizleme kodu tekilleştirildi, `wait_for_function`
-içindeki değer enjeksiyonu güvenli hale getirildi, eksik/`None` fiyat verileri için
-anlamlı hata mesajları eklendi, `browser.close()` `try/finally` ile garantiye alındı,
-kimlik bilgileri ortam değişkenlerine taşındı.
+- Fatura no'ya göre (kelime sınırı ile) filtrelenen satırlar arasında, tutar
+  artık **satır metninden ayrıştırılıp** (`Decimal`, kuruş toleranslı) gerçek
+  tutarla karşılaştırılıyor — format farklılıklarına karşı dayanıklı.
+- Aynı fatura no + aynı tutara sahip birden fazla satır olsa da sorun değil:
+  ilk eşleşen satır seçiliyor.
+- Eşleşme bulunamazsa, incelenen satırların metnini içeren açıklayıcı bir hata
+  fırlatılıyor (teşhis için).
+- `wait_for_load_state("networkidle")` çağrıları, ERP'nin sürekli arka plan
+  isteği attığı durumlarda sonsuz beklemeye/timeout'a düşmesin diye güvenli bir
+  yedek beklemeyle sarmalandı (`_agsakinligini_bekle`).

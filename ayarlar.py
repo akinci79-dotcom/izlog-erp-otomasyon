@@ -1,51 +1,27 @@
-"""
-Ortam ayarları / konfigürasyon.
+# ==========================================
+# İZLOG LOJİSTİK - SİSTEM AYARLARI VE ŞİFRELER
+# ==========================================
+#
+# ⚠️ GÜVENLİK NOTU: Bu dosyadaki DB_SIFRE ve ERP_SIFRE alanlarını gerçek
+# şifrelerinizle DOLDURUN, ancak gerçek şifrelerle bu dosyayı tekrar git'e
+# commit ETMEYİN. Windows sunucusundaki gerçek (şifreleri dolu) kopya,
+# repodaki bu şablon kopyadan bağımsız tutulmalı.
 
-Tüm hassas bilgiler (kullanıcı adı, şifre, bağlantı bilgileri) kaynak koda
-GÖMÜLMEZ; ortam değişkenlerinden (.env dosyası veya sistem env) okunur.
+# 1. ORACLE VERİTABANI BAĞLANTI BİLGİLERİ
+DB_KULLANICI = "uyumsoft"
+DB_SIFRE = "DEĞİŞTİRİNİZ"
+DB_DSN = "172.17.8.11:1521/UYUMSOFT"
 
-Kullanım:
-    1. `.env.example` dosyasını `.env` olarak kopyalayın.
-    2. Kendi ERP / Oracle bilgilerinizi `.env` içine yazın.
-    3. `.env` dosyasını ASLA git'e eklemeyin (.gitignore içinde zaten hariç tutuluyor).
-"""
-import os
+# 2. UYUMSOFT ERP GİRİŞ BİLGİLERİ
+ERP_LOGIN_URL = "https://erp.izlog.com.tr/login.aspx"  # ERP'nin giriş adresi
+ERP_KULLANICI = "DEĞİŞTİRİNİZ"                          # Uyumsoft'a girerken kullandığınız ad
+ERP_SIFRE = "DEĞİŞTİRİNİZ"                               # Uyumsoft şifreniz
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    # python-dotenv kurulu değilse sorun değil; sistem ortam değişkenleri
-    # zaten os.environ üzerinden okunabilir.
-    pass
+# 3. OTOMASYON ÇALIŞMA KURALLARI VE LİNKLER
+# DRY_RUN = True ise sistem sadece ekranı açar, verileri çeker ve tıklanabilirliği test eder.
+# KESİNLİKLE "Kaydet", "Kopya" veya "Sevk Oluştur" butonlarına basmaz.
+DRY_RUN = True
+ERP_YUK_LISTESI_URL = "https://erp.izlog.com.tr/MainList.aspx?CommandName=LGoodsCollection.Show&M=1&MenuId=654&WinId=01"
 
-
-def _zorunlu(anahtar, varsayilan=None):
-    deger = os.environ.get(anahtar, varsayilan)
-    if deger is None:
-        raise RuntimeError(
-            f"HATA: '{anahtar}' ortam değişkeni tanımlı değil. "
-            f".env dosyanızı kontrol edin (bkz. .env.example)."
-        )
-    return deger
-
-
-# --- ERP Bağlantı Bilgileri ---
-ERP_LOGIN_URL = _zorunlu("ERP_LOGIN_URL", "https://erp.ornek-firma.com/Login.aspx")
-ERP_YUK_LISTESI_URL = _zorunlu("ERP_YUK_LISTESI_URL", "https://erp.ornek-firma.com/LGoods/List.aspx")
-ERP_KULLANICI = _zorunlu("ERP_KULLANICI", "kullanici.adi")
-ERP_SIFRE = _zorunlu("ERP_SIFRE", "degistiriniz")
-
-# --- Oracle Bağlantı Bilgileri (oracle_okuyucu.py tarafından kullanılır) ---
-ORACLE_DSN = os.environ.get("ORACLE_DSN", "localhost:1521/ORCLPDB1")
-ORACLE_KULLANICI = os.environ.get("ORACLE_KULLANICI", "oracle_kullanici")
-ORACLE_SIFRE = os.environ.get("ORACLE_SIFRE", "degistiriniz")
-
-# --- Çalışma Modu ---
-# DRY_RUN=1 -> Hiçbir kayıt/kopyalama yapılmaz, sadece veri doğrulaması yapılır.
-DRY_RUN = os.environ.get("DRY_RUN", "0") == "1"
-
-# HEADLESS=1 -> Tarayıcı görünmez modda çalışır (sunucu/CI ortamları için).
-# Not: ERP'nin bazı DevExpress bileşenleri headless modda farklı davranabilir;
-# ilk denemelerde HEADLESS=0 (görünür) kullanmanız önerilir.
-HEADLESS = os.environ.get("HEADLESS", "0") == "1"
+# Veritabanı İz Temizliğinde Kullanılacak Hedef Kullanıcı ID
+HEDEF_KULLANICI_ID = 11310
