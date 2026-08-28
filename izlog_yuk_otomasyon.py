@@ -278,15 +278,15 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # ERP zaten tutara göre de filtrelediği için normalde tek/az sayıda
             # satır kalır.
             #
-            # NOT: Sadece "dxgvDataRow_Aqua" sınıfını aramak yetersiz kalabiliyor --
-            # filtre TEK bir satıra indiğinde DevExpress o satırı otomatik olarak
-            # odaklıyor/seçiyor gibi görünüyor ve bu durumda satırın CSS sınıfı
-            # "dxgvFocusedRow_Aqua" / "dxgvSelectedRow_Aqua" gibi farklı bir isim
-            # taşıyabiliyor (canlı testte satır ekranda turuncu/vurgulu görünüyordu
-            # ama "dxgvDataRow_Aqua" seçicisi onu hiç bulamadı). Bu yüzden sınıf
-            # adında "Row_Aqua" GEÇEN her satır (DataRow/FocusedRow/SelectedRow
-            # farkı olmadan) eşleştiriliyor.
-            fatura_satirlari = lov_penceresi.locator('tr[class*="Row_Aqua"]').filter(
+            # NOT: CSS sınıf adı tahmin etmek (önce "dxgvDataRow_Aqua", sonra
+            # "Row_Aqua" içeren herhangi bir sınıf) güvenilir çıkmadı -- filtre
+            # tek satıra indiğinde DevExpress'in o satıra hangi sınıfı verdiği
+            # net değil. Bu yüzden sınıf kısıtlaması TAMAMEN kaldırıldı: LOV
+            # penceresindeki HER `<tr>` taranıp içinde fatura no GEÇEN satır
+            # bulunuyor. Filtre kutusundaki (input) değer innerText'e dahil
+            # olmadığı için filtre satırı kendiliğinden elenir; bu yöntem hangi
+            # CSS sınıfı kullanılırsa kullanılsın çalışır.
+            fatura_satirlari = lov_penceresi.locator("tr").filter(
                 has_text=re.compile(rf"\b{re.escape(fatura_no_str)}\b")
             )
 
