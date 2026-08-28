@@ -1,0 +1,142 @@
+---
+description: Uyumsoft ERP sistemimizin ekran/alan yapısı, veri akışı ve otomasyon kuralları. Bu projede ERP otomasyonu veya Oracle/ERP verisiyle ilgili rapor talebi olduğunda her zaman uygulanır.
+alwaysApply: true
+---
+
+# ERP Sistemi Bilgi Tabanı
+
+Bu dosya, Uyumsoft ERP sistemimizin yapısını ve `main.py`/`oracle_okuyucu.py`
+otomasyonunun nasıl çalıştığını kalıcı olarak belgelemek için var. Yeni bir
+otomasyon veya rapor talebi geldiğinde önce burayı oku; burada olmayan bir
+bilgi gerekiyorsa kullanıcıya sor ve öğrendiğin bilgiyi bu dosyaya ekle.
+
+Etiketleme kuralı: **[DOĞRULANMIŞ]** = gerçek ERP'ye karşı çalıştırılmış ve
+onaylanmış kod/bilgi. **[VARSAYIM/TODO]** = henüz teyit edilmemiş, tahmini
+veya şablon bilgi — kullanıcıdan teyit almadan bu bilgiye güvenilmemeli.
+
+## Genel Mimari
+
+- ERP: Uyumsoft, DevExpress (ASPxGridView / ASPxEditors) tabanlı web arayüzü.
+- Otomasyon: Python + Playwright (`main.py`), senkron API kullanılıyor.
+- Kaynak veri: Oracle (`oracle_okuyucu.py` üzerinden okunuyor).
+- İlerleme takibi: `islem_listesi.xlsx` (Excel checkpoint dosyası).
+- Ana iş nesneleri: **Yük** (Load, referans no formatı `Y-...`) ve
+  **Sevk** (Transport/Nakliye, referans no formatı `S-...`).
+
+## İş Akışı (Yük → Sevk) [DOĞRULANMIŞ]
+
+1. Yük listesi ekranında kaynak yük numarası aranır, satır seçilir.
+2. `#btnCopy_CD` ile yük kopyalanır → yeni bir tarayıcı sekmesi/penceresi açılır
+   (`page.context.expect_page()` ile yakalanır).
+3. Yeni pencerede: belge tarihi girilir, "Yük Diğer Bilgiler" sekmesinde bir
+   checkbox işaretlenir, "Yurtiçi Yük Tanımı" sekmesinde satış satırları
+   (fiyat + fatura bağlantısı) tek tek eklenir.
+4. Ana form `#btnSave_CD` ile kaydedilir → yeni Yük No (`Y-...`) üretilir.
+   Bu noktada Excel'e checkpoint yazılır (durum: `YÜK OLUŞTU`).
+5. Yeni Yük üzerinde sağ tık → "Sevk Oluştur" menüsü ile Sevk formuna geçilir
+   (bu adım YENİ pencere açmaz, aynı sayfada devam eder).
+6. Sevk formunda tarih, plaka ve sevk fiyatı girilir, kaydedilir → yeni Sevk
+   No (`S-...`) üretilir. Durum: `BAŞARILI`.
+7. Hata olursa durum `HATA_YUK` (Yük aşamasında) veya `HATA_SEVK` (Sevk
+   aşamasında, Yük zaten oluşmuş) olarak işaretlenir; bir sonraki çalıştırmada
+   `HATA_SEVK`/`YÜK OLUŞTU` durumundan devam edilir (Faz 1-3 tekrar yapılmaz).
+
+## Bilinen Ekran/Alan Seçicileri [DOĞRULANMIŞ]
+
+### Giriş ekranı
+- `input#tbxUsername`, `input#tbxPassword` — kullanıcı adı/şifre.
+
+### Liste ekranları (filtre kutuları)
+DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
+(N = kolon indeksi). **Kolon indeksleri ekrana göre değişir**, aşağıdakiler
+şu ana kadar doğrulanmış olanlar:
+- Yük Listesi ekranı, `col1` → Yük No filtresi.
+- Fatura Seç (LOV) penceresi, `col2` → Fatura No filtresi.
+- Fatura Seç (LOV) penceresi, `col6` → Tutar filtresi —
+  **⚠️ BU ALANA YAZMA.** Maskeli/formatlı DevExpress editörü; `.fill()` ile
+  yazılan değer doğru işlenmiyor ve akışı bozuyor (bkz. `main.py` içindeki
+  `_satirda_tutar_var_mi` — tutar, satır metni Python'da ayrıştırılarak
+  karşılaştırılıyor, hiçbir zaman bu kutuya yazılmıyor).
+- LOV içindeki "Seç" butonu: `#btnChoose_CD`.
+
+### Yük/Sevk detay formu (`TabControl_*` öneki)
+- `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
+- `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
+- `#TabControl_dte_DocDate_I` — Belge tarihi. Maskeli alan; temizlemek için
+  `End` → 12x `Backspace` → `Home`, ardından `GGAAYYYY` (noktasız) `type()`
+  ile yazılıp `Enter` basılıyor. Bkz. `_tarih_alanini_temizle_ve_yaz()`.
+- `#TabControl_chk_IsGoodsInWhouse_S_D` — "Depoda mı" checkbox'ı, "Yük Diğer
+  Bilgiler" sekmesinde.
+- `#TabControl_bte_TractorSerialNoPlateNo_I` — Araç plakası (Sevk formunda).
+- Sekme başlıkları `span.dx-vam:has-text('...')` ile tıklanıyor: "Yük Diğer
+  Bilgiler", "Yurtiçi Yük Tanımı".
+- `#btnCopy_CD` — Kopyala (yeni pencere açar).
+- `#btnSave_CD` — Ana formu kaydet.
+- Sağ tık menüsü → "Sevk Oluştur": `div.uyum-popup-menu span:text-is('Sevk Oluştur')`.
+
+### Satış/Fiyat grid'i — "Yurtiçi Yük Tanımı" sekmesi
+Öneki: `#TabControl_grd_LGoodsOpDetailCollection_*`
+- `_EmptyRow_btnNew` — Yeni satır ekle.
+- `_DXEditor1_I` — Ücret Tipi (NAVLUN değilse doldurulur).
+- `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur).
+- `_DXEditor4_I` — Tutar.
+- Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
+
+### Sevk/Nakliye grid'i — Sevk formu
+Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)
+- `_EmptyRow_btnNew`, `_DXEditor4_I` (Tutar).
+
+## Format Kuralları [DOĞRULANMIŞ]
+
+- **Tarih**: Excel/Oracle'dan `GG.AA.YYYY` string olarak gelir; ekrana
+  noktalar çıkarılıp `GGAAYYYY` olarak maskeli alana `type()` ile yazılır.
+- **Tutar — giriş kutusu formatı**: `78279,00` (nokta yok, virgül ondalık).
+  `f"{Decimal(...):.2f}".replace(".", ",")` ile üretilir.
+- **Tutar — liste/grid görünüm formatı**: `78.279,00` (binlik nokta, ondalık
+  virgül). Sadece satır metnini okuyup ayrıştırmak için kullanılır, hiçbir
+  input kutusuna bu format YAZILMAZ.
+- Para hesaplarında her zaman `Decimal(str(değer))` kullanılır, `float`
+  kullanılmaz (yuvarlama hatalarını önlemek için).
+
+## Excel Checkpoint Yapısı — `islem_listesi.xlsx` [DOĞRULANMIŞ]
+
+| Sütun | İçerik |
+|---|---|
+| A | Kaynak Yük No |
+| B | Plaka |
+| C | Sevk Alış Fiyatı |
+| D | Proje (otomatik) |
+| E | Yük Tarihi (otomatik) |
+| F | Fatura No (otomatik) |
+| G | Fatura Tarihi (otomatik) |
+| H | Yeni Yük No (otomatik / checkpoint) |
+| I | Yeni Sevk No (otomatik) |
+| J | Durum: `BAŞARILI`, `DRY_RUN BAŞARILI`, `YÜK OLUŞTU`, `HATA_YUK`, `HATA_SEVK`, `HATA_BİLİNMEYEN` |
+| K | Hata mesajı |
+
+`BAŞARILI` ve `DRY_RUN BAŞARILI` durumundaki satırlar bir sonraki çalıştırmada
+atlanır. `YÜK OLUŞTU`/`HATA_SEVK` durumundaki satırlar, Yük tekrar
+oluşturulmadan doğrudan Sevk fazından devam eder.
+
+## Oracle Veri Katmanı [VARSAYIM/TODO — henüz teyit edilmedi]
+
+`oracle_okuyucu.py` şu an bir **şablon**; aşağıdaki tablo/kolon adları
+TAHMİNİDİR ve gerçek şemayla değiştirilmelidir:
+- `yukler` tablosu: `proje_kodu`, `yuk_tarihi`, `yuk_no`.
+- `yuk_satis_satirlari` tablosu: `ucret_tipi`, `operasyon_kodu`,
+  `satis_fiyati`, `fatura_no`, `fatura_tarihi`, `yuk_no`, `satir_no`.
+- `sevkler` tablosu: `sevk_no`, `aktarildi`.
+
+`kaynak_yuk_verilerini_getir(kaynak_yuk_no)` şu sözleşmeyi (contract)
+döndürmeli: `{"PROJE_KODU": str, "YUK_TARIHI": "GG.AA.YYYY", "SATIS_SATIRLARI":
+[{"UCRET_TIPI", "OPERASYON_KODU", "SATIS_FIYATI", "FATURA_NO", "FATURA_TARIHI"}, ...]}`.
+
+**Rapor talebi geldiğinde**: Gerçek tablo/kolon adları henüz bilinmiyorsa
+SQL yazmadan önce kullanıcıya sor; tahmini isimlerle sorgu üretme.
+
+## Bu Dosyayı Güncelleme
+
+Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
+tablo/kolon adı paylaştığında, bu dosyayı ilgili bölüme ekleyerek güncelle
+(ve DOĞRULANMIŞ/VARSAYIM etiketini doğru koy). Böylece bilgi sohbet
+geçmişinde kaybolmaz, repoya kalıcı olarak işlenir.
