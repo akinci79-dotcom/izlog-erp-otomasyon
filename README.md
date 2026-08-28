@@ -75,18 +75,21 @@ python izlog_yuk_otomasyon.py
   değişikliği yapılmaz. Fatura eşleştirme (asıl düzeltilen hata) bu modda
   **test edilmez**, çünkü o kısım Kopya sonrası açılan formda gerçekleşiyor.
 - **Fatura eşleştirmesini de test etmek için**: `DRY_RUN = True` **ve**
-  `DERIN_TEST_MODU = True` yapın. Bu modda script Kopyalama + tüm veri girişini
-  + fatura LOV eşleştirmesini **gerçekten** yapar (asıl hatanın olduğu yer),
-  ama ana `Kaydet` (`#btnSave_CD`) butonuna kesinlikle basmaz; pencereyi kayıt
-  yapılmadan kapatır. Durum: `DERİN_TEST BAŞARILI`.
-  ⚠️ Bunu çalıştırmadan önce "Kopya" butonuna tıklamanın ve satır bazlı
-  "Kaydet" tıklamalarının veritabanına bir şey yazmadığını (sadece ana
-  Kaydet'in yazdığını) ERP'nizde manuel olarak teyit edin.
-  Not: `Sevk Oluştur` adımı bu modda da test edilmez — o adım gerçekten
-  kaydedilmiş bir Yük referans numarasına ihtiyaç duyduğu için güvenli bir
-  şekilde simüle edilemez. Sevk akışını da test etmek isterseniz ayrı bir
-  test/UAT Uyumsoft ortamınız varsa orada `DRY_RUN = False` ile tam akışı
-  deneyebilirsiniz.
+  `DERIN_TEST_MODU = True` yapın. Bu modda script Kopyalama + **tek bir**
+  (tercihen faturalı) satış satırının veri girişini + fatura LOV
+  eşleştirmesini **gerçekten** yapar (asıl hatanın olduğu yer), ama:
+  - ⚠️ **Bilinen ERP hatası nedeniyle** satır bazlı "Kaydet"e (`a[id*='editnew']`)
+    **kesinlikle basmaz** — fatura seçildikten sonra satırı kaydetmek ERP'de
+    Yükü kilitliyor ve satır SQL'den boşaltılmadan silinemiyor hale geliyor.
+    Bu yüzden birden fazla satır işlenmez; test edilen ilk (faturalı) satırda
+    fatura bulunup seçildikten sonra hemen durulur.
+  - Ana `Kaydet` (`#btnSave_CD`) butonuna da basmaz; pencereyi kayıt
+    yapılmadan kapatır. Durum: `DERİN_TEST BAŞARILI`.
+  - `Sevk Oluştur` adımı bu modda hiç test edilmez — o adım gerçekten
+    kaydedilmiş bir Yük referans numarasına ihtiyaç duyduğu için güvenli bir
+    şekilde simüle edilemez. Sevk akışını da test etmek isterseniz ayrı bir
+    test/UAT Uyumsoft ortamınız varsa orada `DRY_RUN = False` ile tam akışı
+    deneyebilirsiniz.
 - Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın (`DERIN_TEST_MODU`
   bu durumda etkisizdir).
 - Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`)
