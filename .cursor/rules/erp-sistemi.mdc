@@ -81,14 +81,17 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   [DOĞRULANMIŞ: LOV grid sütun sırası -- Firma K.=0, İşyeri K.=1, DocNo=2,
   DocDate=3, Kart K.=4, Kart(Adı)=5, **Yerel Para Tutarı=6**, Hareket
   Tutarı=7, Kdv Tutarı=8, Para=9, ...].
-  **⚠️ BU ALANA YAZMA.** Maskeli/formatlı DevExpress editörü; `.fill()` ile
-  yazılan değer doğru işlenmiyor ve akışı bozuyor (bkz. `izlog_yuk_otomasyon.py`
-  içindeki `_satirda_tutar_var_mi` — tutar, satır metni Python'da ayrıştırılarak
-  karşılaştırılıyor, hiçbir zaman bu kutuya yazılmıyor; kod sadece `""` ile
-  temizliyor, asla değer yazmıyor). Kullanıcı, bu alana elle yazmayı denediğinde
-  de sorun yaşadığını bildirdi ("noktasız", örn. `72426,30` formatı gerekebilir
-  gibi görünüyor) -- ama otomasyon bu alanı hiç kullanmadığı için bu konuyu
-  çözmeye gerek yok, sadece not olarak burada.
+  **✅ ARTIK YAZILIYOR** (önceki tur "buraya yazma" derken YANLIŞTI): Eskiden
+  bu alana yazmanın akışı bozduğu düşünülüyordu, ama gerçek neden "3 nokta"nın
+  bazen YANLIŞ ekranı (Cari Seç) açmasıydı -- DXEditor29 düzeltmesiyle artık
+  DOĞRU ekran (Fatura Kalemleri Listesi) açılıyor ve bu alan normal şekilde
+  çalışıyor. Format: satır girişindeki TUTAR formatıyla AYNI -- noktasız,
+  virgül ondalıklı (örn. `426,00`, `formatli_tutar` değişkeni). Kod artık
+  fatura no (col2) + tutar (col6) filtrelerini BİRLİKTE dolduruyor, ardından
+  gelen sonuçlardan (kullanıcı teyidiyle) İLK satırı seçiyor. Python
+  tarafındaki `_satirda_tutar_var_mi` doğrulaması artık sadece bir ihtiyat
+  kontrolü (ERP filtresi beklenmedik davranırsa bile makul bir satır
+  seçilsin diye) -- zorunlu değil.
 - LOV içindeki "Seç" butonu: `#btnChoose_CD`.
 - Aynı fatura no + aynı tutara sahip birden fazla satır grid'de görünebilir;
   önemli değil, ilk eşleşen satır seçilir.

@@ -240,50 +240,62 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             lov_penceresi = aktif_sayfa.frames[-1]
             lov_penceresi.wait_for_selector("#myListPage_DXFREditorcol2_I", state="visible", timeout=20000)
 
-            # --- ZIRH: Tutar kutusuna HİÇ dokunulmuyor (sadece arama/reset için boş bırakılıyor) ---
-            # Tutar filtre kutusu (#myListPage_DXFREditorcol6_I) DevExpress'in maskeli/
-            # formatlı sayısal editörü; buraya değer yazmak akışı bozuyor. Sadece
-            # fatura no ile filtreleniyor, doğru satır aşağıda tutar metninden
-            # ayrıştırılarak (Decimal ile) bulunuyor.
+            # --- Fatura no + Tutar birlikte filtreleniyor ---
+            # Eskiden tutar kutusuna (#myListPage_DXFREditorcol6_I) hiç yazılmıyordu
+            # çünkü "3 nokta" bazen YANLIŞ ekranı (Cari Seç) açıyordu ve o ekranda
+            # tutar yazmak anlamsız/bozucuydu. DXEditor29 düzeltmesiyle "3 nokta"
+            # artık DOĞRU ekranı (Fatura Kalemleri Listesi) açıyor; bu ekranda
+            # tutar filtresi normal şekilde çalışıyor. Kullanıcı, doğru satırı
+            # bulmak için fatura no + tutarın BİRLİKTE filtrelenip gelen
+            # sonuçlardan İLKİNİN seçilmesi gerektiğini teyit etti. Tutar,
+            # satır girişindeki AYNI formatla yazılıyor (noktasız, virgül
+            # ondalıklı -- örn. "426,00").
             lov_penceresi.fill("#myListPage_DXFREditorcol2_I", fatura_no_str)
-            lov_penceresi.fill("#myListPage_DXFREditorcol6_I", "")
-            lov_penceresi.press("#myListPage_DXFREditorcol2_I", "Enter")
+            lov_penceresi.fill("#myListPage_DXFREditorcol6_I", formatli_tutar)
+            lov_penceresi.press("#myListPage_DXFREditorcol6_I", "Enter")
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
 
             hedef_tutar = fiyat_decimal.quantize(Decimal("0.01"))
 
             # Fatura no'ya göre (kelime sınırı ile tam eşleşme) filtrelenmiş satırlar.
+            # ERP zaten tutara göre de filtrelediği için normalde tek/az sayıda
+            # satır kalır.
             fatura_satirlari = lov_penceresi.locator("tr.dxgvDataRow_Aqua").filter(
                 has_text=re.compile(rf"\b{re.escape(fatura_no_str)}\b")
             )
-            fatura_satirlari.first.wait_for(state="visible", timeout=10000)
+
+            try:
+                fatura_satirlari.first.wait_for(state="visible", timeout=10000)
+            except Exception:
+                raise RuntimeError(
+                    f"[{kaynak_yuk_no}] HATA: Fatura '{fatura_no_str}' (tutar filtresi: {formatli_tutar}) "
+                    f"için LOV'da hiçbir satır bulunamadı. Fatura no ve/veya tutar filtresi ERP'de "
+                    f"eşleşmedi -- format farklı olabilir."
+                )
 
             # NOT: Aynı fatura no + aynı tutar birden fazla satırda görünebilir
             # (örn. aynı faturanın farklı kalemleri aynı tutara sahip olabilir).
-            # Bu durum önemli değil: fatura no zaten eşleşiyorsa ve tutar da
-            # eşleşiyorsa, hangi satır olduğu fark etmez -- ilk eşleşen satır
-            # bulunur bulunmaz seçilir, kalan satırlara bakılmaz.
+            # Bu durum önemli değil: fatura no ve tutar zaten ERP tarafında
+            # filtrelendiği için hangi satır olduğu fark etmez -- ilk satır
+            # seçilir. Python tarafında tutar doğrulaması sadece bir ihtiyat
+            # kontrolü olarak yapılır (ERP filtresi beklenmedik şekilde
+            # çalışmazsa bile makul bir satır seçilsin diye).
             hedef_satir = None
             satir_sayisi = fatura_satirlari.count()
-            incelenen_metinler = []
             for idx in range(satir_sayisi):
                 aday = fatura_satirlari.nth(idx)
                 try:
                     metin = aday.inner_text()
                 except Exception:
                     continue
-                incelenen_metinler.append(metin.replace("\n", " | "))
                 if _satirda_tutar_var_mi(metin, hedef_tutar):
                     hedef_satir = aday
-                    break  # İlk eşleşme yeterli; duplikasyon sorun değil.
+                    break
 
             if hedef_satir is None:
-                ornek = "\n".join(incelenen_metinler[:5])
-                raise RuntimeError(
-                    f"[{kaynak_yuk_no}] HATA: Fatura '{fatura_no_str}' için {hedef_tutar} TL tutarında "
-                    f"eşleşen satır bulunamadı ({satir_sayisi} satır incelendi).\n"
-                    f"İncelenen satır örnekleri:\n{ornek}"
-                )
+                print(f"[{kaynak_yuk_no}] UYARI: Python tarafında tutar doğrulaması eşleşmedi, "
+                      f"ERP'nin fatura no + tutar filtresine güvenilerek ilk satır seçiliyor.")
+                hedef_satir = fatura_satirlari.first
 
             hedef_satir.click()
 
