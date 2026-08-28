@@ -33,6 +33,15 @@ güvenilmemeli.
   arar ve satırı seçer; `Kopya`/`Kaydet`/`Sevk Oluştur` butonlarına KESİNLİKLE
   basılmaz — hiçbir kayıt/veritabanı değişikliği yapılmaz. Gerçek çalıştırmalar
   öncesi her zaman `DRY_RUN = True` ile test edilmeli.
+- `DERIN_TEST_MODU = True` (yalnızca `DRY_RUN = True` ile birlikte anlamlı):
+  Kopyalama + tüm veri girişi + fatura LOV eşleştirmesi GERÇEKTEN yapılır
+  (asıl hatanın olduğu yer), ama ana `Kaydet` (`#btnSave_CD`) butonuna
+  kesinlikle basılmaz; pencere kayıt yapılmadan kapatılır. Durum:
+  `DERİN_TEST BAŞARILI`. `Sevk Oluştur` adımı bu modda hiç test edilmez
+  (gerçekten kaydedilmiş bir Yük referans numarasına ihtiyaç duyar).
+  Varsayım: "Kopya" ve satır bazlı "Kaydet" tıklamaları veritabanına yazmaz
+  (yalnızca ana Kaydet yazar) — bu, kullanıcı tarafından teyit edilmeden
+  production'a karşı çalıştırılmamalı.
 - Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
   çağrılır: `CREATE_USER_ID` alanı `ayarlar.HEDEF_KULLANICI_ID`'ye çevrilir ve
   `UPDATE_DATE`/`UPDATE_USER_ID` Uyumsoft'un orijinal sıfırlama değerlerine

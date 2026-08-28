@@ -100,8 +100,22 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
     page.click(saglam_secici)
 
-    if ayarlar.DRY_RUN:
+    # DERİN TEST MODU: ayarlar.py'de DRY_RUN=True VE DERIN_TEST_MODU=True ise,
+    # sadece arama/seçimle sınırlı kalınmaz; Kopyalama + tüm veri girişi +
+    # fatura LOV eşleştirmesi (asıl düzeltilen hata burada) GERÇEKTEN yapılır,
+    # ama ana "Kaydet" (#btnSave_CD) butonuna KESİNLİKLE basılmaz — pencere
+    # kayıt yapılmadan kapatılır. Bu, "Kopya" tıklamanın ve satır bazlı
+    # "Kaydet" tıklamalarının veritabanına yazmadığı (yalnızca ana Kaydet'in
+    # yazdığı) varsayımına dayanır -- bunu ERP'nizde teyit etmeden production'a
+    # karşı çalıştırmayın.
+    derin_test = bool(ayarlar.DRY_RUN) and bool(getattr(ayarlar, "DERIN_TEST_MODU", False))
+
+    if ayarlar.DRY_RUN and not derin_test:
         return {"durum": "DRY_RUN BAŞARILI", "yeni_yuk_no": None, "yeni_sevk_no": None, "proje": proje_kodu, "fatura_no": tum_faturalar, "fatura_tarihi": tum_fatura_tarihleri, "tarih": yuk_tarihi, "aktif_sayfa": aktif_sayfa}
+
+    if derin_test:
+        print(f"[{kaynak_yuk_no}] ⚠️ DERİN TEST MODU AKTİF: Kopyalama ve veri girişi GERÇEKTEN yapılacak, "
+              f"ama ana 'Kaydet' butonuna kesinlikle basılmayacak.")
 
     yeni_yuk_no = onceki_yeni_yuk_no
 
@@ -234,6 +248,24 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
             aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
             aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
+
+        if derin_test:
+            print(f"[{kaynak_yuk_no}] DERİN TEST TAMAMLANDI: Tüm veri girişi ve fatura eşleştirmesi başarılı. "
+                  f"Ana 'Kaydet' butonuna BASILMIYOR, pencere kayıt yapılmadan kapatılıyor.")
+            try:
+                aktif_sayfa.close()
+            except Exception:
+                pass
+            return {
+                "durum": "DERİN_TEST BAŞARILI",
+                "yeni_yuk_no": None,
+                "yeni_sevk_no": None,
+                "proje": proje_kodu,
+                "fatura_no": tum_faturalar,
+                "fatura_tarihi": tum_fatura_tarihleri,
+                "tarih": yuk_tarihi,
+                "aktif_sayfa": page
+            }
 
         aktif_sayfa.click("#btnSave_CD", force=True)
 

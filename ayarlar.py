@@ -21,6 +21,18 @@ ERP_SIFRE = "DEĞİŞTİRİNİZ"                               # Uyumsoft şifre
 # DRY_RUN = True ise sistem sadece ekranı açar, verileri çeker ve tıklanabilirliği test eder.
 # KESİNLİKLE "Kaydet", "Kopya" veya "Sevk Oluştur" butonlarına basmaz.
 DRY_RUN = True
+
+# DERIN_TEST_MODU = True (ve DRY_RUN = True iken) sistem Kopyalama + tüm veri
+# girişini + fatura LOV eşleştirmesini GERÇEKTEN yapar (asıl hatanın olduğu
+# yer burası), ama ana "Kaydet" (#btnSave_CD) butonuna KESİNLİKLE basmaz;
+# pencereyi kayıt yapılmadan kapatır. "Sevk Oluştur" adımına hiç girmez
+# (o adım gerçekten kaydedilmiş bir Yük'e ihtiyaç duyar).
+#
+# ⚠️ Bu modu production'a karşı çalıştırmadan önce, "Kopya" butonuna tıklamanın
+# ve satır bazlı "Kaydet" tıklamalarının veritabanına GERÇEKTEN bir şey
+# yazmadığını (yalnızca ana Kaydet'in yazdığını) manuel olarak teyit edin.
+DERIN_TEST_MODU = False
+
 ERP_YUK_LISTESI_URL = "https://erp.izlog.com.tr/MainList.aspx?CommandName=LGoodsCollection.Show&M=1&MenuId=654&WinId=01"
 
 # Veritabanı İz Temizliğinde Kullanılacak Hedef Kullanıcı ID
