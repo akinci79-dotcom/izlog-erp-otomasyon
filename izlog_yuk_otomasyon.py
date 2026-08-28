@@ -201,6 +201,24 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             lov_penceresi = aktif_sayfa.frames[-1]
             lov_penceresi.wait_for_selector("#myListPage_DXFREditorcol2_I", state="visible", timeout=20000)
 
+            # --- ZIRH: Yanlış LOV açılmış mı kontrolü ---
+            # "3 nokta" tıklaması, imlecin o an TAM OLARAK Fatura alanında değil de
+            # (örn. Tab navigasyonu grid'in sütun düzenine göre kaydığında) "Cari"
+            # gibi başka bir LOV-bağlı alanda olması durumunda YANLIŞ pencereyi
+            # (örn. "Cari Seç") açabiliyor. Bu durumda arama sonsuza kadar 0 satır
+            # bulamayıp anlamsız bir timeout'a düşer; bunun yerine hemen, net bir
+            # hata ile durduruyoruz.
+            yanlis_ekran_isaretleri = ["Cari Kodu", "Cari Ad", "Firma Kodu"]
+            for isaret in yanlis_ekran_isaretleri:
+                if lov_penceresi.locator(f"text={isaret}").count() > 0:
+                    raise RuntimeError(
+                        f"[{kaynak_yuk_no}] HATA: '3 nokta' tıklaması Fatura Seç ekranını DEĞİL, "
+                        f"başka bir seçim ekranını (örn. Cari Seç) açtı ('{isaret}' etiketi görüldü). "
+                        f"İmleç, fiyat girişinden sonraki Tab navigasyonuyla Fatura alanına değil "
+                        f"başka bir alana denk gelmiş olabilir. Fatura alanının gerçek HTML id'sinin "
+                        f"F12 ile bulunup koda eklenmesi gerekiyor."
+                    )
+
             # --- ZIRH: Tutar kutusuna HİÇ dokunulmuyor (sadece arama/reset için boş bırakılıyor) ---
             # Tutar filtre kutusu (#myListPage_DXFREditorcol6_I) DevExpress'in maskeli/
             # formatlı sayısal editörü; buraya değer yazmak akışı bozuyor. Sadece
