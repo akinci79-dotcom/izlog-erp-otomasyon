@@ -120,8 +120,17 @@ ButtonEdit tablosu **`#TabControl_grd_LGoodsOpDetailCollection_DXEditor29`**
 (sabit, tüm satırlarda aynı -- diğer editörler gibi sayfanın statik kolon
 tanımından geliyor). Kod artık bu id'yi DOĞRUDAN hedefliyor (Tab-sayma
 kaldırıldı); sadece bu id bulunamazsa eski Tab-tabanlı yönteme (uyarı
-loglayarak) düşüyor. Ayrıca yanlış ekran açılırsa ("Cari Kodu"/"Cari Ad"/
-"Firma Kodu" etiketleri) hâlâ net bir hata fırlatılıyor (ekstra güvenlik).
+loglayarak) düşüyor. Canlı testte bu düzeltmeyle doğru ekran ("Fatura
+Kalemleri Listesi", DocNo/Tutar/KDV sütunlu) başarıyla açıldı.
+
+**Dikkat**: "Fatura Kalemleri Listesi" (doğru/gerçek fatura seçim ekranı)
+İLK sütunu olarak `Firma K.` (Firma Kodu) gösteriyor (çoklu şirket desteği
+nedeniyle) -- bu, "Cari Seç" ekranına ait bir işaret DEĞİL. Daha önce
+eklenen "yanlış ekran mı?" kontrolü (metinde "Firma Kodu"/"Cari Kodu"/
+"Cari Ad" arayan) bu yüzden YANLIŞ POZİTİF üretip başarılı bir çalışmayı
+gereksiz yere durdurdu; bu kontrol KALDIRILDI. Fatura no + tutar eşleşmesi
+bulunamazsa zaten `_satirda_tutar_var_mi` mantığı net bir hata veriyor,
+ekstra bir "ekran doğrulama" katmanına gerek yok.
 
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
