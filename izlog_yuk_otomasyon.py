@@ -251,13 +251,21 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # yenilemede siliniyordu). Doğru sıra: ÖNCE fatura no yaz + Enter
             # (filtre uygulansın, bekle), SONRA tutarı (aynı format, noktasız
             # virgül ondalıklı -- örn. "426,00") yaz + Enter.
+            # NOT: Bekleme, iframe'in (lov_penceresi) kendi network durumuna göre
+            # yapılıyor (aktif_sayfa'nın değil) -- dış sayfa hızlıca "idle"
+            # sinyali verip iframe içindeki AJAX'ın bitmesini yanlışlıkla
+            # beklememiş gibi görünebiliyordu. Ayrıca her filtrenin ardından
+            # DevExpress'in grid'i render etmesi için sabit bir tampon bekleme
+            # de ekleniyor.
             lov_penceresi.fill("#myListPage_DXFREditorcol2_I", fatura_no_str)
             lov_penceresi.press("#myListPage_DXFREditorcol2_I", "Enter")
-            _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
+            _agsakinligini_bekle(lov_penceresi, timeout=10000, yedek_bekleme=2000)
+            lov_penceresi.wait_for_timeout(800)
 
             lov_penceresi.fill("#myListPage_DXFREditorcol6_I", formatli_tutar)
             lov_penceresi.press("#myListPage_DXFREditorcol6_I", "Enter")
-            _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
+            _agsakinligini_bekle(lov_penceresi, timeout=10000, yedek_bekleme=2000)
+            lov_penceresi.wait_for_timeout(800)
 
             hedef_tutar = fiyat_decimal.quantize(Decimal("0.01"))
 
@@ -269,12 +277,19 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             )
 
             try:
-                fatura_satirlari.first.wait_for(state="visible", timeout=10000)
+                fatura_satirlari.first.wait_for(state="visible", timeout=15000)
             except Exception:
+                # NOT: Bu, MUTLAKA fatura no/tutar uyuşmazlığı anlamına gelmez --
+                # ERP'nin filtre AJAX'ının render'ı beklenenden uzun sürmüş de
+                # olabilir (canlı testte satır aslında ekranda görünüyordu ama
+                # bu bekleme yetişmemişti). Hata anındaki ekran görüntüsünü
+                # (hata_...png) kontrol edin: satır orada görünüyorsa bu bir
+                # zamanlama sorunu, görünmüyorsa gerçek bir eşleşme sorunu.
                 raise RuntimeError(
                     f"[{kaynak_yuk_no}] HATA: Fatura '{fatura_no_str}' (tutar filtresi: {formatli_tutar}) "
-                    f"için LOV'da hiçbir satır bulunamadı. Fatura no ve/veya tutar filtresi ERP'de "
-                    f"eşleşmedi -- format farklı olabilir."
+                    f"için LOV'da 15 saniye içinde eşleşen bir satır görünmedi. Bu ya gerçek bir fatura "
+                    f"no/tutar uyuşmazlığı ya da ERP'nin filtre render'ının beklenenden uzun sürmesi "
+                    f"olabilir -- ekran görüntüsünü kontrol edin."
                 )
 
             # NOT: Aynı fatura no + aynı tutar birden fazla satırda görünebilir

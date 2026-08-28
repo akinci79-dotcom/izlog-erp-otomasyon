@@ -91,9 +91,19 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   BİRDEN doldurup tek Enter'a basmak İŞE YARAMIYOR -- DevExpress'in filtre
   satırı her Enter'da postback tetikliyor ve henüz gönderilmemiş ikinci
   kutunun değerini siliyor; bu kullanıcı tarafından canlı testte teyit
-  edildi). Doğru sıra: önce col2 doldur + Enter + bekle, SONRA col6 doldur +
+  edildi).   Doğru sıra: önce col2 doldur + Enter + bekle, SONRA col6 doldur +
   Enter + bekle. Ardından gelen sonuçlardan (kullanıcı teyidiyle) İLK satırı
-  seçiyor. Python
+  seçiyor.
+
+  **Zamanlama notu [DOĞRULANMIŞ]**: Canlı testte, filtreleme mantığının
+  DOĞRU çalıştığı ama satırın "görünür" hale gelmesinin `aktif_sayfa`
+  (dış sayfa) üzerinden ölçülen network-idle beklemesinden UZUN sürdüğü
+  bir durum yaşandı -- satır ekranda gerçekten görünüyordu ama kod "satır
+  bulunamadı" hatası verdi. Düzeltme: network-idle beklemesi artık
+  `lov_penceresi` (iframe'in kendisi) üzerinden yapılıyor, her filtre
+  sonrası sabit 800ms render tamponu eklendi, satır görünürlük timeout'u
+  10s'den 15s'e çıkarıldı. Hata mesajı da artık "format sorunu" gibi
+  yanlış kesin bir teşhis koymuyor, ekran görüntüsüne bakılmasını öneriyor. Python
   tarafındaki `_satirda_tutar_var_mi` doğrulaması artık sadece bir ihtiyat
   kontrolü (ERP filtresi beklenmedik davranırsa bile makul bir satır
   seçilsin diye) -- zorunlu değil.
