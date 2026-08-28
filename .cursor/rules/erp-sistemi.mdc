@@ -105,20 +105,26 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   10s'den 15s'e çıkarıldı. Hata mesajı da artık "format sorunu" gibi
   yanlış kesin bir teşhis koymuyor, ekran görüntüsüne bakılmasını öneriyor.
 
-  **✅ GERÇEK KÖK NEDEN BULUNDU [DOĞRULANMIŞ]**: Zamanlama sorunu değildi.
-  Filtre (fatura no + tutar) TAM OLARAK 1 satıra indiğinde, DevExpress o
-  satırı otomatik odaklıyor/vurguluyor (ekranda turuncu görünüyor) ve bu
-  satırın CSS sınıfı `dxgvDataRow_Aqua` DEĞİL farklı bir isim taşıyor --
-  tam olarak hangisi belirsiz (`tr[class*="Row_Aqua"]` genişletmesi de
-  yetersiz kaldı). Bu yüzden CSS sınıf tahmini TAMAMEN bırakıldı: LOV
-  penceresindeki seçici artık sınıf kısıtlaması olmadan (`lov_penceresi.locator("tr")`)
-  HER `<tr>`'yi tarayıp içinde fatura no geçeni buluyor. Filtre kutusundaki
-  (input) değer innerText'e dahil olmadığı için filtre satırı kendiliğinden
-  elenir -- bu yöntem hangi CSS sınıfı kullanılırsa kullanılsın çalışır. Python
+  **✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, F12 ile teyit edildi]**: CSS sınıfı
+  tahmin etmek (önce `dxgvDataRow_Aqua`, sonra `Row_Aqua` içeren herhangi bir
+  sınıf, sonra sınıfsız `<tr>` taraması) hiçbiri güvenilir çıkmadı. Gerçek
+  çözüm: LOV grid'indeki **her hücrenin id'si sabit bir kalıba sahip**:
+  `"myListPage|{sütunİndeksi}|{satırİndeksi}"` (örn. DocNo hücresi için
+  `"myListPage|2|0"` -- sütun 2 = DocNo, filtre kutusu `col2` ile aynı
+  indeks). Bu id, satırın CSS sınıfından (odaklı/seçili/normal) TAMAMEN
+  bağımsız ve değişmiyor. Kod artık ERP'nin fatura no + tutar filtresi
+  sonrası **İLK satırın (satır indeksi 0) DocNo hücresini** doğrudan
+  `td[id="myListPage|2|0"]` ile hedefliyor, tıklıyor. Python tarafında
+  içerik doğrulaması sadece bilgilendirme amaçlı (akışı durdurmuyor). Python
   tarafındaki `_satirda_tutar_var_mi` doğrulaması artık sadece bir ihtiyat
   kontrolü (ERP filtresi beklenmedik davranırsa bile makul bir satır
   seçilsin diye) -- zorunlu değil.
 - LOV içindeki "Seç" butonu: `#btnChoose_CD`.
+- **LOV grid hücre id kalıbı [DOĞRULANMIŞ, F12 ile teyit edildi]**: Grid'deki
+  her `<td>` hücresinin id'si `"{tabloAdı}|{sütunİndeksi}|{satırİndeksi}"`
+  formatında (örn. Fatura Seç LOV'unda DocNo hücresi: `"myListPage|2|0"`).
+  Bu id CSS sınıfından (odaklı/seçili/normal) bağımsız ve sabit -- bir satırı
+  CSS sınıfıyla değil bu id kalıbıyla hedeflemek çok daha güvenilir.
 - Aynı fatura no + aynı tutara sahip birden fazla satır grid'de görünebilir;
   önemli değil, ilk eşleşen satır seçilir.
 

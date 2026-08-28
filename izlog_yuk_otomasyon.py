@@ -274,63 +274,37 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             hedef_tutar = fiyat_decimal.quantize(Decimal("0.01"))
 
-            # Fatura no'ya göre (kelime sınırı ile tam eşleşme) filtrelenmiş satırlar.
-            # ERP zaten tutara göre de filtrelediği için normalde tek/az sayıda
-            # satır kalır.
-            #
-            # NOT: CSS sınıf adı tahmin etmek (önce "dxgvDataRow_Aqua", sonra
-            # "Row_Aqua" içeren herhangi bir sınıf) güvenilir çıkmadı -- filtre
-            # tek satıra indiğinde DevExpress'in o satıra hangi sınıfı verdiği
-            # net değil. Bu yüzden sınıf kısıtlaması TAMAMEN kaldırıldı: LOV
-            # penceresindeki HER `<tr>` taranıp içinde fatura no GEÇEN satır
-            # bulunuyor. Filtre kutusundaki (input) değer innerText'e dahil
-            # olmadığı için filtre satırı kendiliğinden elenir; bu yöntem hangi
-            # CSS sınıfı kullanılırsa kullanılsın çalışır.
-            fatura_satirlari = lov_penceresi.locator("tr").filter(
-                has_text=re.compile(rf"\b{re.escape(fatura_no_str)}\b")
-            )
-
+            # --- KESİN YÖNTEM: Hücre id'sine göre doğrudan hedefleme ---
+            # F12 ile incelendi: LOV grid'indeki her hücrenin id'si sabit bir
+            # kalıba sahip: "myListPage|{sütunİndeksi}|{satırİndeksi}" (örn.
+            # DocNo hücresi için "myListPage|2|0" -- sütun 2 = DocNo, tıpkı
+            # filtre kutusu #myListPage_DXFREditorcol2_I ile aynı indeks).
+            # Bu id CSS sınıfından TAMAMEN bağımsız (odaklı/seçili olsun ya da
+            # olmasın değişmiyor) -- önceki CSS sınıfı tahminleri (dxgvDataRow_Aqua,
+            # Row_Aqua, sınıfsız <tr> taraması) bu yüzden güvenilmezdi. ERP zaten
+            # fatura no + tutar filtrelerini uyguladı; sonucun İLK satırının
+            # (satır indeksi 0) DocNo hücresini doğrudan bu id ile hedefliyoruz.
+            hedef_hucre = lov_penceresi.locator('td[id="myListPage|2|0"]')
             try:
-                fatura_satirlari.first.wait_for(state="visible", timeout=15000)
+                hedef_hucre.wait_for(state="visible", timeout=15000)
             except Exception:
-                # NOT: Bu, MUTLAKA fatura no/tutar uyuşmazlığı anlamına gelmez --
-                # ERP'nin filtre AJAX'ının render'ı beklenenden uzun sürmüş de
-                # olabilir (canlı testte satır aslında ekranda görünüyordu ama
-                # bu bekleme yetişmemişti). Hata anındaki ekran görüntüsünü
-                # (hata_...png) kontrol edin: satır orada görünüyorsa bu bir
-                # zamanlama sorunu, görünmüyorsa gerçek bir eşleşme sorunu.
                 raise RuntimeError(
                     f"[{kaynak_yuk_no}] HATA: Fatura '{fatura_no_str}' (tutar filtresi: {formatli_tutar}) "
-                    f"için LOV'da 15 saniye içinde eşleşen bir satır görünmedi. Bu ya gerçek bir fatura "
-                    f"no/tutar uyuşmazlığı ya da ERP'nin filtre render'ının beklenenden uzun sürmesi "
-                    f"olabilir -- ekran görüntüsünü kontrol edin."
+                    f"için LOV'da hiç satır görünmedi (id='myListPage|2|0' bulunamadı)."
                 )
 
-            # NOT: Aynı fatura no + aynı tutar birden fazla satırda görünebilir
-            # (örn. aynı faturanın farklı kalemleri aynı tutara sahip olabilir).
-            # Bu durum önemli değil: fatura no ve tutar zaten ERP tarafında
-            # filtrelendiği için hangi satır olduğu fark etmez -- ilk satır
-            # seçilir. Python tarafında tutar doğrulaması sadece bir ihtiyat
-            # kontrolü olarak yapılır (ERP filtresi beklenmedik şekilde
-            # çalışmazsa bile makul bir satır seçilsin diye).
-            hedef_satir = None
-            satir_sayisi = fatura_satirlari.count()
-            for idx in range(satir_sayisi):
-                aday = fatura_satirlari.nth(idx)
-                try:
-                    metin = aday.inner_text()
-                except Exception:
-                    continue
-                if _satirda_tutar_var_mi(metin, hedef_tutar):
-                    hedef_satir = aday
-                    break
+            # İhtiyat: ilk satırın DocNo'sunun gerçekten beklenen fatura no'yu
+            # içerip içermediğini kontrol et (sadece bilgilendirme, akışı durdurmuyor).
+            try:
+                hucre_metni = hedef_hucre.inner_text().strip()
+                if fatura_no_str not in hucre_metni:
+                    print(f"[{kaynak_yuk_no}] UYARI: İlk satırın DocNo hücresi ('{hucre_metni}') "
+                          f"beklenen fatura no ('{fatura_no_str}') ile birebir eşleşmiyor, "
+                          f"yine de devam ediliyor (ERP filtresine güveniliyor).")
+            except Exception:
+                pass
 
-            if hedef_satir is None:
-                print(f"[{kaynak_yuk_no}] UYARI: Python tarafında tutar doğrulaması eşleşmedi, "
-                      f"ERP'nin fatura no + tutar filtresine güvenilerek ilk satır seçiliyor.")
-                hedef_satir = fatura_satirlari.first
-
-            hedef_satir.click()
+            hedef_hucre.click()
 
             aktif_sayfa.wait_for_timeout(500)
             lov_penceresi.locator("#btnChoose_CD").click(force=True)
