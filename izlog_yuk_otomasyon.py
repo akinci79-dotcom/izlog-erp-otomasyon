@@ -194,10 +194,6 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", "Tab")
             aktif_sayfa.wait_for_timeout(400)
 
-            aktif_sayfa.keyboard.press("Tab")
-            aktif_sayfa.wait_for_timeout(400)
-            aktif_sayfa.keyboard.press("Tab")
-
             # Ağ trafiğinin dinlenmesi (Sabit 3000ms yerine) - timeout olursa yedek beklemeye düşer
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
 
@@ -209,8 +205,27 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             fatura_no_str = str(fatura_no_raw).strip()
 
-            aktif_kutu_tablosu = aktif_sayfa.locator("*:focus").locator("xpath=ancestor::table[1]")
-            box = aktif_kutu_tablosu.bounding_box()
+            # ARTIK SAĞLAM: Fatura kutusunun "..." butonuna, Tab-sayarak odağı
+            # tahmin etmek (ve bazen yanlış alana -- örn. Cari -- denk gelmek)
+            # yerine DOĞRUDAN F12 ile bulunan sabit id'si üzerinden tıklanıyor.
+            # Hangi satırda grid sütun düzeni ne olursa olsun güvenilir çalışır.
+            box = None
+            try:
+                fatura_kutu_tablosu = aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29")
+                fatura_kutu_tablosu.wait_for(state="visible", timeout=5000)
+                box = fatura_kutu_tablosu.bounding_box()
+            except Exception:
+                box = None
+
+            if not box:
+                # Yedek (eski yöntem): sabit id bulunamazsa odaklanmış hücreden dene.
+                print(f"[{kaynak_yuk_no}] UYARI: Fatura kutusu (DXEditor29) sabit id ile bulunamadı, "
+                      f"yedek (Tab tabanlı) yönteme düşülüyor.")
+                aktif_sayfa.keyboard.press("Tab")
+                aktif_sayfa.wait_for_timeout(300)
+                aktif_sayfa.keyboard.press("Tab")
+                aktif_kutu_tablosu = aktif_sayfa.locator("*:focus").locator("xpath=ancestor::table[1]")
+                box = aktif_kutu_tablosu.bounding_box()
 
             if box:
                 btn_x = box['x'] + box['width'] - 12
@@ -219,7 +234,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 aktif_sayfa.wait_for_timeout(300)
                 aktif_sayfa.mouse.click(btn_x, btn_y)
             else:
-                raise RuntimeError(f"[{kaynak_yuk_no}] HATA: Fatura kutusu ekranda odaklanamadı!")
+                raise RuntimeError(f"[{kaynak_yuk_no}] HATA: Fatura kutusu ekranda bulunamadı!")
 
             aktif_sayfa.wait_for_timeout(1500)
             lov_penceresi = aktif_sayfa.frames[-1]

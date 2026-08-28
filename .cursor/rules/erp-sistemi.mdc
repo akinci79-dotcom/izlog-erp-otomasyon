@@ -108,19 +108,20 @@ Yine de: ERP'de manuel olarak zaten kaydedilmiş bir Yük'ün faturalı bir
 satırını düzenlemeye/silmeye ihtiyaç olursa, önce bu kısıtlamayı hatırla ve
 kullanıcıya sor.
 
-### ⚠️ AÇIK SORUN — "3 nokta" tıklaması bazen yanlış LOV açıyor [ARAŞTIRMA SÜRÜYOR]
-Fatura kutusuna ulaşmak için kullanılan yöntem ("KABA KUVVET ZIRHI"): fiyat
-kutusundan sabit sayıda `Tab` basıp, o an odaklanan hücrenin ata `<table>`
-elementinin "..." butonuna koordinat bazlı tıklamak. Canlı testte bu yöntem
-bazen **Fatura Seç yerine Cari Seç** (müşteri/tedarikçi seçim) ekranını açtı
-— muhtemelen grid'in sütun düzeni satıra göre değiştiği için (örn. Operasyon
-Kodu "NAVLUN" olduğunda bazı sütunlar atlanıyor/farklı sırada geliyor).
-Şimdilik kod, yanlış ekran açıldığını ("Cari Kodu"/"Cari Ad"/"Firma Kodu"
-etiketleri) tespit edip anlamlı bir hata fırlatıyor (sessiz 10s timeout
-yerine) -- ama asıl (kalıcı) çözüm, Fatura alanının gerçek HTML id'sini
-(diğer alanlar gibi `#TabControl_grd_LGoodsOpDetailCollection_DXEditorN_I`
-kalıbında olması bekleniyor) F12 ile bulup, Tab-sayma yerine DOĞRUDAN o id'nin
-"..." butonuna tıklamaktır. Bu id netleşince burası güncellenmeli.
+### ✅ ÇÖZÜLDÜ — "3 nokta" artık sabit id üzerinden tıklanıyor [DOĞRULANMIŞ]
+Eskiden Fatura kutusuna ulaşmak için fiyat kutusundan sabit sayıda `Tab`
+basıp o an odaklanan hücrenin "..." butonuna koordinat bazlı tıklanıyordu
+("KABA KUVVET ZIRHI"). Bu yöntem canlı testte bazen **Fatura Seç yerine
+Cari Seç** (müşteri/tedarikçi seçim) ekranını açtı -- grid'in sütun düzeni
+satıra göre değişebildiği için.
+
+F12 ile bulunan gerçek id: Fatura kutusunun (input + "..." butonu) DevExpress
+ButtonEdit tablosu **`#TabControl_grd_LGoodsOpDetailCollection_DXEditor29`**
+(sabit, tüm satırlarda aynı -- diğer editörler gibi sayfanın statik kolon
+tanımından geliyor). Kod artık bu id'yi DOĞRUDAN hedefliyor (Tab-sayma
+kaldırıldı); sadece bu id bulunamazsa eski Tab-tabanlı yönteme (uyarı
+loglayarak) düşüyor. Ayrıca yanlış ekran açılırsa ("Cari Kodu"/"Cari Ad"/
+"Firma Kodu" etiketleri) hâlâ net bir hata fırlatılıyor (ekstra güvenlik).
 
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
