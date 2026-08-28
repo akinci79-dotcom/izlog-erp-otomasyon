@@ -11,11 +11,35 @@ from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritaban
 
 # --- YARDIMCI FONKSİYONLAR ---
 def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
+    """
+    DevExpress maskeli tarih alanını temizler ve yeni tarihi yazar.
+
+    NEDEN BÖYLE: `Home` -> `Shift+End` -> `Backspace` bazı DevExpress maskeli
+    editörlerde metin seçimini normal bir textbox gibi desteklemiyor (canlı
+    testte imleç sadece mevcut tarihin sonuna gidip bir alt alana geçti,
+    mevcut tarih SİLİNMEDİ). Bu yüzden önce `Ctrl+A` + `Delete` deneniyor
+    (çoğu editörde çalışır); silme işe yaramadıysa (alan hâlâ eski değeri
+    taşıyorsa) alanın GERÇEK mevcut uzunluğuna göre hesaplanan sayıda
+    `Backspace` ile garantili bir temizlik yapılıyor (sabit sayı varsaymak
+    yerine).
+    """
     sayfa.wait_for_selector(selector, state="visible", timeout=15000)
     sayfa.click(selector)
-    sayfa.keyboard.press("Home")
-    sayfa.keyboard.press("Shift+End")
-    sayfa.keyboard.press("Backspace")
+    sayfa.keyboard.press("Control+A")
+    sayfa.keyboard.press("Delete")
+    sayfa.wait_for_timeout(200)
+
+    try:
+        kalan = sayfa.input_value(selector) or ""
+    except Exception:
+        kalan = ""
+
+    if kalan.strip():
+        sayfa.click(selector)
+        sayfa.keyboard.press("End")
+        for _ in range(len(kalan) + 4):
+            sayfa.keyboard.press("Backspace")
+
     sayfa.type(selector, tarih_metni, delay=50)
     sayfa.press(selector, "Enter")
     sayfa.wait_for_timeout(500)

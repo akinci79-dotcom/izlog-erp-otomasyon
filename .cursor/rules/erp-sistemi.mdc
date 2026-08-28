@@ -125,10 +125,13 @@ kalıbında olması bekleniyor) F12 ile bulup, Tab-sayma yerine DOĞRUDAN o id'n
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
-- `#TabControl_dte_DocDate_I` — Belge tarihi. Maskeli alan; temizlemek için
-  `Home` → `Shift+End` (tümünü seç) → `Backspace`, ardından `GGAAYYYY`
-  (noktasız) `type()` ile yazılıp `Enter` + `Tab` basılıyor. Bkz.
-  `devexpress_tarih_yaz()` (`izlog_yuk_otomasyon.py`).
+- `#TabControl_dte_DocDate_I` — Belge tarihi. Maskeli alan; `Home`→`Shift+End`→
+  `Backspace` bu editörde METIN SEÇİMİNİ desteklemiyor (canlı testte imleç
+  sadece sona gidip alanı temizlemeden bir alt alana geçti). Şimdi önce
+  `Ctrl+A`+`Delete` deneniyor, hâlâ kalan varsa `input_value()` ile okunan
+  gerçek uzunluğa göre hesaplanan sayıda `Backspace` ile garantili temizleniyor,
+  ardından `GGAAYYYY` (noktasız) `type()` ile yazılıp `Enter`+`Tab` basılıyor.
+  Bkz. `devexpress_tarih_yaz()` (`izlog_yuk_otomasyon.py`).
 - `#TabControl_chk_IsGoodsInWhouse_S_D` — "Depoda mı" checkbox'ı, "Yük Diğer
   Bilgiler" sekmesinde.
 - `#TabControl_bte_TractorSerialNoPlateNo_I` — Araç plakası (Sevk formunda).
