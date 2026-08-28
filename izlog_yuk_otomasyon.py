@@ -152,12 +152,17 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         # Refactor: Yardımcı fonksiyon kullanımı
         devexpress_tarih_yaz(aktif_sayfa, "#TabControl_dte_DocDate_I", saf_tarih)
 
-        aktif_sayfa.click("span.dx-vam:has-text('Yük Diğer Bilgiler')")
+        # NOT: Sekme başlıkları regex ile ("ğ", "ü", "ı", "ç" gibi Türkçe özel
+        # karakterler "." joker karakteriyle) eşleştiriliyor -- dosya ANSI/UTF-8
+        # dönüşümlerinde bu karakterler bozulabiliyor (canlı testte "Diğer" ->
+        # "Diger" olarak bozulup sekme bulunamadı), regex bu bozulmaya karşı
+        # dayanıklı.
+        aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Y.k Di.er Bilgiler")).first.click()
         aktif_sayfa.wait_for_selector("#TabControl_chk_IsGoodsInWhouse_S_D", state="visible", timeout=5000)
         aktif_sayfa.click("#TabControl_chk_IsGoodsInWhouse_S_D")
 
         aktif_sayfa.wait_for_timeout(500)
-        aktif_sayfa.click("span.dx-vam:has-text('Yurtiçi Yük Tanımı')")
+        aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Yurti.i Y.k Tan.m.")).first.click()
         aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible")
 
         # NOT: Satır bazlı "Kaydet" (a[id*='editnew']) güvenlidir -- bilinen ERP
@@ -362,8 +367,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
     # --- FAZ 4: SEVK OLUŞTURMA ---
     aktif_sayfa.click("#TabControl_txt_ReferenceNo_I", button="right")
-    aktif_sayfa.wait_for_selector("div.uyum-popup-menu span:text-is('Sevk Oluştur')", state="visible")
-    aktif_sayfa.click("div.uyum-popup-menu span:text-is('Sevk Oluştur')")
+    # NOT: "ş" karakteri regex joker (".") ile eşleştiriliyor -- yukarıdaki
+    # sekme başlıklarındaki encoding bozulma sorununa karşı aynı savunma.
+    sevk_olustur_menu = aktif_sayfa.locator("div.uyum-popup-menu span").filter(
+        has_text=re.compile(r"^Sevk Olu.tur$")
+    )
+    sevk_olustur_menu.first.wait_for(state="visible", timeout=15000)
+    sevk_olustur_menu.first.click()
 
     devexpress_tarih_yaz(aktif_sayfa, "#TabControl_dte_DocDate_I", saf_tarih)
 

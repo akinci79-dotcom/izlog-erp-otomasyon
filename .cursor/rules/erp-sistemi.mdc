@@ -169,8 +169,8 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
 - `#TabControl_chk_IsGoodsInWhouse_S_D` — "Depoda mı" checkbox'ı, "Yük Diğer
   Bilgiler" sekmesinde.
 - `#TabControl_bte_TractorSerialNoPlateNo_I` — Araç plakası (Sevk formunda).
-- Sekme başlıkları `span.dx-vam:has-text('...')` ile tıklanıyor: "Yük Diğer
-  Bilgiler", "Yurtiçi Yük Tanımı".
+- Sekme başlıkları `span.dx-vam` üzerinde regex `has_text` ile tıklanıyor:
+  "Yük Diğer Bilgiler", "Yurtiçi Yük Tanımı" (bkz. aşağıdaki encoding notu).
 - `#btnCopy_CD` — Kopyala (yeni pencere açar).
 - `#btnSave_CD` — Ana formu kaydet.
 - Sağ tık menüsü → "Sevk Oluştur": `div.uyum-popup-menu span:text-is('Sevk Oluştur')`.
@@ -256,6 +256,20 @@ değerlerine (`01.01.0001` / `0`) döndürür. `DRY_RUN` aktifken tamamen atlan�
 
 **Fatura tablolarını keşfetmek için kullanılan yardımcı script**: `fatura_bul.py`
 (`all_objects` üzerinden `%INVOICE_M` / `FIND_INVOICE%` desenli tablo/görünüm arar).
+
+### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
+Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,
+Türkçe özel karakterlerin (ğ, ü, ş, ı, ö, ç, İ) bozulmasına yol açabiliyor
+(ANSI/UTF-8 dönüşümünde). Canlı testte "Yük Diğer Bilgiler" sekme metni
+"Yük Diger Bilgiler" olarak bozuldu ("ğ" kayboldu) ve sekmeye tıklama
+timeout ile patladı. **Kural**: Sekme/menü başlığı gibi Türkçe karakter
+içeren metinlerle eşleşen tüm Playwright seçicileri, literal string
+(`:has-text('...')`, `:text-is('...')`) yerine **regex ile, Türkçe özel
+karakterlerin `.` (herhangi bir karakter) joker karakteriyle değiştirilmiş
+hali** kullanılarak yazılmalı (örn. "Diğer" -> `r"Di.er"`, "Yurtiçi" ->
+`r"Yurti.i"`). Bu, dosya hangi encoding'le kaydedilirse kaydedilsin
+(bozulma olsa bile) eşleşmeyi güvenceye alır. Yeni bir Türkçe karakterli
+metin eşleştirmesi eklerken bu kurala uy.
 
 ## Bu Dosyayı Güncelleme
 
