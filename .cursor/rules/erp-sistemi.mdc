@@ -105,6 +105,16 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   10s'den 15s'e çıkarıldı. Hata mesajı da artık "format sorunu" gibi
   yanlış kesin bir teşhis koymuyor, ekran görüntüsüne bakılmasını öneriyor.
 
+  **✅ Birden fazla satış satırı işlerken "Frame was detached" [DOĞRULANMIŞ]**:
+  Fatura eşleştirme mantığı TEK satırda başarıyla çalıştı (ekran görüntüsüyle
+  teyit edildi: fatura no doğru satıra yazıldı) ama birden fazla satış
+  satırı işlenirken 2. satırda `Frame was detached` hatası alındı. Neden:
+  önceki satırın LOV iframe'i DOM'dan tam kaldırılmadan yeni satırın LOV'u
+  açılıyor, `aktif_sayfa.frames[-1]` bu durumda eski/kapanmakta olan frame'i
+  yakalayabiliyordu. Düzeltme: "3 nokta"ya tıklamadan önceki frame sayısı
+  kaydediliyor, tıklandıktan sonra frame sayısı GERÇEKTEN artana kadar
+  (yeni frame eklenene kadar) bekleniyor, ancak o zaman `frames[-1]` alınıyor.
+
   **✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, F12 ile teyit edildi]**: CSS sınıfı
   tahmin etmek (önce `dxgvDataRow_Aqua`, sonra `Row_Aqua` içeren herhangi bir
   sınıf, sonra sınıfsız `<tr>` taraması) hiçbiri güvenilir çıkmadı. Gerçek

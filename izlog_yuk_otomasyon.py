@@ -210,6 +210,15 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             fatura_no_str = str(fatura_no_raw).strip()
 
+            # NOT: "3 nokta"ya tıklamadan ÖNCEKİ frame sayısını kaydediyoruz.
+            # Birden fazla satış satırı işlenirken, önceki satırın LOV
+            # penceresi (iframe) DOM'dan tam kaldırılmadan yeni satırın LOV'u
+            # açılabiliyor -- bu durumda aşağıda `frames[-1]` almak eski,
+            # kapanmakta olan frame'i yakalayabiliyor ve "Frame was detached"
+            # hatasına yol açıyor (canlı testte 2. satırda gözlendi). Bu
+            # yüzden aşağıda YENİ bir frame gerçekten eklenene kadar bekliyoruz.
+            onceki_frame_sayisi = len(aktif_sayfa.frames)
+
             # ARTIK SAĞLAM: Fatura kutusunun "..." butonuna, Tab-sayarak odağı
             # tahmin etmek (ve bazen yanlış alana -- örn. Cari -- denk gelmek)
             # yerine DOĞRUDAN F12 ile bulunan sabit id'si üzerinden tıklanıyor.
@@ -242,6 +251,17 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 raise RuntimeError(f"[{kaynak_yuk_no}] HATA: Fatura kutusu ekranda bulunamadı!")
 
             aktif_sayfa.wait_for_timeout(1500)
+
+            # YENİ frame'in (LOV penceresinin) gerçekten eklendiğinden emin ol
+            # -- doğrudan frames[-1] almak, eski/kapanmakta olan bir frame'i
+            # yakalayıp "Frame was detached" hatasına yol açabiliyordu.
+            for _ in range(20):  # ~10 saniye, 500ms aralıklarla
+                if len(aktif_sayfa.frames) > onceki_frame_sayisi:
+                    break
+                aktif_sayfa.wait_for_timeout(500)
+            else:
+                raise RuntimeError(f"[{kaynak_yuk_no}] HATA: Fatura LOV penceresi (yeni frame) açılmadı!")
+
             lov_penceresi = aktif_sayfa.frames[-1]
             lov_penceresi.wait_for_selector("#myListPage_DXFREditorcol2_I", state="visible", timeout=20000)
 
