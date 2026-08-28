@@ -103,7 +103,19 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
   `lov_penceresi` (iframe'in kendisi) üzerinden yapılıyor, her filtre
   sonrası sabit 800ms render tamponu eklendi, satır görünürlük timeout'u
   10s'den 15s'e çıkarıldı. Hata mesajı da artık "format sorunu" gibi
-  yanlış kesin bir teşhis koymuyor, ekran görüntüsüne bakılmasını öneriyor. Python
+  yanlış kesin bir teşhis koymuyor, ekran görüntüsüne bakılmasını öneriyor.
+
+  **✅ GERÇEK KÖK NEDEN BULUNDU [DOĞRULANMIŞ]**: Zamanlama sorunu değildi.
+  Filtre (fatura no + tutar) TAM OLARAK 1 satıra indiğinde, DevExpress o
+  satırı otomatik odaklıyor/vurguluyor (ekranda turuncu görünüyor) ve bu
+  satırın CSS sınıfı `dxgvDataRow_Aqua` DEĞİL, muhtemelen
+  `dxgvFocusedRow_Aqua`/`dxgvSelectedRow_Aqua` gibi farklı bir isim
+  taşıyor -- bu yüzden `tr.dxgvDataRow_Aqua` seçicisi satırı hiç
+  bulamıyordu (satır ekranda görünse de). Birden fazla satır kaldığında
+  bu sorun çıkmıyordu çünkü hiçbir satır otomatik odaklanmıyordu. Düzeltme:
+  seçici `tr[class*="Row_Aqua"]` olarak genişletildi -- "Row_Aqua" GEÇEN
+  her sınıf adını (DataRow/FocusedRow/SelectedRow farkı olmadan) kabul
+  ediyor. Python
   tarafındaki `_satirda_tutar_var_mi` doğrulaması artık sadece bir ihtiyat
   kontrolü (ERP filtresi beklenmedik davranırsa bile makul bir satır
   seçilsin diye) -- zorunlu değil.
