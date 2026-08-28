@@ -22,17 +22,19 @@ ERP_SIFRE = "DEĞİŞTİRİNİZ"                               # Uyumsoft şifre
 # KESİNLİKLE "Kaydet", "Kopya" veya "Sevk Oluştur" butonlarına basmaz.
 DRY_RUN = True
 
-# DERIN_TEST_MODU = True (ve DRY_RUN = True iken) sistem Kopyalama + TEK bir
-# satış satırının veri girişini + fatura LOV eşleştirmesini (asıl düzeltilen
-# hata burada) GERÇEKTEN yapar, ama:
-#   - Satır bazlı "Kaydet"e (a[id*='editnew']) KESİNLİKLE basmaz -- bilinen
-#     ERP hatası: fatura seçildikten sonra satırı kaydetmek Yükü kilitliyor
-#     ve satır SQL'den boşaltılmadan silinemiyor hale geliyor.
-#   - Ana "Kaydet" (#btnSave_CD) butonuna da basmaz.
-#   - "Sevk Oluştur" adımına hiç girmez (gerçekten kaydedilmiş bir Yük'e
-#     ihtiyaç duyar).
-# Bu yüzden birden fazla satır işlenmez; faturalı ilk satırda (fatura
-# bulunup seçildikten sonra) test güvenle sonlandırılıp pencere kapatılır.
+# DERIN_TEST_MODU = True (ve DRY_RUN = True iken) sistem Kopyalama + TÜM satış
+# satırlarının veri girişini + fatura LOV eşleştirmesini (asıl düzeltilen hata
+# burada) GERÇEKTEN yapar (satır bazlı "Kaydet" dahil -- bu güvenlidir), ama
+# ana "Kaydet" (#btnSave_CD) butonuna KESİNLİKLE basmaz; pencereyi kayıt
+# yapılmadan kapatır. "Sevk Oluştur" adımına hiç girmez (gerçekten kaydedilmiş
+# bir Yük'e ihtiyaç duyar).
+#
+# NOT: Bilinen bir ERP hatası var -- ANA KAYDET İLE KAYDEDİLMİŞ bir Yük'e daha
+# sonra geri dönüp faturalı bir fiyat satırında tekrar işlem yapmaya
+# çalışıldığında Yük kilitleniyor (satır SQL'den boşaltılmadan silinemiyor).
+# Bu, satır bazlı Kaydet'i veya bu test modunu ETKİLEMEZ; sadece "zaten
+# kaydedilmiş bir Yük'ü tekrar açıp düzenleme" senaryosunda geçerli, ki
+# otomasyon bunu hiç yapmıyor.
 DERIN_TEST_MODU = False
 
 ERP_YUK_LISTESI_URL = "https://erp.izlog.com.tr/MainList.aspx?CommandName=LGoodsCollection.Show&M=1&MenuId=654&WinId=01"

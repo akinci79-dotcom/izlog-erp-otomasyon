@@ -75,21 +75,23 @@ python izlog_yuk_otomasyon.py
   değişikliği yapılmaz. Fatura eşleştirme (asıl düzeltilen hata) bu modda
   **test edilmez**, çünkü o kısım Kopya sonrası açılan formda gerçekleşiyor.
 - **Fatura eşleştirmesini de test etmek için**: `DRY_RUN = True` **ve**
-  `DERIN_TEST_MODU = True` yapın. Bu modda script Kopyalama + **tek bir**
-  (tercihen faturalı) satış satırının veri girişini + fatura LOV
-  eşleştirmesini **gerçekten** yapar (asıl hatanın olduğu yer), ama:
-  - ⚠️ **Bilinen ERP hatası nedeniyle** satır bazlı "Kaydet"e (`a[id*='editnew']`)
-    **kesinlikle basmaz** — fatura seçildikten sonra satırı kaydetmek ERP'de
-    Yükü kilitliyor ve satır SQL'den boşaltılmadan silinemiyor hale geliyor.
-    Bu yüzden birden fazla satır işlenmez; test edilen ilk (faturalı) satırda
-    fatura bulunup seçildikten sonra hemen durulur.
-  - Ana `Kaydet` (`#btnSave_CD`) butonuna da basmaz; pencereyi kayıt
-    yapılmadan kapatır. Durum: `DERİN_TEST BAŞARILI`.
+  `DERIN_TEST_MODU = True` yapın. Bu modda script Kopyalama + **tüm satış
+  satırlarının** veri girişini + fatura LOV eşleştirmesini (asıl hatanın
+  olduğu yer) **gerçekten** yapar — satır bazlı "Kaydet" (`a[id*='editnew']`)
+  dahil, çünkü bu güvenlidir. Sadece ana `Kaydet` (`#btnSave_CD`) butonuna
+  **kesinlikle basmaz**; pencereyi kayıt yapılmadan kapatır. Durum:
+  `DERİN_TEST BAŞARILI`.
   - `Sevk Oluştur` adımı bu modda hiç test edilmez — o adım gerçekten
     kaydedilmiş bir Yük referans numarasına ihtiyaç duyduğu için güvenli bir
     şekilde simüle edilemez. Sevk akışını da test etmek isterseniz ayrı bir
     test/UAT Uyumsoft ortamınız varsa orada `DRY_RUN = False` ile tam akışı
     deneyebilirsiniz.
+  - **Bilinen ERP kısıtlaması**: Ana Kaydet ile kaydedilmiş bir Yük'e daha
+    sonra geri dönüp faturalı bir fiyat satırında tekrar işlem yapmaya
+    çalışmak Yükü kilitliyor (satır SQL'den boşaltılmadan silinemiyor).
+    Bu, bu test modunu etkilemez (ana Kaydet'e hiç basılmıyor); sadece
+    ERP'de manuel olarak zaten kaydedilmiş bir Yük'ü tekrar düzenlemeye
+    çalışırken dikkat edilmesi gereken bir durum.
 - Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın (`DERIN_TEST_MODU`
   bu durumda etkisizdir).
 - Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`)

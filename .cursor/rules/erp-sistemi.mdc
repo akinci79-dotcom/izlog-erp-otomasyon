@@ -87,23 +87,26 @@ DevExpress liste filtre kutuları `#myListPage_DXFREditorcolN_I` kalıbında
 - Aynı fatura no + aynı tutara sahip birden fazla satır grid'de görünebilir;
   önemli değil, ilk eşleşen satır seçilir.
 
-### ⚠️ BİLİNEN ERP HATASI — Satır bazlı "Kaydet" + Fatura kilitleme [DOĞRULANMIŞ, kullanıcı bildirdi]
-"Yurtiçi Yük Tanımı" satış satırı grid'inde, bir satıra **fatura seçildikten
-sonra** o satırın kendi "Kaydet" linkine (`a[id*='editnew']:has-text('Kaydet')`)
-basmak, ERP tarafında (nedeni bilinmiyor) **Yükü kilitliyor**; o satır bir
-daha silinemez hale geliyor ve düzeltmek için **SQL'den elle boşaltmak**
-gerekiyor. Bu, hem otomasyonun kendisi hem de test modları için kritik bir
-kısıt:
-- Bu hatanın Kopya ile açılan taslak (henüz ana Kaydet'e basılmamış) Yük'te
-  de geçerli olup olmadığı teyit edilmedi; ihtiyatlı olunmalı.
-- `izlog_yuk_otomasyon.py`'deki `DERIN_TEST_MODU`, bu riski bilerek sadece
-  **TEK bir** (mümkünse faturalı) satırı test eder ve fatura seçildikten
-  hemen sonra, satır Kaydet'e HİÇ basmadan durur (bkz. yukarıdaki kod bloğu).
-- Gerçek (DRY_RUN=False) çalıştırmalarda bu hata riski hâlâ geçerli —
-  otomasyon her satış satırında fatura bağlayıp o satırı kaydediyor. Eğer bu
-  hata gerçek çalıştırmalarda da tetikleniyorsa, kullanıcıdan "boşaltma" için
-  kullandıkları SQL'i öğrenip bir kurtarma/otomatik-düzeltme scripti
-  eklenmesi gerekebilir.
+### ⚠️ BİLİNEN ERP KISITLAMASI — Kaydedilmiş Yük'te faturalı satırı tekrar açma [DOĞRULANMIŞ, kullanıcı test etti]
+"Yurtiçi Yük Tanımı" satış satırı grid'inde satır bazlı "Kaydet"e
+(`a[id*='editnew']:has-text('Kaydet')`) basmak **güvenlidir**, fatura
+bağlanmış olsa da. Sorun, sadece Yük **ana Kaydet (`#btnSave_CD`) ile
+kaydedildikten SONRA** o Yük'e geri dönüp, fatura tanımlı bir fiyat
+satırında tekrar işlem yapmaya (düzenlemeye/silmeye) çalışıldığında ortaya
+çıkıyor: ERP o satırı kilitliyor, satır SQL'den elle boşaltılmadan
+silinemiyor hale geliyor.
+
+Bu otomasyonun normal akışını **etkilemiyor**: her satış satırı, o Yük'ün
+kendi ana Kaydet'inden ÖNCE ekleniyor; otomasyon hiçbir zaman zaten
+kaydedilmiş bir Yük'ün faturalı satırını tekrar açıp düzenlemiyor (Sevk
+fazı bile Yük'ün REFERENCE_NO alanı üzerinden çalışıyor, satırları tekrar
+açmıyor). Bu yüzden `izlog_yuk_otomasyon.py`'deki `DERIN_TEST_MODU`, tüm
+satış satırlarını (satır Kaydet dahil) normal şekilde test edip sadece ana
+Kaydet'e (`#btnSave_CD`) basmadan durabilir — güvenli.
+
+Yine de: ERP'de manuel olarak zaten kaydedilmiş bir Yük'ün faturalı bir
+satırını düzenlemeye/silmeye ihtiyaç olursa, önce bu kısıtlamayı hatırla ve
+kullanıcıya sor.
 
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).

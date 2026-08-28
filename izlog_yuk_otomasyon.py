@@ -102,12 +102,11 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
     # DERİN TEST MODU: ayarlar.py'de DRY_RUN=True VE DERIN_TEST_MODU=True ise,
     # sadece arama/seçimle sınırlı kalınmaz; Kopyalama + tüm veri girişi +
-    # fatura LOV eşleştirmesi (asıl düzeltilen hata burada) GERÇEKTEN yapılır,
-    # ama ana "Kaydet" (#btnSave_CD) butonuna KESİNLİKLE basılmaz — pencere
-    # kayıt yapılmadan kapatılır. Bu, "Kopya" tıklamanın ve satır bazlı
-    # "Kaydet" tıklamalarının veritabanına yazmadığı (yalnızca ana Kaydet'in
-    # yazdığı) varsayımına dayanır -- bunu ERP'nizde teyit etmeden production'a
-    # karşı çalıştırmayın.
+    # fatura LOV eşleştirmesi (asıl düzeltilen hata burada) GERÇEKTEN yapılır
+    # (satır bazlı "Kaydet" dahil -- bu güvenlidir), ama ana "Kaydet"
+    # (#btnSave_CD) butonuna KESİNLİKLE basılmaz — pencere kayıt yapılmadan
+    # kapatılır. "Sevk Oluştur" adımı hiç test edilmez (gerçek bir Yük
+    # referans numarasına ihtiyaç duyar).
     derin_test = bool(ayarlar.DRY_RUN) and bool(getattr(ayarlar, "DERIN_TEST_MODU", False))
 
     if ayarlar.DRY_RUN and not derin_test:
@@ -137,22 +136,15 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         aktif_sayfa.click("span.dx-vam:has-text('Yurtiçi Yük Tanımı')")
         aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible")
 
-        if derin_test:
-            # ⚠️ BİLİNEN ERP HATASI: Fatura seçildikten sonra satır bazlı "Kaydet"e
-            # basmak, ERP tarafında Yükü kilitliyor ve satır SQL'den boşaltılmadan
-            # silinemiyor hale geliyor. Bu yüzden derin test modunda HİÇBİR satır
-            # Kaydet'e basılmaz -- sadece TEK bir satır (tercihen faturalı olan,
-            # asıl düzeltilen fatura eşleştirme mantığını doğrulamak için) test
-            # edilir ve satır kaydedilmeden önce test sonlandırılır.
-            faturali_satirlar = [
-                s for s in satis_satirlari
-                if s.get('FATURA_NO') and str(s.get('FATURA_NO')).strip().upper() not in ("", "NONE")
-            ]
-            test_edilecek_satirlar = (faturali_satirlar or satis_satirlari)[:1]
-        else:
-            test_edilecek_satirlar = satis_satirlari
-
-        for satis in test_edilecek_satirlar:
+        # NOT: Satır bazlı "Kaydet" (a[id*='editnew']) güvenlidir -- bilinen ERP
+        # kilitleme hatası, sadece ANA KAYDET (#btnSave_CD) İLE KAYDEDİLMİŞ bir
+        # Yük'e daha sonra geri dönüp faturalı bir fiyat satırında tekrar işlem
+        # yapmaya çalışıldığında ortaya çıkıyor (kullanıcı tarafından teyit
+        # edildi). Bu otomasyonun normal akışında hiç olmuyor: her satır, o
+        # Yük'ün kendi ana Kaydet'inden ÖNCE ekleniyor. Bu yüzden derin test
+        # modunda tüm satırlar normal şekilde işlenir; tek fark, döngü
+        # bittiğinde ana "Kaydet"e (#btnSave_CD) basılmamasıdır (aşağıda).
+        for satis in satis_satirlari:
             aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew")
             aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
 
@@ -187,10 +179,6 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             fatura_no_raw = satis.get('FATURA_NO')
             if not fatura_no_raw or str(fatura_no_raw).strip().upper() == "NONE" or str(fatura_no_raw).strip() == "":
-                if derin_test:
-                    print(f"[{kaynak_yuk_no}] DERİN TEST: Bu satırda fatura yok, test edilecek eşleştirme mantığı "
-                          f"yok. Satır KAYDEDİLMEDEN (kilitleme riskine karşı) test sonlandırılıyor.")
-                    break
                 aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
                 aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
                 continue
@@ -264,22 +252,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             lov_penceresi.locator("#btnChoose_CD").click(force=True)
             aktif_sayfa.wait_for_timeout(1500)
 
-            if derin_test:
-                # Fatura arama + eşleştirme + seçme (asıl düzeltilen mantık) BAŞARILI.
-                # ⚠️ Satır bazlı "Kaydet"e KESİNLİKLE basılmıyor -- bilinen ERP
-                # kilitleme hatasına karşı. Test burada güvenle sonlandırılır.
-                print(f"[{kaynak_yuk_no}] DERİN TEST: Fatura '{fatura_no_str}' başarıyla bulundu ve seçildi. "
-                      f"Satır KAYDEDİLMEDEN (bilinen kilitleme riskine karşı) test sonlandırılıyor.")
-                break
-
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
             aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
             aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
 
         if derin_test:
-            print(f"[{kaynak_yuk_no}] DERİN TEST TAMAMLANDI: Test edilen satır için veri girişi/fatura eşleştirmesi "
-                  f"tamamlandı. Hiçbir satır 'Kaydet'e basılmadı, ana 'Kaydet' butonuna da BASILMADI. "
-                  f"Pencere kayıt yapılmadan kapatılıyor.")
+            print(f"[{kaynak_yuk_no}] DERİN TEST TAMAMLANDI: Tüm satış satırları (fatura eşleştirmesi dahil) "
+                  f"başarıyla işlendi. Ana 'Kaydet' butonuna KESİNLİKLE BASILMIYOR, pencere kayıt yapılmadan "
+                  f"kapatılıyor.")
             try:
                 aktif_sayfa.close()
             except Exception:
