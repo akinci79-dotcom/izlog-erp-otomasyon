@@ -305,6 +305,19 @@ hali** kullanılarak yazılmalı (örn. "Diğer" -> `r"Di.er"`, "Yurtiçi" ->
 (bozulma olsa bile) eşleşmeyi güvenceye alır. Yeni bir Türkçe karakterli
 metin eşleştirmesi eklerken bu kurala uy.
 
+### ✅ Fatura Seç sonrası satır Kaydet çok erken tıklanıyordu [DOĞRULANMIŞ]
+Üç teşhis ekran görüntüsüyle (tutar yazıldıktan hemen sonra / satır Kaydet
+sonrası / hata anı) tam kök neden bulundu: "Seç" (`#btnChoose_CD`) butonuna
+basıldıktan sonra sadece sabit 1500ms bekleyip hemen satırın kendi
+"Kaydet"ine basılıyordu. Bu yetersizdi -- LOV penceresi kapanıyordu ama
+seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun sürüyordu; Kaydet
+çok erken tıklanınca ERP satırı geçersiz sayıp hem Fatura No'yu hem Tutar'ı
+sıfırlayarak reddediyordu (satır "Kaydet/Vazgeç" modunda, boş kalıyordu).
+Düzeltme: Fatura No alanının input id'si `#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I`
+(DXEditor29 tablosunun İÇİNDEKİ input, `_I` soneki diğer editörlerle aynı
+kalıp) -- artık "Seç" sonrası bu alanın GERÇEKTEN dolduğu doğrulanana kadar
+(en fazla ~10s) bekleniyor, ancak o zaman satır Kaydet'ine basılıyor.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle

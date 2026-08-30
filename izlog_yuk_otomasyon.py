@@ -363,7 +363,29 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             aktif_sayfa.wait_for_timeout(500)
             lov_penceresi.locator("#btnChoose_CD").click(force=True)
-            aktif_sayfa.wait_for_timeout(1500)
+
+            # NOT: Eskiden burada sabit 1500ms bekleyip hemen satır Kaydet'ine
+            # basılıyordu. Canlı testte bu YETERSİZ kaldı: LOV kapandı ama
+            # seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun
+            # sürüyordu; Kaydet çok erken tıklanınca ERP satırı geçersiz
+            # sayıp hem Fatura No'yu hem Tutar'ı sıfırlayarak reddediyordu
+            # (ekran görüntüsüyle teyit edildi). Şimdi Fatura No alanının
+            # GERÇEKTEN dolduğu doğrulanana kadar bekleniyor.
+            fatura_alani_doldu = False
+            for _ in range(20):  # ~10 saniye, 500ms aralıklarla
+                try:
+                    mevcut_deger = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I") or "").strip()
+                except Exception:
+                    mevcut_deger = ""
+                if mevcut_deger:
+                    fatura_alani_doldu = True
+                    break
+                aktif_sayfa.wait_for_timeout(500)
+
+            if not fatura_alani_doldu:
+                print(f"[{kaynak_yuk_no}] UYARI: Fatura No alanı 10 saniye içinde dolmadı, "
+                      f"yine de devam ediliyor (ekstra tampon bekleme ile).")
+                aktif_sayfa.wait_for_timeout(1500)
 
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
             aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
