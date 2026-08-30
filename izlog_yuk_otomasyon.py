@@ -369,18 +369,20 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun
             # sürüyordu; Kaydet çok erken tıklanınca ERP satırı geçersiz
             # sayıp hem Fatura No'yu hem Tutar'ı sıfırlayarak reddediyordu
-            # (ekran görüntüsüyle teyit edildi). "...DXEditor29_I" id'si
-            # (tahmin edilmiş) var olmayabileceği için doğrulama hep sessizce
-            # boş dönüyordu -- bunun yerine zaten bilinen tablo elementinin
-            # (`fatura_kutu_tablosu`) GÖRÜNEN METNİNİ kontrol ediyoruz; iç
-            # yapı ne olursa olsun fatura no seçildiğinde bu metinde belirir.
+            # (ekran görüntüsüyle teyit edildi). İlk iki deneme (tahmini
+            # "..._I" id'si, sonra tablonun inner_text()'i) yanlış çıktı --
+            # değer bir <input>'un VALUE'sunda tutuluyor ve inner_text()
+            # input değerlerini görmez (ekran görüntüsünde değer görünse de
+            # inner_text() boş dönüyordu). Şimdi tablonun İÇİNDEKİ input'un
+            # (tam id'sini bilmeden, ilk <input> alt elementini bularak)
+            # input_value()'su okunuyor -- iç yapı/id ne olursa olsun çalışır.
             fatura_alani_doldu = False
             for _ in range(20):  # ~10 saniye, 500ms aralıklarla
                 try:
-                    guncel_tablo_metni = aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29").inner_text().strip()
+                    guncel_deger = (aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input").first.input_value() or "").strip()
                 except Exception:
-                    guncel_tablo_metni = ""
-                if fatura_no_str in guncel_tablo_metni:
+                    guncel_deger = ""
+                if fatura_no_str in guncel_deger:
                     fatura_alani_doldu = True
                     break
                 aktif_sayfa.wait_for_timeout(500)
@@ -389,14 +391,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # Son bir şans daha: ekstra bekleyip tekrar kontrol et.
                 aktif_sayfa.wait_for_timeout(1500)
                 try:
-                    guncel_tablo_metni = aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29").inner_text().strip()
+                    guncel_deger = (aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input").first.input_value() or "").strip()
                 except Exception:
-                    guncel_tablo_metni = ""
-                if fatura_no_str not in guncel_tablo_metni:
+                    guncel_deger = ""
+                if fatura_no_str not in guncel_deger:
                     raise RuntimeError(
                         f"[{kaynak_yuk_no}] HATA: 'Seç' butonuna basıldıktan sonra fatura no "
                         f"('{fatura_no_str}') satıra hiç yazılmadı (12 saniye beklendi, "
-                        f"tabloda görülen metin: '{guncel_tablo_metni}'). Satır bazlı Kaydet'e "
+                        f"input'ta görülen değer: '{guncel_deger}'). Satır bazlı Kaydet'e "
                         f"basılmadan işlem durduruldu."
                     )
 

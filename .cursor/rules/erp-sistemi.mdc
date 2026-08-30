@@ -313,14 +313,15 @@ basıldıktan sonra sadece sabit 1500ms bekleyip hemen satırın kendi
 seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun sürüyordu; Kaydet
 çok erken tıklanınca ERP satırı geçersiz sayıp hem Fatura No'yu hem Tutar'ı
 sıfırlayarak reddediyordu (satır "Kaydet/Vazgeç" modunda, boş kalıyordu).
-İlk düzeltme denemesi `#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I`
-(varsayılan `_I` soneki) id'sini kullandı ama bu **yanlış çıktı** -- öyle bir
-id yok, doğrulama hep sessizce boş dönüyordu. **Kesin çözüm**: input id'sini
-tahmin etmek yerine, zaten bilinen tablo elementinin (`#TabControl_grd_LGoodsOpDetailCollection_DXEditor29`)
-GÖRÜNEN METNİNİ (`inner_text()`) kontrol et -- fatura no seçildiğinde bu
-metinde belirir, iç yapı/id ne olursa olsun çalışır. "Seç" sonrası bu metinde
-fatura no görünene kadar (~10-12s) bekleniyor; hâlâ görünmezse satır
-Kaydet'ine BASILMADAN net bir hata veriliyor.
+İki başarısız deneme oldu: (1) `#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I`
+(varsayılan `_I` soneki) id'si YANLIŞTI -- öyle bir id yok. (2) Tablonun
+`inner_text()`'i de YANLIŞTI -- değer bir `<input>` elementinin VALUE'sunda
+tutuluyor ve `inner_text()` input değerlerini görmez (ekranda değer görünse
+de metin olarak boş dönüyordu). **Kesin çözüm**: tam input id'sini bilmeden,
+tablonun İÇİNDEKİ ilk `<input>` alt elementini bulup (`#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input`)
+onun `input_value()`'sunu oku -- iç yapı ne olursa olsun çalışır. "Seç"
+sonrası bu değerde fatura no görünene kadar (~10-12s) bekleniyor; hâlâ
+görünmezse satır Kaydet'ine BASILMADAN net bir hata veriliyor.
 
 ## Bu Dosyayı Güncelleme
 
