@@ -415,6 +415,26 @@ hiçbir hata/çıktı vermeden asılı kaldı). Kural: bir Playwright action'ı
 yoksa döngünün toplam süresi varsayılan timeout × deneme sayısı kadar
 şişebilir.
 
+## ⚠️ AÇIK SORU — "Ücret Tipi"/"Operasyon Kodu" için Oracle tablo varsayımı YANLIŞ çıktı [VARSAYIM/TODO]
+
+Mevcut `oracle_okuyucu.py` (kullanıcının orijinal dosyasından, bu oturumda
+icat edilmedi) `LMST_L_GOODS_OP_DET.OPERATION_PRICE_TYPE` alanını
+`LMSD_L_GOODSPRICE_TYPE.GOODS_PRICE_TYPE_ID` ile join edip bunun "Ücret
+Tipi" (Navlun/Ek_Navlun) olduğunu varsayıyordu. Canlı testte bu join
+"ŞARKÜTERİ" gibi GERÇEK BİR ÜCRET TİPİ/OPERASYON KODU OLMAYAN bir metin
+döndürdü -- kullanıcı bunun geçersiz olduğunu teyit etti. Bu, join'in
+YANLIŞ tabloya/kolona işaret ettiğini gösteriyor (muhtemelen
+`LMSD_L_GOODSPRICE_TYPE` aslında bir "mal/kargo kategorisi" sözlüğü, "ücret
+tipi" sözlüğü değil).
+
+**Teşhis scripti eklendi**: `operasyon_ucret_kesif.py` (salt-okunur, veri
+değiştirmez) -- bir kaynak yükün OP_DET satırlarının TÜM ham kolonlarını,
+iki şüpheli sözlük tablosunun TAM içeriğini, ve şemadaki TÜM metin
+kolonlarında "NAVLUN" geçen tablo.kolon kombinasyonlarını arar. Bu script
+çalıştırılıp çıktısı paylaşılana kadar "Ücret Tipi"/"Operasyon Kodu" için
+doğru tablo/kolon/join KESİN olarak bilinmiyor -- bu konuda yeni bir SQL
+değişikliği yapmadan önce bu script çalıştırılıp sonucu görülmeli.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
