@@ -327,6 +327,17 @@ CSS "ile biten" seçicisi, `TabControl_grd_` önekiyle/önekisiz ikisini de
 kapsar). "Seç" sonrası bu hücrede fatura no görünene kadar (~10-12s)
 bekleniyor; hâlâ görünmezse satır Kaydet'ine BASILMADAN net bir hata veriliyor.
 
+**⚠️ Playwright retry döngülerinde MUTLAKA kısa `timeout=` belirt [DOĞRULANMIŞ]**:
+Yukarıdaki bekleme döngüsünde `inner_text()`'e açıkça timeout verilmediği
+için (varsayılan ~30s), elementin var olmadığı her denemede Playwright
+30 saniyeye kadar bekleyebiliyordu -- 20 denemelik bir döngüde bu, otomasyonun
+DAKİKALARCA "takılı kalmış" gibi görünmesine yol açtı (canlı testte gözlendi,
+hiçbir hata/çıktı vermeden asılı kaldı). Kural: bir Playwright action'ı
+(inner_text, input_value, click, vb.) kendi retry döngün İÇİNDE tekrar tekrar
+çağrılıyorsa, HER ÇAĞRIYA kısa bir `timeout=` (örn. 1000ms) vermek zorunlu --
+yoksa döngünün toplam süresi varsayılan timeout × deneme sayısı kadar
+şişebilir.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle

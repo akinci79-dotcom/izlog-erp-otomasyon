@@ -377,10 +377,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # (en üstteki, satır indeksi 0) kendi görüntüleme hücresi
             # kontrol ediliyor -- F12 ile daha önce bulunan id kalıbı:
             # "...LGoodsOpDetailCollection|8|0" (sütun 8 = Fatura No, satır 0).
+            # ÖNEMLİ: inner_text() çağrılarına KISA bir timeout veriliyor
+            # (varsayılan olursa her başarısız denemede Playwright 30 saniye
+            # bekleyebilir -- 20 denemeyle bu, dakikalarca "takılı kalmış"
+            # gibi görünmeye yol açıyordu, canlı testte gözlendi).
             fatura_alani_doldu = False
             for _ in range(20):  # ~10 saniye, 500ms aralıklarla
                 try:
-                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text().strip()
+                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text(timeout=1000).strip()
                 except Exception:
                     guncel_deger = ""
                 if fatura_no_str in guncel_deger:
@@ -392,7 +396,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # Son bir şans daha: ekstra bekleyip tekrar kontrol et.
                 aktif_sayfa.wait_for_timeout(1500)
                 try:
-                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text().strip()
+                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text(timeout=1000).strip()
                 except Exception:
                     guncel_deger = ""
                 if fatura_no_str not in guncel_deger:
