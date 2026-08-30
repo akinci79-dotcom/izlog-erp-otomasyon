@@ -220,12 +220,26 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                     f"alanda görülen: '{yazilan_tutar}'). Bu satırın işlenmesi durduruldu."
                 )
 
+            # TEŞHİS: Tutar yazıldıktan hemen sonra ekran görüntüsü al -- değerin
+            # sonradan (fatura bağlama veya Kaydet sırasında) sıfırlanıp
+            # sıfırlanmadığını görmek için.
+            try:
+                aktif_sayfa.screenshot(path=f"debug_tutar_sonrasi_{kaynak_yuk_no}.png")
+            except Exception:
+                pass
+
             # Ağ trafiğinin dinlenmesi (Sabit 3000ms yerine) - timeout olursa yedek beklemeye düşer
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
 
             fatura_no_raw = satis.get('FATURA_NO')
             if not fatura_no_raw or str(fatura_no_raw).strip().upper() == "NONE" or str(fatura_no_raw).strip() == "":
                 aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
+                aktif_sayfa.wait_for_timeout(500)
+                # TEŞHİS: Faturasız satırda Kaydet sonrası ekran görüntüsü.
+                try:
+                    aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_faturasiz_{kaynak_yuk_no}.png")
+                except Exception:
+                    pass
                 aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
                 continue
 
@@ -353,6 +367,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
             aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
+            aktif_sayfa.wait_for_timeout(500)
+
+            # TEŞHİS: Satır Kaydet'e basıldıktan hemen sonra ekran görüntüsü al.
+            try:
+                aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_{kaynak_yuk_no}.png")
+            except Exception:
+                pass
+
             aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
 
         if derin_test:
