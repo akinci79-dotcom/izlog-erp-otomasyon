@@ -220,6 +220,13 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
   noktalar çıkarılıp `GGAAYYYY` olarak maskeli alana `type()` ile yazılır.
 - **Tutar — giriş kutusu formatı**: `78279,00` (nokta yok, virgül ondalık).
   `f"{Decimal(...):.2f}".replace(".", ",")` ile üretilir.
+  **⚠️ `.fill()` bu alanda GÜVENİLİR DEĞİL** [DOĞRULANMIŞ]: Canlı testte
+  ilk satış satırında `.fill()` "şans eseri" çalıştı ama ikinci satırda
+  alan boş (0,00) kaldı ve akış çok sonra anlaşılmaz bir timeout'a düştü.
+  Tarih alanındaki gibi (`devexpress_tarih_yaz`) tıkla->`Ctrl+A`->`Delete`->
+  karakter karakter `type()` yöntemi kullanılmalı, ardından `input_value()`
+  ile yazmanın gerçekten tuttuğu doğrulanmalı (tutmadıysa hemen net hata
+  ver, sessizce devam etme).
 - **Tutar — liste/grid görünüm formatı**: `78.279,00` (binlik nokta, ondalık
   virgül). Sadece satır metnini okuyup ayrıştırmak için kullanılır, hiçbir
   input kutusuna bu format YAZILMAZ.

@@ -194,10 +194,31 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             fiyat_decimal = Decimal(str(ham_fiyat))
             formatli_tutar = f"{fiyat_decimal:.2f}".replace(".", ",")
 
+            # NOT: `.fill()` bu maskeli/formatlı DevExpress Tutar alanında
+            # GÜVENİLİR DEĞİL -- canlı testte 1. satırda "şans eseri" çalıştı
+            # ama 2. satırda alan boş (0,00) kaldı, akış sessizce devam edip
+            # çok daha sonra anlaşılmaz bir timeout'a düştü. Tarih alanında
+            # işe yarayan yöntemle aynısı uygulanıyor: tıkla -> tümünü seç ->
+            # sil -> karakter karakter yaz. Ayrıca yazmanın gerçekten tuttuğu
+            # doğrulanıyor; tutmadıysa hemen NET bir hata veriliyor (belirsiz
+            # bir timeout yerine).
             aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", force=True)
-            aktif_sayfa.fill("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", formatli_tutar)
+            aktif_sayfa.keyboard.press("Control+A")
+            aktif_sayfa.keyboard.press("Delete")
+            aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", formatli_tutar, delay=50)
             aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", "Tab")
             aktif_sayfa.wait_for_timeout(400)
+
+            try:
+                yazilan_tutar = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I") or "").strip()
+            except Exception:
+                yazilan_tutar = ""
+
+            if yazilan_tutar in ("", "0,00", "0", "0,00000000", "0.00"):
+                raise RuntimeError(
+                    f"[{kaynak_yuk_no}] HATA: Tutar alanı doğru yazılamadı (beklenen ~'{formatli_tutar}', "
+                    f"alanda görülen: '{yazilan_tutar}'). Bu satırın işlenmesi durduruldu."
+                )
 
             # Ağ trafiğinin dinlenmesi (Sabit 3000ms yerine) - timeout olursa yedek beklemeye düşer
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
