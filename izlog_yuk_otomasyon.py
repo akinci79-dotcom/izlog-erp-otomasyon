@@ -383,7 +383,11 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             except Exception:
                 pass
 
-            aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
+            # NOT: Faturali satirin Kaydet'i, faturasiz satira gore daha agir bir
+            # ERP tarafi dogrulama/postback tetikleyebiliyor (canli testte 1.
+            # satirda calisti ama suresi belirsiz). Bu yuzden bekleme suresi
+            # faturasiz satirdakinden (15sn) daha yuksek tutuluyor (30sn).
+            aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=30000)
 
         if derin_test:
             print(f"[{kaynak_yuk_no}] DERİN TEST TAMAMLANDI: Tüm satış satırları (fatura eşleştirmesi dahil) "
