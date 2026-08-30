@@ -364,6 +364,17 @@ operasyon kodlarında NULL/boş kalabiliyor, oysa aynı tablodaki
 `OPERATION_CODE` kolonu (veya başka bir aday) dolu olabiliyor -- tek kolona
 güvenmek bu durumda veriyi kaybettiriyordu.
 
+**⚠️ BUG (KENDİ HATAM) — COALESCE tek parametreyle çağrılırsa Oracle hata
+verir [DOĞRULANMIŞ, kod incelemesiyle bulundu]**: `_coalesce_ifadesi()` ilk
+halinde, sözlük tablosunda sadece TEK bir aday kolon bulunduğunda
+`COALESCE(tek_ifade)` üretiyordu -- Oracle'da `COALESCE()` EN AZ 2 parametre
+ister, tek parametreyle "ORA-00939: too few arguments for function" hatası
+verir. Bu durumda `kaynak_yuk_verilerini_getir()` SQL çalıştırılamadan
+patlıyor, otomasyon ERP'ye hiç gidemeden en baştan çöküyordu (kullanıcı
+ekranda "yük no arama kutusuna bile yazamadı" olarak gözlemledi). Düzeltme:
+`_coalesce_ifadesi()` artık liste tek elemanlıysa COALESCE'e hiç
+sarmadan ifadeyi doğrudan döndürüyor.
+
 **Uygulanan düzeltme**: `oracle_okuyucu.py`'ye `oto_kolon_listesi_kesfi()`
 eklendi -- TEK kolon yerine TÜM aday kolonları (aynı öncelik sırasıyla)
 bir liste olarak döndürüyor. Asıl SQL sorgusu artık bu kolonları

@@ -66,8 +66,19 @@ def oto_kolon_listesi_kesfi(cursor, tablo_adi):
 
 
 def _coalesce_ifadesi(tablo_alias, kolon_listesi):
-    """Birden fazla kolonu, boş string'leri de NULL sayarak COALESCE eden bir SQL ifadesi üretir."""
+    """
+    Birden fazla kolonu, boş string'leri de NULL sayarak COALESCE eden bir SQL
+    ifadesi üretir.
+
+    ÖNEMLİ DÜZELTME: Oracle'da COALESCE() EN AZ 2 parametre ister -- tek
+    parametreyle çağrılırsa "ORA-00939: too few arguments for function"
+    hatası verir. `kolon_listesi` bazı sözlük tablolarında (adaylardan
+    sadece biri tabloda mevcutsa) TEK elemanlı olabiliyor; bu durumda
+    COALESCE'e hiç sarmadan, tek ifadeyi doğrudan döndürüyoruz.
+    """
     parcalar = [f"NULLIF(TRIM({tablo_alias}.{kolon}), '')" for kolon in kolon_listesi]
+    if len(parcalar) == 1:
+        return parcalar[0]
     return f"COALESCE({', '.join(parcalar)})"
 
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
