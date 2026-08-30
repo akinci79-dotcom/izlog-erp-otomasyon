@@ -65,21 +65,29 @@ def oto_kolon_listesi_kesfi(cursor, tablo_adi):
     return oncelik_sirasi
 
 
-def _coalesce_ifadesi(tablo_alias, kolon_listesi):
+def _aday_kolon_sql_listesi(tablo_alias, kolon_listesi, alias_onek):
     """
-    Birden fazla kolonu, boş string'leri de NULL sayarak COALESCE eden bir SQL
-    ifadesi üretir.
+    Her aday kolonu KENDİ SQL takma adıyla (örn. "OP_ADAY_0", "OP_ADAY_1")
+    ayrı ayrı SELECT eden bir SQL parça listesi üretir.
 
-    ÖNEMLİ DÜZELTME: Oracle'da COALESCE() EN AZ 2 parametre ister -- tek
-    parametreyle çağrılırsa "ORA-00939: too few arguments for function"
-    hatası verir. `kolon_listesi` bazı sözlük tablolarında (adaylardan
-    sadece biri tabloda mevcutsa) TEK elemanlı olabiliyor; bu durumda
-    COALESCE'e hiç sarmadan, tek ifadeyi doğrudan döndürüyoruz.
+    NEDEN BÖYLE: Daha önce bu birleştirme SQL içinde COALESCE ile
+    yapılıyordu, ama Oracle'da COALESCE() en az 2 parametre istiyor --
+    kolon listesi tek elemanlıysa "ORA-00939: too few arguments" hatası
+    veriyordu. SQL sözdizimiyle uğraşmak yerine, her aday kolonu OLDUĞU
+    GİBİ (ham) SELECT edip "hangisi doluysa onu kullan" seçimini Python
+    tarafında yapmak çok daha güvenli ve hata ayıklaması kolay -- SQL
+    sözdizimi hatası riski tamamen ortadan kalkıyor.
     """
-    parcalar = [f"NULLIF(TRIM({tablo_alias}.{kolon}), '')" for kolon in kolon_listesi]
-    if len(parcalar) == 1:
-        return parcalar[0]
-    return f"COALESCE({', '.join(parcalar)})"
+    return [f"{tablo_alias}.{kolon} AS {alias_onek}_{i}" for i, kolon in enumerate(kolon_listesi)]
+
+
+def _ilk_dolu_deger(veri, alias_onek, adet):
+    """Bir satır sözlüğünde, alias_onek_0, alias_onek_1, ... adaylarından ilk boş olmayanı döndürür."""
+    for i in range(adet):
+        deger = veri.get(f"{alias_onek}_{i}")
+        if deger is not None and str(deger).strip():
+            return str(deger).strip()
+    return None
 
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
     KULLANICI = ayarlar.DB_KULLANICI
@@ -109,22 +117,26 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
         yuk_tarihi, proje_kodu = ana_kayit
 
         # --- 2. AŞAMA: Dinamik Yapay Zeka (Sözlük Kolonlarını Bulma) ---
-        # NOT: Artık TEK bir kolon tahmin edilmiyor -- birden fazla aday kolon
-        # bulunup SQL'de COALESCE ile birleştiriliyor (bkz. yukarıdaki
-        # oto_kolon_listesi_kesfi() açıklaması, "UĞRAMA" hatası).
+        # NOT: Artık TEK bir kolon tahmin edilmiyor VE SQL içinde birleştirme
+        # (COALESCE) YAPILMIYOR -- her aday kolon KENDİ SQL takma adıyla ham
+        # olarak çekiliyor, "hangisi doluysa onu kullan" seçimi Python
+        # tarafında yapılıyor (bkz. _ilk_dolu_deger()). Bu, Oracle SQL
+        # sözdizimi hatalarına (örn. COALESCE'in en az 2 parametre istemesi)
+        # karşı tamamen bağışık, çünkü hiçbir birleştirme fonksiyonu
+        # kullanılmıyor.
         op_kolonlari = oto_kolon_listesi_kesfi(cursor, "LMSD_L_OP_DEFINITION")
         price_kolonlari = oto_kolon_listesi_kesfi(cursor, "LMSD_L_GOODSPRICE_TYPE")
         print(f"[Bilgi] Operasyon Kodu için denenecek kolonlar (öncelik sırasıyla): {op_kolonlari}")
         print(f"[Bilgi] Ücret Tipi için denenecek kolonlar (öncelik sırasıyla): {price_kolonlari}")
 
-        op_ifadesi = _coalesce_ifadesi("OD", op_kolonlari)
-        price_ifadesi = _coalesce_ifadesi("GT", price_kolonlari)
+        op_secim_listesi = _aday_kolon_sql_listesi("OD", op_kolonlari, "OP_ADAY")
+        price_secim_listesi = _aday_kolon_sql_listesi("GT", price_kolonlari, "PRICE_ADAY")
 
         # --- 3. AŞAMA: GERÇEK IT SQL'İ İLE FATURA BAĞLANTISI ---
         sql_satis_satirlari = f"""
             SELECT
-                {op_ifadesi} as OPERATION_CODE,
-                {price_ifadesi} as PRICE_TYPE,
+                {', '.join(op_secim_listesi)},
+                {', '.join(price_secim_listesi)},
                 OPDET.AMT AS SATIS_FIYATI,
                 INV.DOC_NO AS FATURA_NO,
                 TO_CHAR(INV.DOC_DATE, 'DD.MM.YYYY') AS FATURA_TARIHI
@@ -149,17 +161,19 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
             ham_fiyat = veri.get("SATIS_FIYATI", 0)
             guvenli_fiyat = Decimal(str(ham_fiyat)) if ham_fiyat is not None else Decimal('0.00')
 
-            # TEŞHİS: Oracle'dan varsayılan değere düşülmeden ÖNCE ham gelen
-            # değerleri konsola yaz -- "UĞRAMA" gibi kodların neden NAVLUN'a
-            # düştüğünü net görebilmek için.
-            print(f"[Bilgi] Ham satış satırı verisi: OPERATION_CODE='{veri.get('OPERATION_CODE')}', "
-                  f"PRICE_TYPE='{veri.get('PRICE_TYPE')}', AMT='{ham_fiyat}', "
-                  f"FATURA_NO='{veri.get('FATURA_NO')}'")
+            # TEŞHİS: Her aday kolonun HAM değerini konsola yaz -- "UĞRAMA"
+            # gibi kodların hangi kolonda görünüp hangisinde görünmediğini
+            # net görebilmek için.
+            op_adaylari_ham = [veri.get(f"OP_ADAY_{i}") for i in range(len(op_kolonlari))]
+            price_adaylari_ham = [veri.get(f"PRICE_ADAY_{i}") for i in range(len(price_kolonlari))]
+            print(f"[Bilgi] Ham satış satırı verisi: Operasyon Kodu adayları {list(zip(op_kolonlari, op_adaylari_ham))}, "
+                  f"Ücret Tipi adayları {list(zip(price_kolonlari, price_adaylari_ham))}, "
+                  f"AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
 
-            op_metni = veri.get("OPERATION_CODE")
+            op_metni = _ilk_dolu_deger(veri, "OP_ADAY", len(op_kolonlari))
             if not op_metni: op_metni = "NAVLUN"
 
-            tip_metni = veri.get("PRICE_TYPE")
+            tip_metni = _ilk_dolu_deger(veri, "PRICE_ADAY", len(price_kolonlari))
             if not tip_metni: tip_metni = "NAVLUN"
 
             satis_satirlari.append({

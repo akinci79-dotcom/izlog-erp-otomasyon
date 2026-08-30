@@ -375,18 +375,34 @@ ekranda "yük no arama kutusuna bile yazamadı" olarak gözlemledi). Düzeltme:
 `_coalesce_ifadesi()` artık liste tek elemanlıysa COALESCE'e hiç
 sarmadan ifadeyi doğrudan döndürüyor.
 
-**Uygulanan düzeltme**: `oracle_okuyucu.py`'ye `oto_kolon_listesi_kesfi()`
-eklendi -- TEK kolon yerine TÜM aday kolonları (aynı öncelik sırasıyla)
-bir liste olarak döndürüyor. Asıl SQL sorgusu artık bu kolonları
+**Uygulanan düzeltme (v1, TERK EDİLDİ)**: İlk denemede `oracle_okuyucu.py`'ye
+`oto_kolon_listesi_kesfi()` eklenip, TÜM aday kolonlar SQL içinde
 `COALESCE(NULLIF(TRIM(kolon1),''), NULLIF(TRIM(kolon2),''), ...)` ile
-birleştiriyor -- hangi kolon doluysa o kullanılıyor, ilk aday boşsa
-otomatik bir sonrakine düşülüyor. Ayrıca hangi kolonların denendiğini
-(`[Bilgi] Operasyon Kodu için denenecek kolonlar: [...]`) ve her satırın
-Oracle'dan gelen HAM (varsayılana düşülmeden önceki) `OPERATION_CODE` /
-`PRICE_TYPE` değerlerini konsola yazan teşhis logları eklendi -- bir
+birleştirildi. Bu, kolon listesi TEK elemanlıysa Oracle'da
+`ORA-00939: too few arguments for function` hatasına yol açtı (COALESCE
+en az 2 parametre ister) -- bu ayrı bir bug olarak düzeltildi (tek
+elemanlıysa COALESCE'e sarmadan direkt kullan), ama kullanıcı yine de
+aynı şekilde patlamaya devam ettiğini bildirdi.
+
+**✅ UYGULANAN DÜZELTME (v2, GÜNCEL) — SQL'de HİÇ birleştirme fonksiyonu
+kullanma**: SQL sözdizimiyle uğraşmanın riskli olduğu görülünce yaklaşım
+tamamen değiştirildi. Artık her aday kolon SQL'de KENDİ ayrı takma adıyla
+(`OD.DESCRIPTION AS OP_ADAY_0`, `OD.OPERATION_CODE AS OP_ADAY_1`, ...) HAM
+olarak çekiliyor -- SQL'de COALESCE veya başka bir birleştirme fonksiyonu
+YOK. "Hangi kolon doluysa onu kullan" seçimi tamamen Python tarafında
+(`_ilk_dolu_deger()`) yapılıyor: `OP_ADAY_0`, `OP_ADAY_1`, ... sırasıyla
+kontrol edilip ilk boş olmayan değer kullanılıyor. Bu yaklaşım Oracle SQL
+sözdizimi kurallarına (parametre sayısı vb.) tamamen bağışık, çünkü hiçbir
+SQL birleştirme fonksiyonu kullanılmıyor -- test/debug döngüsünü kısaltmak
+için mock veriyle (gerçek Oracle bağlantısı olmadan) doğrulandı.
+
+Ayrıca hangi kolonların denendiğini (`[Bilgi] Operasyon Kodu için
+denenecek kolonlar: [...]`) ve her satırın TÜM aday kolonlarının HAM
+değerlerini (`[Bilgi] Ham satış satırı verisi: Operasyon Kodu adayları
+[(kolon_adi, deger), ...]`) konsola yazan teşhis logları var -- bir
 sonraki testte "UĞRAMA" hâlâ gelmiyorsa, tam olarak hangi kolonun hangi
-değeri döndürdüğünü (veya tamamen NULL olduğunu) doğrudan konsoldan
-görebilmek için. Bu, tahmin turlarını azaltmak amacıyla eklendi.
+değeri döndürdüğünü (veya tüm adayların NULL olduğunu) doğrudan konsoldan
+görebilmek için.
 
 **⚠️ Playwright retry döngülerinde MUTLAKA kısa `timeout=` belirt [DOĞRULANMIŞ]**:
 Yukarıdaki bekleme döngüsünde `inner_text()`'e açıkça timeout verilmediği
