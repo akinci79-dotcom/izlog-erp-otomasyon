@@ -181,10 +181,69 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             ucret_tipi = satis.get('UCRET_TIPI', 'NAVLUN')
 
             if op_kodu != 'NAVLUN':
-                aktif_sayfa.fill("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", ucret_tipi)
-                aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
-                aktif_sayfa.fill("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", op_kodu)
-                aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
+                # NOT: "Ücret Tipi" (DXEditor1) ve "Operasyon Kodu" (DXEditor9)
+                # düz metin kutusu DEĞİL, Uyumsoft sözlük tablolarından
+                # (LMSD_L_GOODSPRICE_TYPE / LMSD_L_OP_DEFINITION) beslenen
+                # DevExpress ARAMA/LOOKUP kutuları -- Tutar ve Tarih alanlarında
+                # daha önce görüldüğü gibi `.fill()` bu tür editörlerde
+                # GÜVENİLİR DEĞİL (görsel metni yazar ama ERP'nin ihtiyaç
+                # duyduğu gizli ID'yi bir öğe SEÇİLMEDEN set etmeyebilir).
+                # Bu yüzden aynı sağlam desen uygulanıyor: tıkla -> temizle ->
+                # karakter karakter yaz -> açılan öneri listesinin gelmesini
+                # bekle -> ilk öneriyi ok tuşu + Enter ile SEÇ (sadece Tab ile
+                # kutudan çıkmak yerine). Ardından değerin gerçekten dolduğu
+                # doğrulanıyor; dolmadıysa net bir hata ile durduruluyor.
+                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
+                aktif_sayfa.keyboard.press("Control+A")
+                aktif_sayfa.keyboard.press("Delete")
+                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", ucret_tipi, delay=50)
+                aktif_sayfa.wait_for_timeout(900)
+                aktif_sayfa.keyboard.press("ArrowDown")
+                aktif_sayfa.wait_for_timeout(200)
+                aktif_sayfa.keyboard.press("Enter")
+                aktif_sayfa.wait_for_timeout(400)
+
+                try:
+                    yazilan_ucret_tipi = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I") or "").strip()
+                except Exception:
+                    yazilan_ucret_tipi = ""
+
+                if not yazilan_ucret_tipi:
+                    try:
+                        aktif_sayfa.screenshot(path=f"debug_ucrettipi_hata_{kaynak_yuk_no}.png")
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"[{kaynak_yuk_no}] HATA: 'Ücret Tipi' alanı seçilemedi (beklenen: '{ucret_tipi}', "
+                        f"alanda görülen: '{yazilan_ucret_tipi}'). Bu satırın işlenmesi durduruldu. "
+                        f"Ekran görüntüsü: debug_ucrettipi_hata_{kaynak_yuk_no}.png"
+                    )
+
+                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
+                aktif_sayfa.keyboard.press("Control+A")
+                aktif_sayfa.keyboard.press("Delete")
+                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", op_kodu, delay=50)
+                aktif_sayfa.wait_for_timeout(900)
+                aktif_sayfa.keyboard.press("ArrowDown")
+                aktif_sayfa.wait_for_timeout(200)
+                aktif_sayfa.keyboard.press("Enter")
+                aktif_sayfa.wait_for_timeout(400)
+
+                try:
+                    yazilan_op_kodu = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I") or "").strip()
+                except Exception:
+                    yazilan_op_kodu = ""
+
+                if not yazilan_op_kodu:
+                    try:
+                        aktif_sayfa.screenshot(path=f"debug_operasyonkodu_hata_{kaynak_yuk_no}.png")
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"[{kaynak_yuk_no}] HATA: 'Operasyon Kodu' alanı seçilemedi (beklenen: '{op_kodu}', "
+                        f"alanda görülen: '{yazilan_op_kodu}'). Bu satırın işlenmesi durduruldu. "
+                        f"Ekran görüntüsü: debug_operasyonkodu_hata_{kaynak_yuk_no}.png"
+                    )
 
             # Güvenli Decimal Çevirimi
             ham_fiyat = satis.get('SATIS_FIYATI')

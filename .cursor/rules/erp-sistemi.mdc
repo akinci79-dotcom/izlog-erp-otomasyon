@@ -205,8 +205,15 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
 ### Satış/Fiyat grid'i — "Yurtiçi Yük Tanımı" sekmesi
 Öneki: `#TabControl_grd_LGoodsOpDetailCollection_*`
 - `_EmptyRow_btnNew` — Yeni satır ekle.
-- `_DXEditor1_I` — Ücret Tipi (NAVLUN değilse doldurulur).
-- `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur).
+- `_DXEditor1_I` — Ücret Tipi (NAVLUN değilse doldurulur). Düz metin kutusu
+ DEĞİL, `LMSD_L_GOODSPRICE_TYPE` sözlüğünden beslenen DevExpress
+ ARAMA/LOOKUP kutusu -- `.fill()` + `Tab` güvenilir değil (Tutar/Tarih
+ alanlarındaki gibi). **[VARSAYIM/TODO]**: Şu an tıkla->temizle->yaz->
+ öneri listesini bekle (900ms)->ArrowDown+Enter ile seç deseni uygulandı,
+ henüz canlı testte teyit edilmedi.
+- `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur). Aynı
+ lookup/arama kutusu davranışı (`LMSD_L_OP_DEFINITION` sözlüğü), aynı
+ düzeltme deseni uygulandı. **[VARSAYIM/TODO]**: henüz teyit edilmedi.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 
