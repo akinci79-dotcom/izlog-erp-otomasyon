@@ -345,19 +345,37 @@ Kaydet'ine basıyor. Eğer bu da yetmezse, bir sonraki adım kod tahminiyle
 uğraşmak yerine kullanıcıdan CANLI F12 incelemesiyle gerçek DOM yapısını
 almak olmalı.
 
-**✅ ÇÖZÜLDÜ — "Operasyon Kodu" alanı boş kalıp hata veriyordu [DOĞRULANMIŞ, ekran görüntüsüyle teyit edildi]**:
-Asıl sebep Playwright/DevExpress değil, basit bir **büyük/küçük harf tutarsızlığıydı**:
-`oracle_okuyucu.py`, Oracle'da `OPERATION_CODE` NULL geldiğinde varsayılan
-değeri `"Navlun"` (baş harf büyük) döndürüyordu, ama `izlog_yuk_otomasyon.py`
-bunu `op_kodu != 'NAVLUN'` (tamamen büyük) ile karşılaştırıyordu. Python'da
-string karşılaştırması harfe duyarlı olduğu için `"Navlun" != "NAVLUN"`
-yanlışlıkla `True` çıkıp normal bir Navlun satırı "özel operasyon kodu
-gerekiyor" sanılıyor, sonra ERP'nin "Operasyon Kodu" arama kutusuna
-"Navlun" yazılmaya çalışılıyor ama eşleşme bulunamayıp alan boş kalıyordu
-(ekran görüntüsünde kırmızı/zorunlu alan olarak görünüyordu). Düzeltme:
-`oracle_okuyucu.py`'deki varsayılan değerler `"NAVLUN"` (tamamen büyük)
-olarak standardize edildi VE `izlog_yuk_otomasyon.py`'deki karşılaştırma
-`op_kodu.strip().upper() != 'NAVLUN'` şeklinde harfe duyarsız yapıldı.
+**⚠️ KISMEN ÇÖZÜLDÜ (İLK TEŞHİS YANLIŞTI) — "Operasyon Kodu" alanı boş kalıp
+hata veriyordu [DOĞRULANMIŞ, kullanıcı canlı ERP ekranından teyit etti]**:
+İlk turda bunun bir büyük/küçük harf karşılaştırma hatası (`"Navlun" !=
+"NAVLUN"`) olduğu düşünülmüştü -- bu düzeltme (harfe duyarsız karşılaştırma +
+varsayılan değerlerin `"NAVLUN"` olarak standardize edilmesi) yapıldı ve
+hâlâ geçerli/faydalı, ama **asıl kök nedeni değildi**. Kullanıcı canlı ERP
+ekranından kaynak yükün ilgili fiyat satırında Ücret Tipi=`Ek_Navlun`,
+Operasyon Kodu=`UĞRAMA` olduğunu teyit etti -- yani bu satır hiç varsayılan
+"Navlun" değil, GERÇEK bir özel operasyon kodu içeriyordu, ama otomasyon
+Oracle'dan bunu hiç alamayıp varsayılana düşüyordu.
+
+**Kök neden [VARSAYIM/TODO, henüz canlı SQL çalıştırılıp teyit edilmedi]**:
+`oto_kolon_kesfi()` fonksiyonu `LMSD_L_OP_DEFINITION` sözlük tablosunda TEK
+bir kolonu (öncelik: `DESCRIPTION` → `OPERATION_CODE` → ...) seçip onu
+kullanıyordu. Varsayım: `DESCRIPTION` kolonu "UĞRAMA" gibi standart dışı
+operasyon kodlarında NULL/boş kalabiliyor, oysa aynı tablodaki
+`OPERATION_CODE` kolonu (veya başka bir aday) dolu olabiliyor -- tek kolona
+güvenmek bu durumda veriyi kaybettiriyordu.
+
+**Uygulanan düzeltme**: `oracle_okuyucu.py`'ye `oto_kolon_listesi_kesfi()`
+eklendi -- TEK kolon yerine TÜM aday kolonları (aynı öncelik sırasıyla)
+bir liste olarak döndürüyor. Asıl SQL sorgusu artık bu kolonları
+`COALESCE(NULLIF(TRIM(kolon1),''), NULLIF(TRIM(kolon2),''), ...)` ile
+birleştiriyor -- hangi kolon doluysa o kullanılıyor, ilk aday boşsa
+otomatik bir sonrakine düşülüyor. Ayrıca hangi kolonların denendiğini
+(`[Bilgi] Operasyon Kodu için denenecek kolonlar: [...]`) ve her satırın
+Oracle'dan gelen HAM (varsayılana düşülmeden önceki) `OPERATION_CODE` /
+`PRICE_TYPE` değerlerini konsola yazan teşhis logları eklendi -- bir
+sonraki testte "UĞRAMA" hâlâ gelmiyorsa, tam olarak hangi kolonun hangi
+değeri döndürdüğünü (veya tamamen NULL olduğunu) doğrudan konsoldan
+görebilmek için. Bu, tahmin turlarını azaltmak amacıyla eklendi.
 
 **⚠️ Playwright retry döngülerinde MUTLAKA kısa `timeout=` belirt [DOĞRULANMIŞ]**:
 Yukarıdaki bekleme döngüsünde `inner_text()`'e açıkça timeout verilmediği
