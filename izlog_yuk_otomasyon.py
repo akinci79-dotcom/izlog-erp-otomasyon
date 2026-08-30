@@ -180,7 +180,16 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             op_kodu = satis.get('OPERASYON_KODU', 'NAVLUN')
             ucret_tipi = satis.get('UCRET_TIPI', 'NAVLUN')
 
-            if op_kodu != 'NAVLUN':
+            # NOT: Bu karşılaştırma büyük/küçük harften BAĞIMSIZ olmalı --
+            # canlı testte Oracle tarafında (oracle_okuyucu.py) varsayılan
+            # değer "Navlun" (baş harf büyük) olarak dönüyordu, ama burada
+            # "NAVLUN" (tamamen büyük) ile karşılaştırılıyordu. Python'da bu
+            # karşılaştırma harfe duyarlı olduğu için "Navlun" != "NAVLUN"
+            # yanlışlıkla True çıkıp normal bir Navlun satırı "özel operasyon
+            # kodu gerekiyor" sanılıyor, sonra ERP'nin arama kutusuna "Navlun"
+            # yazılmaya çalışılıyor ama eşleşme bulunamayıp alan boş kalıyor
+            # ve hata fırlatılıyordu.
+            if op_kodu.strip().upper() != 'NAVLUN':
                 # NOT: "Ücret Tipi" (DXEditor1) ve "Operasyon Kodu" (DXEditor9)
                 # düz metin kutusu DEĞİL, Uyumsoft sözlük tablolarından
                 # (LMSD_L_GOODSPRICE_TYPE / LMSD_L_OP_DEFINITION) beslenen

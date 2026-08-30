@@ -345,6 +345,20 @@ Kaydet'ine basıyor. Eğer bu da yetmezse, bir sonraki adım kod tahminiyle
 uğraşmak yerine kullanıcıdan CANLI F12 incelemesiyle gerçek DOM yapısını
 almak olmalı.
 
+**✅ ÇÖZÜLDÜ — "Operasyon Kodu" alanı boş kalıp hata veriyordu [DOĞRULANMIŞ, ekran görüntüsüyle teyit edildi]**:
+Asıl sebep Playwright/DevExpress değil, basit bir **büyük/küçük harf tutarsızlığıydı**:
+`oracle_okuyucu.py`, Oracle'da `OPERATION_CODE` NULL geldiğinde varsayılan
+değeri `"Navlun"` (baş harf büyük) döndürüyordu, ama `izlog_yuk_otomasyon.py`
+bunu `op_kodu != 'NAVLUN'` (tamamen büyük) ile karşılaştırıyordu. Python'da
+string karşılaştırması harfe duyarlı olduğu için `"Navlun" != "NAVLUN"`
+yanlışlıkla `True` çıkıp normal bir Navlun satırı "özel operasyon kodu
+gerekiyor" sanılıyor, sonra ERP'nin "Operasyon Kodu" arama kutusuna
+"Navlun" yazılmaya çalışılıyor ama eşleşme bulunamayıp alan boş kalıyordu
+(ekran görüntüsünde kırmızı/zorunlu alan olarak görünüyordu). Düzeltme:
+`oracle_okuyucu.py`'deki varsayılan değerler `"NAVLUN"` (tamamen büyük)
+olarak standardize edildi VE `izlog_yuk_otomasyon.py`'deki karşılaştırma
+`op_kodu.strip().upper() != 'NAVLUN'` şeklinde harfe duyarsız yapıldı.
+
 **⚠️ Playwright retry döngülerinde MUTLAKA kısa `timeout=` belirt [DOĞRULANMIŞ]**:
 Yukarıdaki bekleme döngüsünde `inner_text()`'e açıkça timeout verilmediği
 için (varsayılan ~30s), elementin var olmadığı her denemede Playwright

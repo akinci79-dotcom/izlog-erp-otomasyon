@@ -85,10 +85,10 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
             guvenli_fiyat = Decimal(str(ham_fiyat)) if ham_fiyat is not None else Decimal('0.00')
 
             op_metni = veri.get("OPERATION_CODE")
-            if not op_metni: op_metni = "Navlun"
+            if not op_metni: op_metni = "NAVLUN"
 
             tip_metni = veri.get("PRICE_TYPE")
-            if not tip_metni: tip_metni = "Navlun"
+            if not tip_metni: tip_metni = "NAVLUN"
 
             satis_satirlari.append({
                 "OPERASYON_KODU": op_metni,
