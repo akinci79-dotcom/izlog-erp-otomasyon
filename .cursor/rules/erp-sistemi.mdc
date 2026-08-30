@@ -327,6 +327,17 @@ CSS "ile biten" seçicisi, `TabControl_grd_` önekiyle/önekisiz ikisini de
 kapsar). "Seç" sonrası bu hücrede fatura no görünene kadar (~10-12s)
 bekleniyor; hâlâ görünmezse satır Kaydet'ine BASILMADAN net bir hata veriliyor.
 
+**✅ Basitleştirildi (id tahmin denemeleri terk edildi) [DOĞRULANMIŞ]**:
+"Seç" sonrası fatura no'nun satıra yazıldığını DOM üzerinden doğrulamaya
+çalışan üç ayrı yöntem (varsayılan `_I` id'si, tablo `inner_text()`'i,
+`input_value()`, satıra özel `|8|0` hücresi) hepsi ya yanlış çıktı ya da
+yanlış pozitif/negatif verdi. Kod artık bu doğrulamayı TAMAMEN bırakıp
+orijinal (1. satırda çalışan) basit yönteme döndü: "Seç" sonrası sabit bir
+süre (3000ms, 1. satırdaki 1500ms'den fazla) bekleyip doğrudan satır
+Kaydet'ine basıyor. Eğer bu da yetmezse, bir sonraki adım kod tahminiyle
+uğraşmak yerine kullanıcıdan CANLI F12 incelemesiyle gerçek DOM yapısını
+almak olmalı.
+
 **⚠️ Playwright retry döngülerinde MUTLAKA kısa `timeout=` belirt [DOĞRULANMIŞ]**:
 Yukarıdaki bekleme döngüsünde `inner_text()`'e açıkça timeout verilmediği
 için (varsayılan ~30s), elementin var olmadığı her denemede Playwright

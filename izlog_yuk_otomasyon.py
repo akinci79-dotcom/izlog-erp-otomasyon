@@ -364,48 +364,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             aktif_sayfa.wait_for_timeout(500)
             lov_penceresi.locator("#btnChoose_CD").click(force=True)
 
-            # NOT: Eskiden burada sabit 1500ms bekleyip hemen satır Kaydet'ine
-            # basılıyordu. Canlı testte bu YETERSİZ kaldı: LOV kapandı ama
-            # seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun
-            # sürüyordu; Kaydet çok erken tıklanınca ERP satırı geçersiz
-            # sayıp hem Fatura No'yu hem Tutar'ı sıfırlayarak reddediyordu.
-            # ÖNEMLİ: "DXEditor29 içindeki HERHANGİ input" kontrolü YANLIŞ
-            # POZİTİF verdi -- aynı Yük'te birden fazla satır AYNI faturaya
-            # bağlanıyorsa (bu durumda öyle), önceki (zaten kaydedilmiş)
-            # satırın eski değeri hâlâ DOM'da bir yerde kalıp testi yanıltıyor
-            # olabilir. Bu yüzden artık ÖZELLİKLE şu an düzenlenen satırın
-            # (en üstteki, satır indeksi 0) kendi görüntüleme hücresi
-            # kontrol ediliyor -- F12 ile daha önce bulunan id kalıbı:
-            # "...LGoodsOpDetailCollection|8|0" (sütun 8 = Fatura No, satır 0).
-            # ÖNEMLİ: inner_text() çağrılarına KISA bir timeout veriliyor
-            # (varsayılan olursa her başarısız denemede Playwright 30 saniye
-            # bekleyebilir -- 20 denemeyle bu, dakikalarca "takılı kalmış"
-            # gibi görünmeye yol açıyordu, canlı testte gözlendi).
-            fatura_alani_doldu = False
-            for _ in range(20):  # ~10 saniye, 500ms aralıklarla
-                try:
-                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text(timeout=1000).strip()
-                except Exception:
-                    guncel_deger = ""
-                if fatura_no_str in guncel_deger:
-                    fatura_alani_doldu = True
-                    break
-                aktif_sayfa.wait_for_timeout(500)
-
-            if not fatura_alani_doldu:
-                # Son bir şans daha: ekstra bekleyip tekrar kontrol et.
-                aktif_sayfa.wait_for_timeout(1500)
-                try:
-                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text(timeout=1000).strip()
-                except Exception:
-                    guncel_deger = ""
-                if fatura_no_str not in guncel_deger:
-                    raise RuntimeError(
-                        f"[{kaynak_yuk_no}] HATA: 'Seç' butonuna basıldıktan sonra fatura no "
-                        f"('{fatura_no_str}') satıra hiç yazılmadı (12 saniye beklendi, "
-                        f"satırın Fatura No hücresinde görülen: '{guncel_deger}'). Satır bazlı "
-                        f"Kaydet'e basılmadan işlem durduruldu."
-                    )
+            # NOT: Dogru id'yi tahmin etmeye dayali dogrulama denemeleri
+            # (input_value, inner_text, cesitli seciciler) hepsi yanlis
+            # cikti ve satiri gereksiz yere Kaydet'e basmadan durdurdu.
+            # Orijinal (1. satirda CALISAN) basit yonteme donuldu: LOV
+            # kapandiktan sonra sabit bir sure bekleyip dogrudan Kaydet'e
+            # basmak. 1. satirda 1500ms yetiyordu; 2. satirda yetmedigi
+            # gozlendigi icin sure uzatildi.
+            aktif_sayfa.wait_for_timeout(3000)
 
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
             aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
