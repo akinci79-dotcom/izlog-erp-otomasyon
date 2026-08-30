@@ -313,15 +313,19 @@ basıldıktan sonra sadece sabit 1500ms bekleyip hemen satırın kendi
 seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun sürüyordu; Kaydet
 çok erken tıklanınca ERP satırı geçersiz sayıp hem Fatura No'yu hem Tutar'ı
 sıfırlayarak reddediyordu (satır "Kaydet/Vazgeç" modunda, boş kalıyordu).
-İki başarısız deneme oldu: (1) `#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I`
-(varsayılan `_I` soneki) id'si YANLIŞTI -- öyle bir id yok. (2) Tablonun
-`inner_text()`'i de YANLIŞTI -- değer bir `<input>` elementinin VALUE'sunda
-tutuluyor ve `inner_text()` input değerlerini görmez (ekranda değer görünse
-de metin olarak boş dönüyordu). **Kesin çözüm**: tam input id'sini bilmeden,
-tablonun İÇİNDEKİ ilk `<input>` alt elementini bulup (`#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input`)
-onun `input_value()`'sunu oku -- iç yapı ne olursa olsun çalışır. "Seç"
-sonrası bu değerde fatura no görünene kadar (~10-12s) bekleniyor; hâlâ
-görünmezse satır Kaydet'ine BASILMADAN net bir hata veriliyor.
+Üç başarısız deneme oldu: (1) `#TabControl_grd_LGoodsOpDetailCollection_DXEditor29_I`
+(varsayılan `_I` soneki) id'si YANLIŞTI. (2) Tablonun `inner_text()`'i de
+YANLIŞTI -- değer bir `<input>`'un VALUE'sunda tutuluyor, inner_text() bunu
+görmüyor. (3) DXEditor29 içindeki "İLK input"un `input_value()`'su da
+YANILTICI ÇIKTI -- aynı Yük'te birden fazla satır AYNI faturaya bağlanıyorsa,
+önceki (zaten kaydedilmiş) satırın eski değeri DOM'da bir yerde kalıp testi
+yanlış pozitif yapabiliyor. **Kesin çözüm**: ÖZELLİKLE şu an düzenlenen
+satırın (en üstte, satır indeksi 0) kendi görüntüleme hücresi kontrol
+ediliyor -- F12 ile daha önce bulunan id kalıbı `...LGoodsOpDetailCollection|8|0`
+(sütun 8 = Fatura No, satır 0) kullanılarak (`[id$="LGoodsOpDetailCollection|8|0"]`
+CSS "ile biten" seçicisi, `TabControl_grd_` önekiyle/önekisiz ikisini de
+kapsar). "Seç" sonrası bu hücrede fatura no görünene kadar (~10-12s)
+bekleniyor; hâlâ görünmezse satır Kaydet'ine BASILMADAN net bir hata veriliyor.
 
 ## Bu Dosyayı Güncelleme
 

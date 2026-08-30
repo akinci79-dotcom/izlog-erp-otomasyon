@@ -368,18 +368,19 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # basılıyordu. Canlı testte bu YETERSİZ kaldı: LOV kapandı ama
             # seçilen fatura no'nun satıra GERÇEKTEN yazılması daha uzun
             # sürüyordu; Kaydet çok erken tıklanınca ERP satırı geçersiz
-            # sayıp hem Fatura No'yu hem Tutar'ı sıfırlayarak reddediyordu
-            # (ekran görüntüsüyle teyit edildi). İlk iki deneme (tahmini
-            # "..._I" id'si, sonra tablonun inner_text()'i) yanlış çıktı --
-            # değer bir <input>'un VALUE'sunda tutuluyor ve inner_text()
-            # input değerlerini görmez (ekran görüntüsünde değer görünse de
-            # inner_text() boş dönüyordu). Şimdi tablonun İÇİNDEKİ input'un
-            # (tam id'sini bilmeden, ilk <input> alt elementini bularak)
-            # input_value()'su okunuyor -- iç yapı/id ne olursa olsun çalışır.
+            # sayıp hem Fatura No'yu hem Tutar'ı sıfırlayarak reddediyordu.
+            # ÖNEMLİ: "DXEditor29 içindeki HERHANGİ input" kontrolü YANLIŞ
+            # POZİTİF verdi -- aynı Yük'te birden fazla satır AYNI faturaya
+            # bağlanıyorsa (bu durumda öyle), önceki (zaten kaydedilmiş)
+            # satırın eski değeri hâlâ DOM'da bir yerde kalıp testi yanıltıyor
+            # olabilir. Bu yüzden artık ÖZELLİKLE şu an düzenlenen satırın
+            # (en üstteki, satır indeksi 0) kendi görüntüleme hücresi
+            # kontrol ediliyor -- F12 ile daha önce bulunan id kalıbı:
+            # "...LGoodsOpDetailCollection|8|0" (sütun 8 = Fatura No, satır 0).
             fatura_alani_doldu = False
             for _ in range(20):  # ~10 saniye, 500ms aralıklarla
                 try:
-                    guncel_deger = (aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input").first.input_value() or "").strip()
+                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text().strip()
                 except Exception:
                     guncel_deger = ""
                 if fatura_no_str in guncel_deger:
@@ -391,15 +392,15 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # Son bir şans daha: ekstra bekleyip tekrar kontrol et.
                 aktif_sayfa.wait_for_timeout(1500)
                 try:
-                    guncel_deger = (aktif_sayfa.locator("#TabControl_grd_LGoodsOpDetailCollection_DXEditor29 input").first.input_value() or "").strip()
+                    guncel_deger = aktif_sayfa.locator('[id$="LGoodsOpDetailCollection|8|0"]').first.inner_text().strip()
                 except Exception:
                     guncel_deger = ""
                 if fatura_no_str not in guncel_deger:
                     raise RuntimeError(
                         f"[{kaynak_yuk_no}] HATA: 'Seç' butonuna basıldıktan sonra fatura no "
                         f"('{fatura_no_str}') satıra hiç yazılmadı (12 saniye beklendi, "
-                        f"input'ta görülen değer: '{guncel_deger}'). Satır bazlı Kaydet'e "
-                        f"basılmadan işlem durduruldu."
+                        f"satırın Fatura No hücresinde görülen: '{guncel_deger}'). Satır bazlı "
+                        f"Kaydet'e basılmadan işlem durduruldu."
                     )
 
             aktif_sayfa.wait_for_selector("a[id*='editnew']:has-text('Kaydet')", state="visible", timeout=15000)
