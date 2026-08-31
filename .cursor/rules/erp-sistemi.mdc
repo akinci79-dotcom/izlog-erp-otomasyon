@@ -47,6 +47,20 @@ güvenilmemeli.
   `UPDATE_DATE`/`UPDATE_USER_ID` Uyumsoft'un orijinal sıfırlama değerlerine
   (`01.01.0001` / `0`) döndürülür ("veritabanı iz temizliği"). `DRY_RUN`
   aktifken bu adım tamamen atlanır.
+- `ayarlar.py` içinde `TESHIS_EKRAN_GORUNTUSU_AL` [DOĞRULANMIŞ, varsayılan
+  `False`]: `izlog_yuk_otomasyon.py` içinde HER BAŞARILI satırda otomatik
+  alınan "sağlama" ekran görüntüleri (Ücret Tipi/Operasyon Kodu sonrası,
+  Tutar sonrası, satır Kaydet sonrası -- toplam 5 nokta) bu bayrağa bağlı;
+  `False` iken hiç alınmıyorlar (kullanıcı, çalışma klasörünün
+  `debug_*.png` dosyalarıyla hızla dolduğunu bildirdi). `ayarlar.py`'de bu
+  değişken hiç tanımlı değilse `getattr(..., False)` ile varsayılan olarak
+  KAPALI kabul edilir, yani mevcut `ayarlar.py` dosyasını değiştirmeye
+  gerek yok. **Hata anında** alınan ekran görüntüleri (örn.
+  `debug_EMPTYROW_TIMEOUT_*`, `debug_*_hata_*`, `hata_*.png`) bu bayraktan
+  ETKİLENMEZ, her zaman alınmaya devam eder -- bunlar zaten nadir ve
+  teşhis için gereklidir. Aktif olarak yeni bir hata türü araştırılırken
+  `ayarlar.py`'ye `TESHIS_EKRAN_GORUNTUSU_AL = True` eklenip geçici olarak
+  açılabilir.
 
 ## İş Akışı (Yük → Sevk) [DOĞRULANMIŞ]
 
