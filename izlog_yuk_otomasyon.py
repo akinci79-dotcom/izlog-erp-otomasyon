@@ -287,6 +287,38 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Yurti.i Y.k Tan.m.")).first.click()
         aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible")
 
+        # ⚠️ KRİTİK TEŞHİS [VARSAYIM/TODO, henüz canlı ekranla kesin teyit
+        # edilmedi ama güçlü şüphe var]: "Kopya" (Copy) butonu, kaynak Yük'ün
+        # (zaten gerçek/kayıtlı) fiyat satırlarını da beraberinde kopyalıyor
+        # olabilir. Eğer öyleyse, aşağıdaki döngü bu satırların ÜZERİNE
+        # Oracle'dan okunan aynı verileri TEKRAR eklemeye çalışıyor olabilir
+        # -- bu hem "aynı fatura ikinci kez bağlanmaya çalışılınca ERP'nin
+        # takılması" (canlı testte gözlemlenen semptomla örtüşüyor) hem de
+        # GERÇEK (DRY_RUN kapalı) çalıştırmalarda MÜKERRER KAYIT riski
+        # taşıyor. Bu yüzden döngü başlamadan HEMEN ÖNCE, grid'de zaten
+        # satır olup olmadığı kontrol ediliyor ve varsa NET bir uyarı +
+        # ekran görüntüsü ile loglanıyor (henüz akışı DURDURMUYOR, sadece
+        # teşhis amaçlı -- bir sonraki canlı testte bu uyarı çıkarsa
+        # hipotez doğrulanmış olacak).
+        try:
+            mevcut_satir_metni = aktif_sayfa.locator(
+                "#TabControl_grd_LGoodsOpDetailCollection_DXMainTable"
+            ).inner_text(timeout=3000)
+        except Exception:
+            mevcut_satir_metni = ""
+
+        if "Düzelt" in mevcut_satir_metni:
+            print(f"[{kaynak_yuk_no}] ⚠️ UYARI: 'Yurtiçi Yük Tanımı' grid'inde döngü BAŞLAMADAN ÖNCE "
+                  f"ZATEN satır(lar) var gibi görünüyor -- 'Kopya' butonunun kaynak Yük'ün mevcut fiyat "
+                  f"satırlarını da kopyalamış olma ihtimali var. Bu, aşağıdaki döngünün AYNI faturayı "
+                  f"ikinci kez bağlamaya çalışmasına ve/veya GERÇEK çalıştırmalarda mükerrer kayda yol "
+                  f"açabilir. Lütfen kaynak Yük'ü (kopya değil, orijinali) ERP'de açıp 'Yurtiçi Yük "
+                  f"Tanımı' sekmesinde zaten kayıtlı fiyat satırı olup olmadığını kontrol edin.")
+            try:
+                aktif_sayfa.screenshot(path=f"debug_KOPYADA_MEVCUT_SATIR_UYARISI_{kaynak_yuk_no}.png")
+            except Exception:
+                pass
+
         # NOT: Satır bazlı "Kaydet" (a[id*='editnew']) güvenlidir -- bilinen ERP
         # kilitleme hatası, sadece ANA KAYDET (#btnSave_CD) İLE KAYDEDİLMİŞ bir
         # Yük'e daha sonra geri dönüp faturalı bir fiyat satırında tekrar işlem
