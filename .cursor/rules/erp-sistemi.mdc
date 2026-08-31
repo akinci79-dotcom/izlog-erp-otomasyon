@@ -308,21 +308,41 @@ Kaydet'e bastığında ekranın ANINDA yeni satıra geçtiğini gördüğünü
 belirtti -- yani 90sn'ye çıkarılan bekleme süresi muhtemelen sorunu tek
 başına ÇÖZMEYECEK, çünkü sorun "yavaşlık" değil.
 
-**⚠️ YENİ TEŞHİS EKLENDİ — "Kaydet" tıklaması yanlış/etkisiz bir elemana
-denk geliyor olabilir [VARSAYIM/TODO, henüz canlı testle teyit edilmedi]**:
-`a[id*='editnew']:has-text('Kaydet')` seçicisi sayfa genelinde arama yapıp
-`.first` ile eşleşeni alıyor, ve `force=True` kullanılıyor. Eğer DOM'da bu
-deseni eşleştiren görünmez/yanlış bir eleman varsa (bir şablon veya
-kalıntı), `force=True` sayesinde Playwright HİÇBİR HATA vermeden "tıkladım"
-der ama ekranda GERÇEKTEN bir şey olmaz -- satır sonsuza kadar düzenleme
-modunda ("Kaydet Vazgeç") kalır, ve 90 saniyelik bekleme boşuna geçer.
-Bunu ANINDA (90sn beklemeden) yakalamak için, Kaydet tıklamasından hemen
-sonra grid metninde hâlâ "Vazgeç" kelimesi var mı diye kontrol eden yeni
-bir adım eklendi (`izlog_yuk_otomasyon.py`, satır bazlı Kaydet sonrası).
-Varsa, net bir "Kaydet tıklaması etkisiz kaldı" hatası + ekran görüntüsü
-(`debug_KAYDET_TIKLAMASI_ETKISIZ_satir{N}_*.png`) üretiliyor. Bir sonraki
-canlı test, sorunun "tıklama etkisiz" mi yoksa "tıklama etkili ama SONRASI
-takılıyor" mu olduğunu kesin olarak ayıracak.
+**✅ KESİN ÇÖZÜM OLABİLİR [DOĞRULANMIŞ kullanıcı gözlemi, kod düzeltmesi
+henüz canlı testle teyit edilmedi] — ERP Kaydet sonrası OTOMATİK yeni satır
+açıyor**: Kullanıcı kritik bir gözlem paylaştı: bir satırı Kaydet'e
+bastığında ERP'nin **kendiliğinden, otomatik olarak** yeni (boş) bir satır
+açtığını gördü -- yani `EmptyRow_btnNew` ("Yeni Satır Ekle") butonuna HER
+satır için manuel basmaya gerek YOKMUŞ. Bu, önceki tüm "EmptyRow_btnNew
+timeout" hatalarının kök nedenini açıklıyor: bir satır düzenleme modundayken
+`EmptyRow_btnNew` butonu muhtemelen GİZLİ/PASİF kalıyor (DevExpress grid'i
+aynı anda sadece bir satırın düzenlenmesine izin veriyor), ama ERP zaten
+otomatik olarak YENİ bir düzenlenebilir satır açmış oluyor. Kod eskiden bu
+otomatik açılan satırı fark etmeden `EmptyRow_btnNew`'in görünür olmasını
+bekliyordu -- ki bu buton belki de HİÇBİR ZAMAN görünür olmuyor (satır
+düzenleme modundayken), sonsuza kadar (90sn) bekleyip timeout'a düşüyordu.
+
+**Uygulanan düzeltme** (`izlog_yuk_otomasyon.py`):
+1. Döngünün HER iterasyonunun BAŞINDA, `EmptyRow_btnNew`'e basmadan ÖNCE,
+ `DXEditor4_I` (Tutar alanı) ZATEN görünür mü diye kısa bir kontrol
+ (2sn timeout, hatasız) yapılıyor. Görünüyorsa (bir önceki satırın
+ Kaydet'i otomatik açmış demektir), `EmptyRow_btnNew`'e HİÇ basılmıyor,
+ doğrudan veri girişine geçiliyor. Görünmüyorsa (ilk satır ya da otomatik
+ açılma olmadıysa), eskisi gibi butona basılıp yeni satırın açılması
+ bekleniyor.
+2. `_emptyrow_bekle_teshisli()` artık SADECE `EmptyRow_btnNew`'in görünür
+ olmasını değil, `EmptyRow_btnNew` VEYA `DXEditor4_I`'dan HANGİSİ ÖNCE
+ görünür olursa onu (CSS virgülüyle "veya" mantığı) bekliyor -- bir önceki
+ satırın Kaydet'i sonrası hangi senaryo gerçekleşirse gerçekleşsin (buton
+ görünür OLUR ya da yeni satır otomatik açılır), ikisi de "hazır" sayılıyor.
+
+**⚠️ Ayrıca eklenen (hâlâ geçerli) teşhis**: "Kaydet" tıklamasının yanlış/
+etkisiz bir elemana denk gelip gelmediğini ANINDA test eden bir kontrol da
+kod içinde duruyor -- tıklamadan hemen sonra grid metninde hâlâ "Vazgeç"
+kelimesi var mı diye bakılıyor, varsa net bir "Kaydet tıklaması etkisiz
+kaldı" hatası + ekran görüntüsü (`debug_KAYDET_TIKLAMASI_ETKISIZ_satir{N}_
+*.png`) üretiliyor. Yukarıdaki "otomatik yeni satır açılması" düzeltmesi
+doğruysa bu kontrol hiç tetiklenmemeli (tıklama gerçekten etkili).
 
 ### Sevk/Nakliye grid'i — Sevk formu
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)

@@ -179,19 +179,27 @@ def _teshis_gorunur_popup_metni(sayfa):
 
 def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi, timeout, asama):
     """
-    `#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew` elemanının
-    tekrar görünür olmasını bekler (bir satır Kaydet edildikten sonra grid'in
-    "yeni satır ekle" durumuna dönmesi beklenir). Bu bekleme daha önce
-    timeout olduğunda SADECE generic "Timeout 30000ms exceeded" hatası
-    fırlatıyordu -- hangi satırda (1. mi 2. mi, hangi Operasyon Kodu) ve o an
-    ekranda görünür bir popup/uyarı olup olmadığı BELİRSİZDİ. Artık timeout
-    anında: satır indeksi + Operasyon Kodu + (varsa) görünür popup metni +
+    Bir satır Kaydet edildikten sonra grid'in bir SONRAKİ satır için hazır
+    olmasını bekler. Bu, İKİ farklı şekilde gerçekleşebilir (kullanıcının
+    canlı gözlemine dayanan yeni bulgu): (1) `EmptyRow_btnNew` ("Yeni Satır
+    Ekle") butonu tekrar görünür olur -- eskiden SADECE bu bekleniyordu, VEYA
+    (2) ERP otomatik olarak bir SONRAKİ satırı hemen açar (bu durumda
+    `EmptyRow_btnNew` GİZLİ/PASİF kalabilir, ama `DXEditor4_I` -- Tutar
+    alanı -- zaten görünür olur). Eskiden sadece (1) beklendiği için, ERP
+    (2) senaryosunu izlediğinde kod hiç gerçekleşmeyecek bir şeyi (buton
+    görünür olsun) bekleyip gereksiz yere timeout'a düşüyordu. Artık İKİSİNDEN
+    HERHANGİ BİRİ yeterli sayılıyor (CSS virgülüyle "veya" mantığı).
+
+    Timeout olduğunda SADECE generic "Timeout ...ms exceeded" hatası fırlatmak
+    yerine: satır indeksi + Operasyon Kodu + (varsa) görünür popup metni +
     satıra özel bir teşhis ekran görüntüsü ile zenginleştirilmiş bir
     RuntimeError fırlatılıyor.
     """
     try:
         sayfa.wait_for_selector(
-            "#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=timeout
+            "#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew, "
+            "#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I",
+            state="visible", timeout=timeout
         )
     except Exception as orijinal_hata:
         popup_metni = _teshis_gorunur_popup_metni(sayfa)
@@ -339,8 +347,41 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         # dosyası `satir{N}_{OPERASYON_KODU}` etiketiyle adlandırılıyor,
         # üzerine yazma tamamen ortadan kalkıyor.
         for satir_index, satis in enumerate(satis_satirlari, start=1):
-            aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew")
-            aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
+            # ⚠️ KRİTİK DÜZELTME [test edilecek yeni hipotez, kullanıcının
+            # canlı gözlemine dayanıyor]: Kullanıcı, bir satırı Kaydet'e
+            # bastığında ERP'nin OTOMATİK OLARAK yeni (boş) bir satır açtığını
+            # bildirdi -- yani "Yeni Satır Ekle" (`EmptyRow_btnNew`) butonuna
+            # HER satır için manuel basmaya gerek olmayabilir, çünkü bir
+            # önceki satırın Kaydet'i zaten yeni satırı otomatik açmış olabilir.
+            # Eğer öyleyse, kod BİR ÖNCEKİ satırın Kaydet'inden SONRA zaten
+            # açık olan bu yeni satırı fark etmeden tekrar `EmptyRow_btnNew`'e
+            # basmaya çalışıyor -- bu buton, bir satır düzenleme modundayken
+            # GİZLİ/PASİF olabilir, bu yüzden `wait_for_selector(...,
+            # state="visible")` hiç görünmeyen bir şeyi bekleyip 90 saniye
+            # sonra timeout'a düşüyor olabilir (asıl "EmptyRow_btnNew hiç
+            # görünmüyor" hatasının kök nedeni tam olarak bu olabilir).
+            #
+            # Düzeltme: Önce DXEditor4_I (Tutar alanı) ZATEN görünür mü diye
+            # bakılıyor (kısa bir timeout ile, hata fırlatmadan) -- eğer
+            # görünüyorsa bir önceki satırın Kaydet'i zaten yeni satırı açmış
+            # demektir, `EmptyRow_btnNew`'e HİÇ basılmıyor. Görünmüyorsa (ilk
+            # satır ya da otomatik açılma olmadıysa), eskisi gibi
+            # `EmptyRow_btnNew`'e basılıp yeni satırın açılması bekleniyor.
+            yeni_satir_zaten_acik = False
+            try:
+                aktif_sayfa.wait_for_selector(
+                    "#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", state="visible", timeout=2000
+                )
+                yeni_satir_zaten_acik = True
+                print(f"[{kaynak_yuk_no}] Bilgi: Satır {satir_index} için yeni satır ZATEN açık görünüyor "
+                      f"(muhtemelen bir önceki satırın Kaydet'i otomatik açtı) -- 'Yeni Satır Ekle' "
+                      f"butonuna basılmıyor.")
+            except Exception:
+                yeni_satir_zaten_acik = False
+
+            if not yeni_satir_zaten_acik:
+                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew")
+                aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
 
             op_kodu = satis.get('OPERASYON_KODU', 'NAVLUN')
             ucret_tipi = satis.get('UCRET_TIPI', 'NAVLUN')
