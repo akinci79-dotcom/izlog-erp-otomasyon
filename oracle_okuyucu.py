@@ -7,26 +7,34 @@ import ayarlar
 # ==========================================
 oracledb.init_oracle_client(lib_dir=r"C:\instantclient\instantclient_19_32")
 
-# ⚠️ "Ücret Tipi" (ERP dropdown seçenekleri: Navlun, Hizmet, Diğer, Avans,
-# Ek_Navlun, Yakit) Oracle'da HİÇBİR YERDE saklanmıyor [DOĞRULANMIŞ, kapsamlı
-# keşifle kanıtlandı]: INVD_EXPENSE'deki NAVLUN ve UĞRAMA kayıtlarının TÜM
-# kategori kolonları (CATEGORIES1-10_ID) sıfır, EXPENSE_TYPE ikisinde de aynı
-# -- ayırt edici hiçbir alan yok. Şema genelinde "Ek_Navlun"/"Hizmet"/"Avans"/
-# "Yakit" metinleri arandığında TEK bulunan yer bir DENETİM/DEĞİŞİKLİK GÜNLÜĞÜ
-# tablosuydu (DBA_TRACK_DETAIL), gerçek bir sözlük tablosu değil. Bu, "Ücret
-# Tipi"nin muhtemelen ERP'nin kendi UYGULAMA KODUNA gömülü sabit bir kural
-# olduğunu, Oracle'dan sorgulanamayacağını gösteriyor.
+# ✅ "Ücret Tipi" KAYNAĞI KESİN OLARAK BULUNDU [DOĞRULANMIŞ, iki bağımsız
+# veri noktasıyla teyitli]: `ucret_tipi_kesif.py` çıktısında
+# INVD_BRANCH_EXPENSE tablosunun INVD_EXPENSE.EXPENSE_ID ile eşleşen
+# satırlarında bir `OPERATION_PRICE_TYPE` (sayısal) kolonu bulundu:
+#   - NAVLUN (EXPENSE_ID=732)  -> OPERATION_PRICE_TYPE = 1
+#   - UĞRAMA (EXPENSE_ID=745)  -> OPERATION_PRICE_TYPE = 5
+# ERP ekranındaki "Ücret Tipi" dropdown'ının sırası (Navlun, Hizmet, Diğer,
+# Avans, Ek_Navlun, Yakit) 1'den başlayarak numaralandırılırsa:
+#   1=Navlun, 2=Hizmet, 3=Diğer, 4=Avans, 5=Ek_Navlun, 6=Yakit
+# Bu, HER İKİ bilinen değeri de (NAVLUN->1->"Navlun", UĞRAMA->5->"Ek_Navlun")
+# birebir doğruluyor -- rastlantı olma ihtimali yok denecek kadar düşük.
+# Böylece "Ücret Tipi" artık elle bakılan bir sözlük yerine gerçek bir Oracle
+# sorgusuyla (aşağıdaki JOIN) otomatik ve güvenilir şekilde bulunuyor.
 #
-# Bu yüzden burada KÖR TAHMİN yapmak yerine (örn. "NAVLUN değilse hep
-# Ek_Navlun yaz" -- bu YANLIŞ çıktı, çünkü gerçek seçenekler arasında Hizmet/
-# Diğer/Avans/Yakit de var), sadece CANLI TESTTE TEYİT EDİLMİŞ eşlemeler
-# burada tutuluyor. Bilinmeyen bir Operasyon Kodu geldiğinde kod SESSİZCE
-# YANLIŞ bir değer yazmak yerine NET bir hata verip kullanıcıdan doğru Ücret
-# Tipini bu sözlüğe eklemesini istiyor -- ERP'ye yanlış veri girmektense
-# durup sormak çok daha güvenli.
-OPERASYON_KODU_UCRET_TIPI_ESLEME = {
-    "NAVLUN": "NAVLUN",
-    "UĞRAMA": "Ek_Navlun",
+# **[VARSAYIM/TODO]**: INVD_BRANCH_EXPENSE çoklu şube (BRANCH_ID) desteği
+# içeriyor; aynı EXPENSE_ID için farklı şubelerde farklı OPERATION_PRICE_TYPE
+# tanımlı olma ihtimaline karşı SQL'de MIN() ile tek bir değere indirgeniyor
+# (İzlog'un tüm bilinen kayıtlarında BRANCH_ID=6364/CO_ID=2371 sabit
+# görünüyor, yani pratikte tek bir değer olması bekleniyor). Eğer ileride
+# yanlış bir Ücret Tipi yazıldığı görülürse, bu JOIN'e ayrıca YK'nin kendi
+# BRANCH_ID'siyle eşleşme şartı eklenmesi gerekebilir.
+UCRET_TIPI_ENUM_ESLEME = {
+    1: "Navlun",
+    2: "Hizmet",
+    3: "Diğer",
+    4: "Avans",
+    5: "Ek_Navlun",
+    6: "Yakit",
 }
 
 
@@ -57,7 +65,7 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
 
         yuk_tarihi, proje_kodu = ana_kayit
 
-        # --- 2. AŞAMA: FATURA BAĞLANTISI VE OPERASYON KODU (KESİNLEŞTİ) ---
+        # --- 2. AŞAMA: FATURA BAĞLANTISI, OPERASYON KODU VE ÜCRET TİPİ ---
         # NOT: Önceki varsayımlar (LMSD_L_OP_DEFINITION / LMSD_L_GOODSPRICE_TYPE)
         # kullanıcının paylaştığı GERÇEK, ÇALIŞAN bir Uyumsoft raporunun
         # (LojistikYükSevkKalemRaporu) SQL'i ve Excel çıktısıyla KANITLANMIŞ
@@ -68,32 +76,29 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
         #     Gerçek rapor verisinde bu değerler birebir eşleşti.
         #   - LMSD_L_GOODSPRICE_TYPE (eski "Ücret Tipi" varsayımımız) aslında
         #     "Ücret Tipi" DEĞİL -- YÜK'ün (tüm yükün, satır bazlı değil) KARGO
-        #     KATEGORİSİ (SAKARYA, KURUYÜK, ŞARKÜTERİ gibi). Raporda her
-        #     "UĞRAMA" satırı, kardeşi "NAVLUN" satırıyla AYNI bu değere sahipti
-        #     -- yük seviyesinde tek bir değer olduğunu doğruluyor, "Ücret Tipi"
-        #     ile hiç ilgisi yok. Bu yüzden bu join tamamen kaldırıldı.
-        #   - "Ücret Tipi" (Navlun / Ek_Navlun) için ayrı bir Oracle sözlük
-        #     tablosu/kolonu raporda hiç görünmedi. **[VARSAYIM/TODO]**: ERP
-        #     ekranında "Operasyon Kodu" = NAVLUN olan satırlarda "Ücret Tipi"
-        #     de "Navlun" gösteriyor; NAVLUN DIŞI bir operasyon kodu (örn.
-        #     UĞRAMA) olduğunda "Ücret Tipi" kullanıcı ekranında "Ek_Navlun"
-        #     olarak görüldü (canlı ekran görüntüsüyle teyit edildi). Bu yüzden
-        #     "Ücret Tipi" ayrı bir Oracle sorgusuyla ÇEKİLMİYOR, basitçe
-        #     Operasyon Kodu NAVLUN ise "NAVLUN", değilse sabit "Ek_Navlun"
-        #     olarak TÜRETİLİYOR. Farklı operasyon kodlarının (GENSET, MESAİ,
-        #     BEKLEME gibi) gerçekten hepsi "Ek_Navlun" ücret tipine mi giriyor,
-        #     yoksa başka bir ücret tipine mi -- bu henüz canlı ekranda TEK TEK
-        #     teyit edilmedi, sadece UĞRAMA için teyitli.
+        #     KATEGORİSİ (SAKARYA, KURUYÜK, ŞARKÜTERİ gibi). Bu yüzden bu join
+        #     tamamen kaldırıldı.
+        #   - "Ücret Tipi" [DOĞRULANMIŞ]: INVD_BRANCH_EXPENSE.OPERATION_PRICE_TYPE
+        #     sayısal kolonundan geliyor (join: INVD_BRANCH_EXPENSE.EXPENSE_ID =
+        #     INVD_EXPENSE.EXPENSE_ID). Bkz. yukarıdaki UCRET_TIPI_ENUM_ESLEME
+        #     yorumu -- iki bağımsız kayıtla (NAVLUN->1, UĞRAMA->5) teyitli.
         sql_satis_satirlari = """
             SELECT
                 HK.EXPENSE_CODE AS OPERATION_CODE,
                 OPDET.AMT AS SATIS_FIYATI,
                 INV.DOC_NO AS FATURA_NO,
-                TO_CHAR(INV.DOC_DATE, 'DD.MM.YYYY') AS FATURA_TARIHI
+                TO_CHAR(INV.DOC_DATE, 'DD.MM.YYYY') AS FATURA_TARIHI,
+                BE.OPERATION_PRICE_TYPE AS OPERATION_PRICE_TYPE
             FROM LMST_L_GOODS_OP_DET OPDET
             LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
             LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = OPDET.OPERATION_ID
             LEFT JOIN PSMT_INVOICE_M INV ON INV.INVOICE_M_ID = OPDET.INVOICE_M_ID
+            LEFT JOIN (
+                SELECT EXPENSE_ID, MIN(OPERATION_PRICE_TYPE) AS OPERATION_PRICE_TYPE
+                FROM INVD_BRANCH_EXPENSE
+                WHERE ISPASSIVE = 0
+                GROUP BY EXPENSE_ID
+            ) BE ON BE.EXPENSE_ID = HK.EXPENSE_ID
 
             WHERE YK.REFERENCE_NO = :yuk_no
               AND OPDET.PURCHASE_SALES_TYPE IN (2,4)
@@ -111,20 +116,24 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
             op_metni_ham = veri.get("OPERATION_CODE")
             op_metni = str(op_metni_ham).strip() if op_metni_ham and str(op_metni_ham).strip() else "NAVLUN"
 
-            # Bkz. yukarıdaki NOT: Ücret Tipi Oracle'da bulunamıyor, sadece
-            # canlı testte teyit edilen kodlar için sözlükten okunuyor.
-            tip_metni = OPERASYON_KODU_UCRET_TIPI_ESLEME.get(op_metni.strip().upper())
+            # Bkz. yukarıdaki NOT: Ücret Tipi artık gerçek bir Oracle enum
+            # kolonundan (INVD_BRANCH_EXPENSE.OPERATION_PRICE_TYPE) okunuyor.
+            enum_kodu = veri.get("OPERATION_PRICE_TYPE")
+            tip_metni = UCRET_TIPI_ENUM_ESLEME.get(enum_kodu) if enum_kodu is not None else None
             if tip_metni is None:
                 raise ValueError(
-                    f"[{kaynak_yuk_no}] HATA: '{op_metni}' operasyon kodu için Ücret Tipi bilinmiyor "
-                    f"(şu an sadece NAVLUN ve UĞRAMA için biliniyor). ERP'de bu satırın Ücret Tipi "
-                    f"alanının ne olduğunu kontrol edip oracle_okuyucu.py'deki "
-                    f"OPERASYON_KODU_UCRET_TIPI_ESLEME sözlüğüne '{op_metni.strip().upper()}': '<Ücret Tipi>' "
-                    f"şeklinde ekleyin (yanlış tahmin ile ERP'ye hatalı veri girmemek için otomasyon burada durduruldu)."
+                    f"[{kaynak_yuk_no}] HATA: '{op_metni}' operasyon kodu (EXPENSE_CODE) için "
+                    f"INVD_BRANCH_EXPENSE.OPERATION_PRICE_TYPE bulunamadı ya da bilinmeyen bir "
+                    f"sayısal değer döndü (ham değer: {enum_kodu!r}, bilinen değerler: "
+                    f"{UCRET_TIPI_ENUM_ESLEME}). ERP'de bu satırın Ücret Tipi alanını gözle kontrol "
+                    f"edip gerekirse oracle_okuyucu.py'deki UCRET_TIPI_ENUM_ESLEME sözlüğüne yeni "
+                    f"sayı->metin eşlemesini ekleyin (yanlış tahmin ile ERP'ye hatalı veri girmemek "
+                    f"için otomasyon burada durduruldu)."
                 )
 
             print(f"[Bilgi] Satış satırı: OPERASYON_KODU='{op_metni}' (ham Oracle değeri: {op_metni_ham!r}), "
-                  f"eşlenen UCRET_TIPI='{tip_metni}', AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
+                  f"OPERATION_PRICE_TYPE={enum_kodu!r} -> UCRET_TIPI='{tip_metni}', AMT='{ham_fiyat}', "
+                  f"FATURA_NO='{veri.get('FATURA_NO')}'")
 
             satis_satirlari.append({
                 "OPERASYON_KODU": op_metni,

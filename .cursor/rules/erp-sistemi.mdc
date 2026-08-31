@@ -312,29 +312,55 @@ tesadüfen doğru çıktı -- ama GENSET, MESAİ, BEKLEME gibi başka operasyon
 kodlarının gerçek Ücret Tipi "Hizmet", "Yakit", "Avans" ya da "Diğer" OLABİLİR,
 bu durumda kod yine yanlış değer yazmaya çalışıp aynı sınıf hataya düşer.
 
-**✅ SONUÇ: "Ücret Tipi" Oracle'da HİÇ SAKLANMIYOR [DOĞRULANMIŞ, kapsamlı
-keşifle kanıtlandı]**: `ucret_tipi_kesif.py` çalıştırıldı. Bulgular:
-- `INVD_EXPENSE`'deki NAVLUN (id=732) ve UĞRAMA (id=745) kayıtlarının TÜM
- kategori kolonları (`CATEGORIES1_ID`...`CATEGORIES10_ID`) sıfır,
- `EXPENSE_TYPE` ikisinde de aynı (1) -- Ücret Tipi'ni ayırt edecek HİÇBİR
- alan yok.
-- Şema genelinde ("Ek_Navlun", "Hizmet", "Avans", "Yakit" metinleri, tüm
- metin kolonlarında) arandığında TEK bulunan yer `DBA_TRACK_DETAIL.DETAIL`
- -- bu bir DENETİM/DEĞİŞİKLİK GÜNLÜĞÜ tablosu (kullanıcı bir alanı
- değiştirdiğinde otomatik oluşan iz kaydı), GERÇEK bir sözlük/lookup
- tablosu DEĞİL.
+**❌ ÇÜRÜTÜLDÜ (kısmen) — "Ücret Tipi Oracle'da hiç saklanmıyor" ilk sonucu
+YANLIŞTI, doğru tablo aranmamıştı**: İlk `ucret_tipi_kesif.py` turu
+`INVD_EXPENSE`'in kendi kolonlarına baktı (hiçbiri ayırt edici değildi) ve
+metin araması yaptı (sadece denetim günlüğü `DBA_TRACK_DETAIL` bulundu).
+Ama asıl kaynak `INVD_EXPENSE`'in DIŞINDA, ayrı bir tabloda çıktı.
 
-**Sonuç**: "Ücret Tipi" muhtemelen ERP'nin kendi UYGULAMA KODUNA gömülü
-sabit bir kural/eşleme -- Oracle'dan sorgulanamıyor. Bu yüzden
-`oracle_okuyucu.py`'de `OPERASYON_KODU_UCRET_TIPI_ESLEME` adında bir Python
-sözlüğü tutuluyor, SADECE canlı testte teyit edilen eşlemeler içeriyor:
-`{"NAVLUN": "NAVLUN", "UĞRAMA": "Ek_Navlun"}`. **Bilinmeyen bir Operasyon
-Kodu (GENSET, MESAİ, BEKLEME, YAKIT vb.) geldiğinde kod artık KÖR TAHMİN
-YAPMIYOR** -- net bir `ValueError` fırlatıp kullanıcıdan ERP'de o satırın
-gerçek Ücret Tipi'ni kontrol edip bu sözlüğe eklemesini istiyor. Yeni bir
-operasyon kodu ile karşılaşıldığında: kullanıcıdan ERP ekranında o satırın
-Ücret Tipi'nin ne olduğu sorulmalı, sonra `OPERASYON_KODU_UCRET_TIPI_ESLEME`
-sözlüğüne eklenmeli.
+**✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, İKİ bağımsız veri noktasıyla
+teyitli, kullanıcının genişletilmiş `ucret_tipi_kesif.py` çıktısıyla]**:
+"Ücret Tipi" gerçekte **`INVD_BRANCH_EXPENSE.OPERATION_PRICE_TYPE`**
+(sayısal) kolonundan geliyor, join: `INVD_BRANCH_EXPENSE.EXPENSE_ID =
+INVD_EXPENSE.EXPENSE_ID` (bu tablo raporun orijinal SQL'inde JOIN
+ediliyordu ama hiç SELECT edilmiyordu -- asıl ipucu buradaydı). Canlı
+veride görülen değerler:
+- NAVLUN (EXPENSE_ID=732) -> `OPERATION_PRICE_TYPE = 1`
+- UĞRAMA (EXPENSE_ID=745) -> `OPERATION_PRICE_TYPE = 5`
+
+ERP ekranındaki "Ücret Tipi" dropdown sırası (Navlun, Hizmet, Diğer, Avans,
+Ek_Navlun, Yakit) 1'den başlayarak numaralandırılırsa **her iki bilinen
+değer de birebir eşleşiyor** (1=Navlun, 5=Ek_Navlun) -- rastlantı olma
+ihtimali yok denecek kadar düşük. Tam eşleme tablosu (`oracle_okuyucu.py`
+-> `UCRET_TIPI_ENUM_ESLEME`):
+
+| OPERATION_PRICE_TYPE | Ücret Tipi |
+|---|---|
+| 1 | Navlun |
+| 2 | Hizmet |
+| 3 | Diğer |
+| 4 | Avans |
+| 5 | Ek_Navlun |
+| 6 | Yakit |
+
+`oracle_okuyucu.py`'deki `kaynak_yuk_verilerini_getir()` SQL'i artık
+`INVD_BRANCH_EXPENSE`'i (ISPASSIVE=0 filtresiyle, `MIN(OPERATION_PRICE_TYPE)`
+ile tek değere indirgeyerek, fan-out'u önlemek için alt sorgu kullanarak)
+JOIN edip bu sayısal kodu okuyor ve `UCRET_TIPI_ENUM_ESLEME` ile metne
+çeviriyor. Artık elle bakılan bir Python sözlüğüne (eski
+`OPERASYON_KODU_UCRET_TIPI_ESLEME`, kaldırıldı) ihtiyaç yok -- GENSET,
+MESAİ, BEKLEME gibi HENÜZ canlı ekranda görülmemiş operasyon kodları da
+otomatik ve doğru şekilde çalışmalı. Bilinmeyen/NULL bir
+`OPERATION_PRICE_TYPE` değeri gelirse (örn. 1-6 dışında bir sayı ya da
+JOIN hiç eşleşme bulamazsa) kod yine KÖR TAHMİN YAPMAZ, net bir `ValueError`
+ile durur.
+
+**[VARSAYIM/TODO]**: `INVD_BRANCH_EXPENSE` çoklu şube (`BRANCH_ID`) desteği
+içeriyor; şimdiye kadar görülen tüm kayıtlarda `BRANCH_ID=6364`/`CO_ID=2371`
+sabit, yani İzlog'un tek bir şube/ücret tipi tanımı olduğu varsayılıyor.
+Eğer ileride bir Yük için yanlış Ücret Tipi yazıldığı görülürse, SQL'deki
+JOIN'e ayrıca Yük'ün kendi `BRANCH_ID`'siyle eşleşme şartı eklenmesi
+gerekebilir -- bu henüz canlı testte ihtiyaç olarak ortaya çıkmadı.
 
 **❌ ÇÜRÜTÜLDÜ — "ERP faturalı Kaydet sonrası yavaş" teorisi de yanlış
 çıktı [kullanıcı canlı testte teyit etti]**: Kullanıcı, Navlun satırını
@@ -456,9 +482,15 @@ otomatik çalışır). DSN: `172.17.8.11:1521/UYUMSOFT`, kullanıcı: `uyumsoft`
   yük için TEK bir değer) kargo/yük kategorisi sözlüğü (örn. `SAKARYA`,
   `KURUYÜK`, `ŞARKÜTERİ`), join `LMST_L_GOODS.GOODS_PRICE_TYPE_ID` üzerinden
   (OP_DET üzerinden DEĞİL). Otomasyonun ihtiyacı olan bir alan değil, artık
-  hiç sorgulanmıyor. "Ücret Tipi" (Navlun/Ek_Navlun) Oracle'dan çekilmiyor;
-  Operasyon Kodu NAVLUN ise "NAVLUN", değilse sabit "Ek_Navlun" olarak
-  Python'da türetiliyor (`oracle_okuyucu.py`) -- bkz. yukarıdaki [VARSAYIM/TODO] notu.
+  hiç sorgulanmıyor.
+- `INVD_BRANCH_EXPENSE` — **"Ücret Tipi"nin gerçek kaynağı** [DOĞRULANMIŞ,
+  iki bağımsız veri noktasıyla teyitli, bkz. yukarıdaki ayrıntılı not].
+  Kolon: `OPERATION_PRICE_TYPE` (sayısal enum, 1=Navlun, 2=Hizmet, 3=Diğer,
+  4=Avans, 5=Ek_Navlun, 6=Yakit — `oracle_okuyucu.py` ->
+  `UCRET_TIPI_ENUM_ESLEME`). Join: `INVD_BRANCH_EXPENSE.EXPENSE_ID =
+  INVD_EXPENSE.EXPENSE_ID`, sorguda `ISPASSIVE=0` filtresiyle ve
+  `MIN(OPERATION_PRICE_TYPE)` ile tek değere indirgenerek (çoklu şube
+  fan-out'unu önlemek için) kullanılıyor.
 - `PSMT_INVOICE_M` — Fatura ana tablosu. `INVOICE_M_ID`, `DOC_NO` (Fatura no),
   `DOC_DATE` (Fatura tarihi). `LMST_L_GOODS_OP_DET.INVOICE_M_ID` üzerinden
   doğrudan bağlanıyor (ayrı bir detay tablosuna gerek yok).
@@ -612,16 +644,15 @@ bu, aşağıdaki eşlemeleri kesin olarak doğruladı:
  üzerinden DEĞİL). Bizim önceki "ŞARKÜTERİ" hatamız tam olarak bu yanlış
  join'den kaynaklanıyordu. Bu alan `oracle_okuyucu.py`'de artık hiç
  sorgulanmıyor (otomasyonun ihtiyacı olan bir alan değil).
-- **Ücret Tipi (Navlun / Ek_Navlun)**: Raporda bu alan için ayrı bir Oracle
- kolonu/tablosu görünmedi. **[VARSAYIM/TODO, kısmen doğrulanmış]**:
- Operasyon Kodu NAVLUN ise Ücret Tipi de "NAVLUN"; NAVLUN dışı bir
- operasyon kodu (örn. UĞRAMA) olduğunda Ücret Tipi kullanıcı ekranında
- "Ek_Navlun" olarak GÖRÜLDÜ (canlı ekran görüntüsüyle teyit edildi) --
- kod artık bunu Oracle'dan çekmek yerine bu basit kurala göre TÜRETİYOR.
- GENSET/MESAİ/BEKLEME gibi diğer operasyon kodlarının da gerçekten
- "Ek_Navlun" ücret tipine mi girdiği ise henüz TEK TEK ekranda teyit
- edilmedi -- eğer ERP'de farklı bir Ücret Tipi gösterirse kullanıcıdan
- bilgi alınıp burası güncellenmeli.
+- **✅ Ücret Tipi — ARTIK KESİN [DOĞRULANMIŞ]**: `INVD_BRANCH_EXPENSE.
+ OPERATION_PRICE_TYPE` (sayısal enum) kolonundan geliyor, join:
+ `INVD_BRANCH_EXPENSE.EXPENSE_ID = INVD_EXPENSE.EXPENSE_ID`. Bkz. yukarıdaki
+ "Ücret Tipi KAYNAĞI KESİN OLARAK BULUNDU" bölümü ve `UCRET_TIPI_ENUM_ESLEME`
+ sözlüğü. Eski "NAVLUN değilse sabit Ek_Navlun" türetme kuralı KALDIRILDI --
+ artık GENSET/MESAİ/BEKLEME gibi HENÜZ ekranda tek tek görülmemiş operasyon
+ kodları da bu gerçek Oracle sorgusu sayesinde otomatik ve doğru şekilde
+ çalışmalı (bilinmeyen bir enum değeri gelirse kod yine kör tahmin yapmaz,
+ net bir hata ile durur).
 
 `oracle_okuyucu.py`'deki dinamik kolon keşfi (`oto_kolon_kesfi`,
 `oto_kolon_listesi_kesfi` ve COALESCE tabanlı yaklaşımlar) tamamen
