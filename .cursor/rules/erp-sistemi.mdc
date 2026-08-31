@@ -271,22 +271,36 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 
-**⚠️ TEŞHİS — "Kopya" butonu kaynak Yük'ün mevcut fiyat satırlarını da
-kopyalıyor olabilir [VARSAYIM/TODO, henüz canlı ekranla kesin teyit
-edilmedi]**: `#btnCopy_CD` ile açılan yeni pencerede, satış satırı
-döngüsü (`_EmptyRow_btnNew` ile yeni satır ekleme) başlamadan HEMEN ÖNCE,
-grid'de (`#TabControl_grd_LGoodsOpDetailCollection_DXMainTable`) zaten
-"Düzelt" metni (mevcut bir satırın düzenle linki) görünüp görünmediği
-kontrol ediliyor. Eğer görünüyorsa, "Kopya" butonunun kaynak Yük'ün
-zaten kayıtlı fiyat satırlarını da beraberinde kopyalamış olma ihtimali
-var -- bu hem "aynı fatura ikinci kez bağlanmaya çalışılınca ERP'nin
-takılması" semptomuyla örtüşüyor hem de GERÇEK (`DRY_RUN=False`)
-çalıştırmalarda MÜKERRER KAYIT riski taşıyor. Kod şu an bu durumu sadece
-NET bir konsol uyarısı + `debug_KOPYADA_MEVCUT_SATIR_UYARISI_{yuk_no}.png`
-ekran görüntüsü ile logluyor, akışı DURDURMUYOR. Bir sonraki canlı testte
-bu uyarı çıkarsa hipotez doğrulanmış sayılmalı ve kullanıcıya sorulup
-(a) kopyalanan mevcut satırların silinip silinmeyeceği ya da (b) döngünün
-atlanıp atlanmayacağı netleştirilmeli.
+**❌ ÇÜRÜTÜLDÜ — "Kopya" butonu kaynak Yük'ün mevcut fiyat satırlarını da
+kopyalıyor teorisi [kullanıcı canlı testte YANLIŞ olduğunu teyit etti]**:
+`#btnCopy_CD` ile açılan yeni pencerede, satış satırı döngüsü başlamadan
+önce grid'de zaten "Düzelt" metni görünüp görünmediğini kontrol eden bir
+teşhis eklenmişti (aşağıda hâlâ duruyor, zararsız/pasif). Kullanıcı canlı
+testte NET olarak teyit etti: fiyat satırını ve fatura bağlantısını
+GERÇEKTEN otomasyonun kendisi oluşturuyor, "Kopya" kaynaktan mevcut satır
+getirmiyor. Yani bu teori kök neden DEĞİL.
+
+**✅ GÜNCEL DURUM — Asıl sorun satıra özgü değil, "faturalı Kaydet sonrası
+grid'in yeni satır ekle durumuna dönüş süresi" [DOĞRULANMIŞ, kullanıcı
+canlı testte teyit etti]**: Veri işlemleri (satır oluşturma + fatura
+bağlama) BAŞARIYLA çalışıyor. Sorun sadece: satır bazlı Kaydet'e
+basıldıktan SONRA grid'in `_EmptyRow_btnNew` butonunu tekrar görünür hale
+getirmesi bazen 30 saniyeden UZUN sürüyor (veya hiç dönmüyor). Bu artık
+sadece 2. satırda değil, 1. satırda (NAVLUN, önceden hep sorunsuzdu) da
+gözlemlendi -- yani belirli bir satıra/operasyon koduna özgü değil, GENEL
+bir "faturalı Kaydet sonrası ERP'nin arka plan işlem süresi" meselesi
+olabilir. İlk ucuz deney olarak bekleme süresi 30sn'den **90sn'ye**
+çıkarıldı (`izlog_yuk_otomasyon.py`, `_emptyrow_bekle_teshisli` çağrısı,
+`asama="faturalı Kaydet"`). Bir sonraki canlı test bunun yeterli olup
+olmadığını gösterecek; yetmezse `_emptyrow_bekle_teshisli`'nin popup
+tespiti ve satıra özel teşhis ekran görüntüsü (`debug_EMPTYROW_TIMEOUT_
+satir{N}_*.png`) bir sonraki ipucu olacak.
+
+Eski (artık çürütülmüş ama zararsız/pasif) teşhis: `#btnCopy_CD` ile açılan
+pencerede döngü başlamadan önce grid'de (`#TabControl_grd_
+LGoodsOpDetailCollection_DXMainTable`) "Düzelt" metni var mı diye bakan
+kontrol hâlâ kodda duruyor (`debug_KOPYADA_MEVCUT_SATIR_UYARISI_{yuk_no}.png`)
+ama artık normal koşullarda hiç tetiklenmemesi bekleniyor.
 
 ### Sevk/Nakliye grid'i — Sevk formu
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)

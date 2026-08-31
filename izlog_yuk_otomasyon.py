@@ -624,23 +624,32 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             except Exception:
                 pass
 
-            # NOT: Faturali satirin Kaydet'i, faturasiz satira gore daha agir bir
-            # ERP tarafi dogrulama/postback tetikleyebiliyor (canli testte 1.
-            # satirda calisti ama suresi belirsiz). Bu yuzden bekleme suresi
-            # faturasiz satirdakinden (15sn) daha yuksek tutuluyor (30sn).
+            # ⚠️ GÜNCEL BULGU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
+            # "Kopya"nın kaynak Yük'ün mevcut fiyat satırlarını da kopyaladığı
+            # teorisi YANLIŞ çıktı -- kullanıcı, satırın (fatura dahil) GERÇEKTEN
+            # otomasyon tarafından oluşturulup başarıyla kaydedildiğini teyit
+            # etti. Yani veri işlemleri (satır oluşturma + fatura bağlama)
+            # ÇALIŞIYOR; tek sorun, Kaydet SONRASI grid'in "yeni satır ekle"
+            # durumuna dönmesinin bazen 30 saniyeden UZUN sürmesi (veya hiç
+            # dönmemesi). Bu artık sadece 2. satırda değil, 1. satırda da
+            # (NAVLUN, önceden hep sorunsuzdu) gözlemlendi -- yani sorun belirli
+            # bir satıra/operasyon koduna özgü değil, GENEL olarak "faturalı bir
+            # satırın Kaydet'i sonrası ERP'nin arka plan işleminin ne kadar
+            # süreceği" ile ilgili olabilir. Bu yüzden ilk basit ve ucuz deney
+            # olarak bekleme süresi 30sn'den 90sn'ye çıkarıldı -- eğer sorun
+            # sadece "ERP'nin normalden yavaş olması" ise bu tek başına yeterli
+            # olabilir. Yetmezse, `_emptyrow_bekle_teshisli` içindeki popup
+            # tespiti ve satıra özel ekran görüntüsü bir sonraki ipucunu verecek.
             #
-            # ✅ YENİ TEŞHİS KATMANI [bkz. `_emptyrow_bekle_teshisli`]: Bu
-            # bekleme daha önce SESSİZCE (generic "Timeout 30000ms exceeded")
-            # patlıyordu -- hangi satırda (1. mi 2. mi) ve ekranda o an GÖRÜNÜR
-            # bir popup/uyarı olup olmadığı hiç bilinmiyordu. Artık timeout
-            # olursa: (1) satır indeksi + operasyon kodu hata mesajına ekleniyor,
+            # ✅ TEŞHİS KATMANI [bkz. `_emptyrow_bekle_teshisli`]: Timeout olursa
+            # artık: (1) satır indeksi + operasyon kodu hata mesajına ekleniyor,
             # (2) ekranda görünür bilinen bir DevExpress popup/mesaj kutusu
             # deseni varsa metni okunup hataya ekleniyor, (3) ayrı, satıra özel
             # bir teşhis ekran görüntüsü alınıyor -- HİÇBİRİ tıklama/etkileşim
             # yapmıyor, sadece OKUYOR (akışı değiştirmiyor).
             _emptyrow_bekle_teshisli(
                 aktif_sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi,
-                timeout=30000, asama="faturalı Kaydet"
+                timeout=90000, asama="faturalı Kaydet"
             )
 
         if derin_test:
