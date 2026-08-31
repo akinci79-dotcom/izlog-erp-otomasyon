@@ -9,6 +9,14 @@ from playwright.sync_api import sync_playwright
 import ayarlar
 from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritabaninda_guncelle
 
+# NOT: Aktif geliştirme/hata ayıklama sırasında HER başarılı satırda ek
+# "sağlama" ekran görüntüsü almak faydalıydı, ama normal çalışmada klasörü
+# hızla debug_*.png dosyalarıyla dolduruyor (bkz. ayarlar.example.py'deki
+# TESHIS_EKRAN_GORUNTUSU_AL notu). Varsayılan olarak KAPALI -- sadece gerçek
+# bir hata/istisna oluştuğunda alınan ekran görüntüleri (bunlar zaten nadir
+# ve teşhis için gereklidir) bu bayraktan ETKİLENMİYOR, her zaman alınıyor.
+TESHIS_EKRAN_GORUNTUSU_AL = bool(getattr(ayarlar, "TESHIS_EKRAN_GORUNTUSU_AL", False))
+
 # --- YARDIMCI FONKSİYONLAR ---
 def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     """
@@ -329,10 +337,11 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                   f"ikinci kez bağlamaya çalışmasına ve/veya GERÇEK çalıştırmalarda mükerrer kayda yol "
                   f"açabilir. Lütfen kaynak Yük'ü (kopya değil, orijinali) ERP'de açıp 'Yurtiçi Yük "
                   f"Tanımı' sekmesinde zaten kayıtlı fiyat satırı olup olmadığını kontrol edin.")
-            try:
-                aktif_sayfa.screenshot(path=f"debug_KOPYADA_MEVCUT_SATIR_UYARISI_{kaynak_yuk_no}.png")
-            except Exception:
-                pass
+            if TESHIS_EKRAN_GORUNTUSU_AL:
+                try:
+                    aktif_sayfa.screenshot(path=f"debug_KOPYADA_MEVCUT_SATIR_UYARISI_{kaynak_yuk_no}.png")
+                except Exception:
+                    pass
 
         # NOT: Satır bazlı "Kaydet" (a[id*='editnew']) güvenlidir -- bilinen ERP
         # kilitleme hatası, sadece ANA KAYDET (#btnSave_CD) İLE KAYDEDİLMİŞ bir
@@ -467,10 +476,14 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # ekran görüntüsü al -- bir sonraki adımda (Tutar/Fatura)
                 # bir şey ters giderse, bu alanların o anda GERÇEKTEN doğru
                 # göründüğünü (veya görünmediğini) teyit edebilmek için.
-                try:
-                    aktif_sayfa.screenshot(path=f"debug_ucrettipi_operasyonkodu_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
-                except Exception:
-                    pass
+                # Sadece TESHIS_EKRAN_GORUNTUSU_AL=True iken alınır (bkz.
+                # dosya başındaki NOT) -- normal çalışmada gereksiz yere
+                # klasörü doldurmaması için.
+                if TESHIS_EKRAN_GORUNTUSU_AL:
+                    try:
+                        aktif_sayfa.screenshot(path=f"debug_ucrettipi_operasyonkodu_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
+                    except Exception:
+                        pass
 
             # Güvenli Decimal Çevirimi
             ham_fiyat = satis.get('SATIS_FIYATI')
@@ -508,11 +521,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             # TEŞHİS: Tutar yazıldıktan hemen sonra ekran görüntüsü al -- değerin
             # sonradan (fatura bağlama veya Kaydet sırasında) sıfırlanıp
-            # sıfırlanmadığını görmek için.
-            try:
-                aktif_sayfa.screenshot(path=f"debug_tutar_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
-            except Exception:
-                pass
+            # sıfırlanmadığını görmek için. Sadece TESHIS_EKRAN_GORUNTUSU_AL=True
+            # iken alınır.
+            if TESHIS_EKRAN_GORUNTUSU_AL:
+                try:
+                    aktif_sayfa.screenshot(path=f"debug_tutar_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
+                except Exception:
+                    pass
 
             # Ağ trafiğinin dinlenmesi (Sabit 3000ms yerine) - timeout olursa yedek beklemeye düşer
             _agsakinligini_bekle(aktif_sayfa, timeout=10000, yedek_bekleme=1500)
@@ -522,10 +537,12 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 aktif_sayfa.locator("a[id*='editnew']:has-text('Kaydet')").first.click(force=True)
                 aktif_sayfa.wait_for_timeout(500)
                 # TEŞHİS: Faturasız satırda Kaydet sonrası ekran görüntüsü.
-                try:
-                    aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_faturasiz_{satir_etiketi}_{kaynak_yuk_no}.png")
-                except Exception:
-                    pass
+                # Sadece TESHIS_EKRAN_GORUNTUSU_AL=True iken alınır.
+                if TESHIS_EKRAN_GORUNTUSU_AL:
+                    try:
+                        aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_faturasiz_{satir_etiketi}_{kaynak_yuk_no}.png")
+                    except Exception:
+                        pass
                 _emptyrow_bekle_teshisli(
                     aktif_sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi,
                     timeout=15000, asama="faturasız Kaydet"
@@ -667,10 +684,12 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             aktif_sayfa.wait_for_timeout(1500)
 
             # TEŞHİS: Satır Kaydet'e basıldıktan hemen sonra ekran görüntüsü al.
-            try:
-                aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
-            except Exception:
-                pass
+            # Sadece TESHIS_EKRAN_GORUNTUSU_AL=True iken alınır.
+            if TESHIS_EKRAN_GORUNTUSU_AL:
+                try:
+                    aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
+                except Exception:
+                    pass
 
             # ❌ KALDIRILDI [kendi hatam, DOĞRULANMIŞ]: Burada daha önce
             # grid metninde "Vazgeç" kelimesi kalıp kalmadığını kontrol edip

@@ -41,3 +41,13 @@ ERP_YUK_LISTESI_URL = "https://erp.izlog.com.tr/MainList.aspx?CommandName=LGoods
 
 # Veritabanı İz Temizliğinde Kullanılacak Hedef Kullanıcı ID
 HEDEF_KULLANICI_ID = 11310
+
+# 4. TEŞHİS (DEBUG) EKRAN GÖRÜNTÜLERİ
+# False (varsayılan): SADECE gerçek bir hata/istisna oluştuğunda ekran
+# görüntüsü alınır (bunlar zaten nadirdir ve teşhis için gereklidir).
+# True: Her BAŞARILI satırda da (Ücret Tipi/Operasyon Kodu/Tutar yazıldıktan
+# ve Kaydet'e basıldıktan sonra) ek "sağlama" ekran görüntüleri alınır --
+# bu, aktif geliştirme/hata ayıklama sırasında faydalıydı ama normal
+# çalışmada klasörü hızla debug_*.png dosyalarıyla dolduruyor. Yeni bir
+# hata türü araştırılırken geçici olarak True yapılabilir.
+TESHIS_EKRAN_GORUNTUSU_AL = False
