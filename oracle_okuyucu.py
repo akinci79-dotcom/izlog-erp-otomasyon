@@ -7,88 +7,6 @@ import ayarlar
 # ==========================================
 oracledb.init_oracle_client(lib_dir=r"C:\instantclient\instantclient_19_32")
 
-def oto_kolon_kesfi(cursor, tablo_adi):
-    """
-    Sistemin hata vermesini engellemek için, Uyumsoft sözlük tablolarındaki
-    metin/açıklama kolonunun adını tahmin etmeden Oracle'dan dinamik olarak okur.
-
-    NOT: Bu fonksiyon TEK bir kolon adı döndürür (geriye dönük uyumluluk için
-    tutuluyor). Canlı testte, tek kolona güvenmenin riskli olduğu görüldü:
-    örn. "DESCRIPTION" kolonu bazı standart dışı operasyon kodlarında
-    ("UĞRAMA" gibi) NULL/boş kalabiliyor, oysa aynı tablodaki "OPERATION_CODE"
-    kolonu dolu olabiliyor. Bu yüzden asıl veri çekme sorgusunda artık
-    `oto_kolon_listesi_kesfi()` kullanılıyor (aşağıda) -- birden fazla aday
-    kolonu SQL'de COALESCE ile birleştirip "hangisi doluysa onu kullan"
-    mantığı kuruyor.
-    """
-    cursor.execute(f"SELECT * FROM {tablo_adi} WHERE 1=0")
-    kolonlar = [col[0].upper() for col in cursor.description]
-
-    if 'DESCRIPTION' in kolonlar: return 'DESCRIPTION'
-    if 'OPERATION_CODE' in kolonlar: return 'OPERATION_CODE'
-    if 'GOODS_PRICE_TYPE_CODE' in kolonlar: return 'GOODS_PRICE_TYPE_CODE'
-
-    for k in kolonlar:
-        if 'CODE' in k or 'DESC' in k or 'NAME' in k or 'AD' in k:
-            return k
-    return kolonlar[1]
-
-
-def oto_kolon_listesi_kesfi(cursor, tablo_adi):
-    """
-    `oto_kolon_kesfi()`'nin tek kolon yerine, en olası "okunabilir kod/açıklama"
-    kolonlarının TAMAMINI öncelik sırasına göre bir liste olarak döndüren hali.
-
-    NEDEN BÖYLE: Canlı testte, kaynak yükün fiyat satırında Operasyon Kodu
-    "UĞRAMA" olmasına rağmen otomasyon bunu hiç göremedi ve varsayılan
-    "NAVLUN" değerine düştü. Kök neden: tek kolona (örn. "DESCRIPTION")
-    güvenmek -- bu kolon "UĞRAMA" gibi standart dışı kodlarda NULL/boş
-    kalabiliyor, oysa aynı tablodaki başka bir kolon (örn. "OPERATION_CODE")
-    her zaman dolu olabiliyor. Çağıran taraf bu listeyi SQL'de COALESCE ile
-    birleştirerek hangi kolon doluysa onu kullanabiliyor.
-    """
-    cursor.execute(f"SELECT * FROM {tablo_adi} WHERE 1=0")
-    kolonlar = [col[0].upper() for col in cursor.description]
-
-    oncelik_sirasi = []
-    for aday in ("DESCRIPTION", "OPERATION_CODE", "GOODS_PRICE_TYPE_CODE"):
-        if aday in kolonlar and aday not in oncelik_sirasi:
-            oncelik_sirasi.append(aday)
-
-    for k in kolonlar:
-        if ('CODE' in k or 'DESC' in k or 'NAME' in k or 'AD' in k) and k not in oncelik_sirasi:
-            oncelik_sirasi.append(k)
-
-    if not oncelik_sirasi:
-        oncelik_sirasi = [kolonlar[1]]
-
-    return oncelik_sirasi
-
-
-def _aday_kolon_sql_listesi(tablo_alias, kolon_listesi, alias_onek):
-    """
-    Her aday kolonu KENDİ SQL takma adıyla (örn. "OP_ADAY_0", "OP_ADAY_1")
-    ayrı ayrı SELECT eden bir SQL parça listesi üretir.
-
-    NEDEN BÖYLE: Daha önce bu birleştirme SQL içinde COALESCE ile
-    yapılıyordu, ama Oracle'da COALESCE() en az 2 parametre istiyor --
-    kolon listesi tek elemanlıysa "ORA-00939: too few arguments" hatası
-    veriyordu. SQL sözdizimiyle uğraşmak yerine, her aday kolonu OLDUĞU
-    GİBİ (ham) SELECT edip "hangisi doluysa onu kullan" seçimini Python
-    tarafında yapmak çok daha güvenli ve hata ayıklaması kolay -- SQL
-    sözdizimi hatası riski tamamen ortadan kalkıyor.
-    """
-    return [f"{tablo_alias}.{kolon} AS {alias_onek}_{i}" for i, kolon in enumerate(kolon_listesi)]
-
-
-def _ilk_dolu_deger(veri, alias_onek, adet):
-    """Bir satır sözlüğünde, alias_onek_0, alias_onek_1, ... adaylarından ilk boş olmayanı döndürür."""
-    for i in range(adet):
-        deger = veri.get(f"{alias_onek}_{i}")
-        if deger is not None and str(deger).strip():
-            return str(deger).strip()
-    return None
-
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
     KULLANICI = ayarlar.DB_KULLANICI
     SIFRE = ayarlar.DB_SIFRE
@@ -116,36 +34,42 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
 
         yuk_tarihi, proje_kodu = ana_kayit
 
-        # --- 2. AŞAMA: Dinamik Yapay Zeka (Sözlük Kolonlarını Bulma) ---
-        # NOT: Artık TEK bir kolon tahmin edilmiyor VE SQL içinde birleştirme
-        # (COALESCE) YAPILMIYOR -- her aday kolon KENDİ SQL takma adıyla ham
-        # olarak çekiliyor, "hangisi doluysa onu kullan" seçimi Python
-        # tarafında yapılıyor (bkz. _ilk_dolu_deger()). Bu, Oracle SQL
-        # sözdizimi hatalarına (örn. COALESCE'in en az 2 parametre istemesi)
-        # karşı tamamen bağışık, çünkü hiçbir birleştirme fonksiyonu
-        # kullanılmıyor.
-        op_kolonlari = oto_kolon_listesi_kesfi(cursor, "LMSD_L_OP_DEFINITION")
-        price_kolonlari = oto_kolon_listesi_kesfi(cursor, "LMSD_L_GOODSPRICE_TYPE")
-        print(f"[Bilgi] Operasyon Kodu için denenecek kolonlar (öncelik sırasıyla): {op_kolonlari}")
-        print(f"[Bilgi] Ücret Tipi için denenecek kolonlar (öncelik sırasıyla): {price_kolonlari}")
-
-        op_secim_listesi = _aday_kolon_sql_listesi("OD", op_kolonlari, "OP_ADAY")
-        price_secim_listesi = _aday_kolon_sql_listesi("GT", price_kolonlari, "PRICE_ADAY")
-
-        # --- 3. AŞAMA: GERÇEK IT SQL'İ İLE FATURA BAĞLANTISI ---
-        sql_satis_satirlari = f"""
+        # --- 2. AŞAMA: FATURA BAĞLANTISI VE OPERASYON KODU (KESİNLEŞTİ) ---
+        # NOT: Önceki varsayımlar (LMSD_L_OP_DEFINITION / LMSD_L_GOODSPRICE_TYPE)
+        # kullanıcının paylaştığı GERÇEK, ÇALIŞAN bir Uyumsoft raporunun
+        # (LojistikYükSevkKalemRaporu) SQL'i ve Excel çıktısıyla KANITLANMIŞ
+        # şekilde YANLIŞ çıktı:
+        #   - "Operasyon Kodu" (NAVLUN, UĞRAMA, GENSET, MESAİ, BEKLEME) aslında
+        #     INVD_EXPENSE tablosundan geliyor: INVD_EXPENSE.EXPENSE_CODE,
+        #     join: INVD_EXPENSE.EXPENSE_ID = LMST_L_GOODS_OP_DET.OPERATION_ID.
+        #     Gerçek rapor verisinde bu değerler birebir eşleşti.
+        #   - LMSD_L_GOODSPRICE_TYPE (eski "Ücret Tipi" varsayımımız) aslında
+        #     "Ücret Tipi" DEĞİL -- YÜK'ün (tüm yükün, satır bazlı değil) KARGO
+        #     KATEGORİSİ (SAKARYA, KURUYÜK, ŞARKÜTERİ gibi). Raporda her
+        #     "UĞRAMA" satırı, kardeşi "NAVLUN" satırıyla AYNI bu değere sahipti
+        #     -- yük seviyesinde tek bir değer olduğunu doğruluyor, "Ücret Tipi"
+        #     ile hiç ilgisi yok. Bu yüzden bu join tamamen kaldırıldı.
+        #   - "Ücret Tipi" (Navlun / Ek_Navlun) için ayrı bir Oracle sözlük
+        #     tablosu/kolonu raporda hiç görünmedi. **[VARSAYIM/TODO]**: ERP
+        #     ekranında "Operasyon Kodu" = NAVLUN olan satırlarda "Ücret Tipi"
+        #     de "Navlun" gösteriyor; NAVLUN DIŞI bir operasyon kodu (örn.
+        #     UĞRAMA) olduğunda "Ücret Tipi" kullanıcı ekranında "Ek_Navlun"
+        #     olarak görüldü (canlı ekran görüntüsüyle teyit edildi). Bu yüzden
+        #     "Ücret Tipi" ayrı bir Oracle sorgusuyla ÇEKİLMİYOR, basitçe
+        #     Operasyon Kodu NAVLUN ise "NAVLUN", değilse sabit "Ek_Navlun"
+        #     olarak TÜRETİLİYOR. Farklı operasyon kodlarının (GENSET, MESAİ,
+        #     BEKLEME gibi) gerçekten hepsi "Ek_Navlun" ücret tipine mi giriyor,
+        #     yoksa başka bir ücret tipine mi -- bu henüz canlı ekranda TEK TEK
+        #     teyit edilmedi, sadece UĞRAMA için teyitli.
+        sql_satis_satirlari = """
             SELECT
-                {', '.join(op_secim_listesi)},
-                {', '.join(price_secim_listesi)},
+                HK.EXPENSE_CODE AS OPERATION_CODE,
                 OPDET.AMT AS SATIS_FIYATI,
                 INV.DOC_NO AS FATURA_NO,
                 TO_CHAR(INV.DOC_DATE, 'DD.MM.YYYY') AS FATURA_TARIHI
             FROM LMST_L_GOODS_OP_DET OPDET
             LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
-            LEFT JOIN LMSD_L_OP_DEFINITION OD ON OD.OPERATION_ID = OPDET.OPERATION_ID
-            LEFT JOIN LMSD_L_GOODSPRICE_TYPE GT ON GT.GOODS_PRICE_TYPE_ID = OPDET.OPERATION_PRICE_TYPE
-
-            -- GİZEM ÇÖZÜLDÜ: Fatura ID'si zaten OP_DET'in içindeymiş ve tablo PSMT_INVOICE_M imiş!
+            LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = OPDET.OPERATION_ID
             LEFT JOIN PSMT_INVOICE_M INV ON INV.INVOICE_M_ID = OPDET.INVOICE_M_ID
 
             WHERE YK.REFERENCE_NO = :yuk_no
@@ -161,20 +85,14 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
             ham_fiyat = veri.get("SATIS_FIYATI", 0)
             guvenli_fiyat = Decimal(str(ham_fiyat)) if ham_fiyat is not None else Decimal('0.00')
 
-            # TEŞHİS: Her aday kolonun HAM değerini konsola yaz -- "UĞRAMA"
-            # gibi kodların hangi kolonda görünüp hangisinde görünmediğini
-            # net görebilmek için.
-            op_adaylari_ham = [veri.get(f"OP_ADAY_{i}") for i in range(len(op_kolonlari))]
-            price_adaylari_ham = [veri.get(f"PRICE_ADAY_{i}") for i in range(len(price_kolonlari))]
-            print(f"[Bilgi] Ham satış satırı verisi: Operasyon Kodu adayları {list(zip(op_kolonlari, op_adaylari_ham))}, "
-                  f"Ücret Tipi adayları {list(zip(price_kolonlari, price_adaylari_ham))}, "
-                  f"AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
+            op_metni_ham = veri.get("OPERATION_CODE")
+            op_metni = str(op_metni_ham).strip() if op_metni_ham and str(op_metni_ham).strip() else "NAVLUN"
 
-            op_metni = _ilk_dolu_deger(veri, "OP_ADAY", len(op_kolonlari))
-            if not op_metni: op_metni = "NAVLUN"
+            # Bkz. yukarıdaki NOT: Ücret Tipi, Operasyon Kodu'ndan türetiliyor.
+            tip_metni = "NAVLUN" if op_metni.upper() == "NAVLUN" else "Ek_Navlun"
 
-            tip_metni = _ilk_dolu_deger(veri, "PRICE_ADAY", len(price_kolonlari))
-            if not tip_metni: tip_metni = "NAVLUN"
+            print(f"[Bilgi] Satış satırı: OPERASYON_KODU='{op_metni}' (ham Oracle değeri: {op_metni_ham!r}), "
+                  f"türetilen UCRET_TIPI='{tip_metni}', AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
 
             satis_satirlari.append({
                 "OPERASYON_KODU": op_metni,

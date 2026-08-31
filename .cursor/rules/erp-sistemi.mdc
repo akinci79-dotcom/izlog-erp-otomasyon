@@ -205,15 +205,17 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
 ### Satış/Fiyat grid'i — "Yurtiçi Yük Tanımı" sekmesi
 Öneki: `#TabControl_grd_LGoodsOpDetailCollection_*`
 - `_EmptyRow_btnNew` — Yeni satır ekle.
-- `_DXEditor1_I` — Ücret Tipi (NAVLUN değilse doldurulur). Düz metin kutusu
- DEĞİL, `LMSD_L_GOODSPRICE_TYPE` sözlüğünden beslenen DevExpress
- ARAMA/LOOKUP kutusu -- `.fill()` + `Tab` güvenilir değil (Tutar/Tarih
- alanlarındaki gibi). **[VARSAYIM/TODO]**: Şu an tıkla->temizle->yaz->
- öneri listesini bekle (900ms)->ArrowDown+Enter ile seç deseni uygulandı,
+- `_DXEditor1_I` — Ücret Tipi (NAVLUN değilse doldurulur, örn. "Ek_Navlun").
+ Düz metin kutusu DEĞİL, DevExpress ARAMA/LOOKUP kutusu -- `.fill()` +
+ `Tab` güvenilir değil (Tutar/Tarih alanlarındaki gibi). Değer Oracle'dan
+ çekilmiyor, Operasyon Kodu'ndan türetiliyor (bkz. aşağıdaki "Operasyon
+ Kodu" [DOĞRULANMIŞ] bölümü). **[VARSAYIM/TODO]**: Doldurma yöntemi (tıkla
+ ->temizle->yaz->öneri listesini bekle (900ms)->ArrowDown+Enter ile seç)
  henüz canlı testte teyit edilmedi.
-- `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur). Aynı
- lookup/arama kutusu davranışı (`LMSD_L_OP_DEFINITION` sözlüğü), aynı
- düzeltme deseni uygulandı. **[VARSAYIM/TODO]**: henüz teyit edilmedi.
+- `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur, örn.
+ "UĞRAMA"). Aynı lookup/arama kutusu davranışı. Değer `INVD_EXPENSE.
+ EXPENSE_CODE`'dan geliyor [DOĞRULANMIŞ] (bkz. aşağıdaki bölüm). **[VARSAYIM/TODO]**:
+ Doldurma yöntemi henüz canlı testte teyit edilmedi.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 
@@ -274,13 +276,24 @@ otomatik çalışır). DSN: `172.17.8.11:1521/UYUMSOFT`, kullanıcı: `uyumsoft`
   `DOC_DATE` (Yük tarihi), `PROJECT_ID`, `GOODS_ID`.
 - `LMSD_L_AGR_PROJ_TYPE` — Proje sözlüğü. `PROJECT_ID`, `PROJECT_CODE`.
 - `LMST_L_GOODS_OP_DET` — Yük satış/operasyon detay satırları. `GOODS_ID`,
-  `OPERATION_ID`, `OPERATION_PRICE_TYPE`, `AMT` (tutar), `INVOICE_M_ID`,
+  `OPERATION_ID` (bkz. `INVD_EXPENSE`), `AMT` (tutar), `INVOICE_M_ID`,
   `PURCHASE_SALES_TYPE` (satış satırları için `IN (2,4)` filtresi kullanılıyor).
-- `LMSD_L_OP_DEFINITION` — Operasyon kodu sözlüğü. Açıklama kolonu **sabit
-  değil**; `oto_kolon_kesfi()` ile dinamik keşfediliyor (öncelik: `DESCRIPTION`
-  → `OPERATION_CODE` → `CODE`/`DESC`/`NAME`/`AD` içeren ilk kolon → `kolonlar[1]`).
-- `LMSD_L_GOODSPRICE_TYPE` — Ücret tipi sözlüğü. Açıklama kolonu aynı şekilde
-  `oto_kolon_kesfi()` ile dinamik bulunuyor (öncelik: `GOODS_PRICE_TYPE_CODE`).
+  `OPERATION_PRICE_TYPE` kolonu artık KULLANILMIYOR (yanlış varsayıma
+  dayanıyordu, bkz. aşağıdaki not).
+- `INVD_EXPENSE` — Operasyon Kodu sözlüğü [DOĞRULANMIŞ, gerçek çalışan bir
+  Uyumsoft raporunun SQL'i ve Excel çıktısıyla teyit edildi]. Kolon:
+  `EXPENSE_CODE` (örn. `NAVLUN`, `UĞRAMA`, `GENSET`, `MESAİ`, `BEKLEME`).
+  Join: `INVD_EXPENSE.EXPENSE_ID = LMST_L_GOODS_OP_DET.OPERATION_ID`.
+  Eskiden yanlışlıkla `LMSD_L_OP_DEFINITION` kullanılıyordu -- o tablo
+  TAMAMEN YANLIŞTI, artık hiç sorgulanmıyor.
+- ~~`LMSD_L_GOODSPRICE_TYPE`~~ — **"Ücret Tipi" DEĞİL** [DOĞRULANMIŞ,
+  yanlışlığı teyit edildi]. Bu tablo aslında YÜK'ün (satır bazlı değil, tüm
+  yük için TEK bir değer) kargo/yük kategorisi sözlüğü (örn. `SAKARYA`,
+  `KURUYÜK`, `ŞARKÜTERİ`), join `LMST_L_GOODS.GOODS_PRICE_TYPE_ID` üzerinden
+  (OP_DET üzerinden DEĞİL). Otomasyonun ihtiyacı olan bir alan değil, artık
+  hiç sorgulanmıyor. "Ücret Tipi" (Navlun/Ek_Navlun) Oracle'dan çekilmiyor;
+  Operasyon Kodu NAVLUN ise "NAVLUN", değilse sabit "Ek_Navlun" olarak
+  Python'da türetiliyor (`oracle_okuyucu.py`) -- bkz. yukarıdaki [VARSAYIM/TODO] notu.
 - `PSMT_INVOICE_M` — Fatura ana tablosu. `INVOICE_M_ID`, `DOC_NO` (Fatura no),
   `DOC_DATE` (Fatura tarihi). `LMST_L_GOODS_OP_DET.INVOICE_M_ID` üzerinden
   doğrudan bağlanıyor (ayrı bir detay tablosuna gerek yok).
@@ -415,25 +428,40 @@ hiçbir hata/çıktı vermeden asılı kaldı). Kural: bir Playwright action'ı
 yoksa döngünün toplam süresi varsayılan timeout × deneme sayısı kadar
 şişebilir.
 
-## ⚠️ AÇIK SORU — "Ücret Tipi"/"Operasyon Kodu" için Oracle tablo varsayımı YANLIŞ çıktı [VARSAYIM/TODO]
+## ✅ ÇÖZÜLDÜ — "Operasyon Kodu" ve "Ücret Tipi" için doğru Oracle tablo/kolon [DOĞRULANMIŞ]
 
-Mevcut `oracle_okuyucu.py` (kullanıcının orijinal dosyasından, bu oturumda
-icat edilmedi) `LMST_L_GOODS_OP_DET.OPERATION_PRICE_TYPE` alanını
-`LMSD_L_GOODSPRICE_TYPE.GOODS_PRICE_TYPE_ID` ile join edip bunun "Ücret
-Tipi" (Navlun/Ek_Navlun) olduğunu varsayıyordu. Canlı testte bu join
-"ŞARKÜTERİ" gibi GERÇEK BİR ÜCRET TİPİ/OPERASYON KODU OLMAYAN bir metin
-döndürdü -- kullanıcı bunun geçersiz olduğunu teyit etti. Bu, join'in
-YANLIŞ tabloya/kolona işaret ettiğini gösteriyor (muhtemelen
-`LMSD_L_GOODSPRICE_TYPE` aslında bir "mal/kargo kategorisi" sözlüğü, "ücret
-tipi" sözlüğü değil).
+Önceki varsayımlar (`LMSD_L_OP_DEFINITION` / `LMSD_L_GOODSPRICE_TYPE`)
+YANLIŞ çıktı. Kullanıcı, İzlog'da GERÇEKTEN ÇALIŞAN bir Uyumsoft raporunun
+("LojistikYükSevkKalemRaporu") SQL'ini VE gerçek Excel çıktısını paylaştı;
+bu, aşağıdaki eşlemeleri kesin olarak doğruladı:
 
-**Teşhis scripti eklendi**: `operasyon_ucret_kesif.py` (salt-okunur, veri
-değiştirmez) -- bir kaynak yükün OP_DET satırlarının TÜM ham kolonlarını,
-iki şüpheli sözlük tablosunun TAM içeriğini, ve şemadaki TÜM metin
-kolonlarında "NAVLUN" geçen tablo.kolon kombinasyonlarını arar. Bu script
-çalıştırılıp çıktısı paylaşılana kadar "Ücret Tipi"/"Operasyon Kodu" için
-doğru tablo/kolon/join KESİN olarak bilinmiyor -- bu konuda yeni bir SQL
-değişikliği yapmadan önce bu script çalıştırılıp sonucu görülmeli.
+- **Operasyon Kodu** (NAVLUN, UĞRAMA, GENSET, MESAİ, BEKLEME) →
+ `INVD_EXPENSE.EXPENSE_CODE`, join: `INVD_EXPENSE.EXPENSE_ID =
+ LMST_L_GOODS_OP_DET.OPERATION_ID`. Gerçek rapor verisinde bu değerler
+ birebir ERP ekranındaki değerlerle eşleşti.
+- **`LMSD_L_GOODSPRICE_TYPE` "Ücret Tipi" DEĞİL** -- bu aslında YÜK'ün
+ (satır bazlı değil, tüm yük için TEK bir değer) KARGO KATEGORİSİ
+ (SAKARYA, KURUYÜK, ŞARKÜTERİ gibi), rapor kolonu adı
+ `YUK_FIYAT_TIP_KODU`. Join `LMSD_L_GOODSPRICE_TYPE.GOODS_PRICE_TYPE_ID =
+ LMST_L_GOODS.GOODS_PRICE_TYPE_ID` (yük ana tablosu üzerinden, OP_DET
+ üzerinden DEĞİL). Bizim önceki "ŞARKÜTERİ" hatamız tam olarak bu yanlış
+ join'den kaynaklanıyordu. Bu alan `oracle_okuyucu.py`'de artık hiç
+ sorgulanmıyor (otomasyonun ihtiyacı olan bir alan değil).
+- **Ücret Tipi (Navlun / Ek_Navlun)**: Raporda bu alan için ayrı bir Oracle
+ kolonu/tablosu görünmedi. **[VARSAYIM/TODO, kısmen doğrulanmış]**:
+ Operasyon Kodu NAVLUN ise Ücret Tipi de "NAVLUN"; NAVLUN dışı bir
+ operasyon kodu (örn. UĞRAMA) olduğunda Ücret Tipi kullanıcı ekranında
+ "Ek_Navlun" olarak GÖRÜLDÜ (canlı ekran görüntüsüyle teyit edildi) --
+ kod artık bunu Oracle'dan çekmek yerine bu basit kurala göre TÜRETİYOR.
+ GENSET/MESAİ/BEKLEME gibi diğer operasyon kodlarının da gerçekten
+ "Ek_Navlun" ücret tipine mi girdiği ise henüz TEK TEK ekranda teyit
+ edilmedi -- eğer ERP'de farklı bir Ücret Tipi gösterirse kullanıcıdan
+ bilgi alınıp burası güncellenmeli.
+
+`oracle_okuyucu.py`'deki dinamik kolon keşfi (`oto_kolon_kesfi`,
+`oto_kolon_listesi_kesfi` ve COALESCE tabanlı yaklaşımlar) tamamen
+kaldırıldı -- artık kesinleşmiş, sabit SQL kullanılıyor. Geçici teşhis
+scripti `operasyon_ucret_kesif.py` de görevini tamamladığı için silindi.
 
 ## Bu Dosyayı Güncelleme
 
