@@ -302,6 +302,27 @@ LGoodsOpDetailCollection_DXMainTable`) "Düzelt" metni var mı diye bakan
 kontrol hâlâ kodda duruyor (`debug_KOPYADA_MEVCUT_SATIR_UYARISI_{yuk_no}.png`)
 ama artık normal koşullarda hiç tetiklenmemesi bekleniyor.
 
+**❌ ÇÜRÜTÜLDÜ — "Ücret Tipi, Operasyon Kodu NAVLUN değilse hep 'Ek_Navlun'"
+kuralı YANLIŞ [DOĞRULANMIŞ, kullanıcı F12/ekran görüntüsüyle "Ücret Tipi"
+dropdown'ının TAM içeriğini paylaştı]**: "Ücret Tipi" alanının gerçek
+dropdown seçenekleri: **Navlun, Hizmet, Diğer, Avans, Ek_Navlun, Yakit**
+(6 seçenek). `oracle_okuyucu.py`'deki mevcut kural (Operasyon Kodu NAVLUN
+ise Ücret Tipi "NAVLUN", değilse SABİT "Ek_Navlun") sadece "UĞRAMA" için
+tesadüfen doğru çıktı -- ama GENSET, MESAİ, BEKLEME gibi başka operasyon
+kodlarının gerçek Ücret Tipi "Hizmet", "Yakit", "Avans" ya da "Diğer" OLABİLİR,
+bu durumda kod yine yanlış değer yazmaya çalışıp aynı sınıf hataya düşer.
+
+**Salt-okunur keşif scripti eklendi**: `ucret_tipi_kesif.py` -- `INVD_EXPENSE`
+tablosunun tüm kolonlarını (muhtemelen bir üst kategori/PARENT_ID kolonu
+içeriyor, çünkü Operasyon Kodu zaten bu tablodan geliyor -- bkz. yukarıdaki
+"Operasyon Kodu" [DOĞRULANMIŞ] bölümü), kaynak yükün operasyon kodu
+kayıtlarının TAM ham verisini, ve şemada "Ek_Navlun"/"Hizmet"/"Avans"/
+"Yakit" metinleri geçen tablo.kolon kombinasyonlarını arar. Bu script
+çalıştırılıp gerçek "Ücret Tipi" kaynağı bulunana kadar, `UCRET_TIPI`
+alanı hâlâ HATALI/EKSİK bir varsayıma dayanıyor -- yeni bir operasyon
+kodu (GENSET, MESAİ, BEKLEME gibi) canlı test edilmeden önce bu script
+çalıştırılıp sonucu görülmeli.
+
 **❌ ÇÜRÜTÜLDÜ — "ERP faturalı Kaydet sonrası yavaş" teorisi de yanlış
 çıktı [kullanıcı canlı testte teyit etti]**: Kullanıcı, Navlun satırını
 Kaydet'e bastığında ekranın ANINDA yeni satıra geçtiğini gördüğünü
