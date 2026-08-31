@@ -229,6 +229,28 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
  Bu alanlar doldurulduktan hemen sonra `debug_ucrettipi_operasyonkodu_
  sonrasi_{yuk_no}.png` ekran görüntüsü alınıyor -- sorun devam ederse bu
  dosya paylaşılmalı.
+
+ **⚠️ GÜNCEL DURUM — Enter kaldırılmasına RAĞMEN sorun devam etti
+ [DOĞRULANMIŞ, kullanıcı manuel ekran görüntüsüyle teyit etti]**: Enter
+ kaldırılıp sadece Tab kullanılmasına rağmen, 2. satırda Ücret Tipi/
+ Operasyon Kodu hâlâ "Navlun"/"NAVLUN" (varsayılan) olarak görünmeye devam
+ etti, Tutar hâlâ 0,00 kaldı, ve süreç yine aynı `EmptyRow_btnNew` timeout
+ hatasıyla çöktü. **Yeni teori [VARSAYIM/TODO]**: Kodun `input_value()`
+ kontrolü yazdığı anda alanı "dolu" görüyor (hata vermiyor), ama ERP birkaç
+ yüz milisaniye sonra arka planda bir doğrulama yapıp yazılan metni geçerli
+ bir liste öğesiyle eşleştiremeyip alanı otomatik olarak eski varsayılan
+ değere GERİ DÖNDÜRÜYOR olabilir -- kontrolümüz bu geri dönüşten ÖNCE
+ çalıştığı için yanlışlıkla "başarılı" sanıyor olabilir.
+
+ **Uygulanan düzeltme**: `_lookup_alani_dogrula()` adında yeni bir yardımcı
+ fonksiyon eklendi -- artık İKİ AŞAMALI kontrol yapıyor: (1) yazıldıktan
+ hemen sonra dolu mu, (2) fazladan 1500ms bekleyip HÂLÂ beklenen değeri
+ içeriyor mu (case-insensitive substring karşılaştırması). İkinci kontrol
+ başarısız olursa (değer geri döndüyse) net bir "... değerine GERİ
+ DÖNDÜRÜLDÜ" hatası ve ayrı bir ekran görüntüsü (`..._geri_donus_
+ {yuk_no}.png`) üretiliyor -- artık belirsiz bir 30 saniyelik
+ `EmptyRow_btnNew` timeout'u yerine, tam bu noktada net bir teşhis
+ alınacak. Bir sonraki test bu teoriyi ya doğrulayacak ya da çürütecek.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 

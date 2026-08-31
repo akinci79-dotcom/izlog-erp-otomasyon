@@ -72,6 +72,56 @@ def _tutar_adaylarini_ayikla(metin):
     return sonuc
 
 
+def _lookup_alani_dogrula(sayfa, selector, beklenen_deger, kaynak_yuk_no, alan_adi, hata_dosya_onek):
+    """
+    DevExpress lookup/arama kutusuna yazılan bir değerin GERÇEKTEN kalıcı
+    olduğunu doğrular -- yalnızca "boş değil" kontrolü YETERSİZ kaldı: canlı
+    testte alan yazıldıktan hemen sonra dolu görünüyordu ama kısa bir süre
+    sonra ERP'nin arka plan doğrulaması tarafından eski varsayılan değere
+    ("Navlun"/"NAVLUN") sıfırlanıyordu. Bu yüzden burada İKİ AŞAMALI kontrol
+    yapılıyor: (1) hemen sonra dolu mu, (2) fazladan bekleme sonrası hâlâ
+    beklenen değeri içeriyor mu (case-insensitive substring karşılaştırması).
+    İkisi de geçerse yazılan değeri döndürür; geçmezse net bir hata verir.
+    """
+    try:
+        ilk_deger = (sayfa.input_value(selector) or "").strip()
+    except Exception:
+        ilk_deger = ""
+
+    if not ilk_deger:
+        try:
+            sayfa.screenshot(path=f"{hata_dosya_onek}_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: '{alan_adi}' alanı seçilemedi (beklenen: '{beklenen_deger}', "
+            f"alanda görülen: '{ilk_deger}'). Bu satırın işlenmesi durduruldu. "
+            f"Ekran görüntüsü: {hata_dosya_onek}_{kaynak_yuk_no}.png"
+        )
+
+    # İkinci aşama: biraz daha bekleyip HÂLÂ doğru mu diye tekrar kontrol et
+    # -- ERP'nin arka plan doğrulamasının geri alması ihtimaline karşı.
+    sayfa.wait_for_timeout(1500)
+    try:
+        son_deger = (sayfa.input_value(selector) or "").strip()
+    except Exception:
+        son_deger = ""
+
+    if beklenen_deger.strip().upper() not in son_deger.upper():
+        try:
+            sayfa.screenshot(path=f"{hata_dosya_onek}_geri_donus_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: '{alan_adi}' alanına '{beklenen_deger}' yazıldı ama kısa süre "
+            f"sonra ERP tarafından '{son_deger}' değerine GERİ DÖNDÜRÜLDÜ (muhtemelen ERP bu metni "
+            f"geçerli bir liste öğesiyle eşleştiremedi). Bu satırın işlenmesi durduruldu. "
+            f"Ekran görüntüsü: {hata_dosya_onek}_geri_donus_{kaynak_yuk_no}.png"
+        )
+
+    return son_deger
+
+
 def _satirda_tutar_var_mi(satir_metni, hedef_tutar, tolerans=Decimal("0.01")):
     """
     Bir grid satırının metninde, hedef tutara (kuruş toleransıyla) eşit bir
@@ -200,15 +250,19 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # Bu yüzden aynı sağlam desen uygulanıyor: tıkla -> temizle ->
                 # karakter karakter yaz -> açılan öneri listesinin gelmesini
                 # bekle -> Tab ile kutudan çık. Ardından değerin gerçekten
-                # dolduğu doğrulanıyor; dolmadıysa net bir hata ile durduruluyor.
+                # dolduğu VE (bir süre sonra) HÂLÂ doğru kaldığı doğrulanıyor.
                 #
-                # ÖNEMLİ DÜZELTME: Önceki denemede burada "ArrowDown + Enter"
-                # ile öneriyi seçmeye çalışılıyordu, ama DevExpress GridView
-                # satırlarında Enter tuşu genellikle SATIRI ERKEN/EKSİK VERİYLE
-                # KAYDETMEYE çalışır (Tutar ve Fatura henüz girilmeden) --
-                # canlı testte satırın "Navlun" üzerinde takılıp bir süre sonra
-                # kapanması bu yüzden olabilir. Enter tamamen kaldırıldı,
-                # sadece Tab kullanılıyor (Tutar alanında olduğu gibi).
+                # ÖNEMLİ NOT: Canlı testte, alan yazıldıktan hemen sonraki
+                # kontrolde "dolu" görünmesine rağmen, ekranda kalıcı olarak
+                # eski varsayılan değere ("Navlun"/"NAVLUN") GERİ DÖNDÜĞÜ
+                # gözlemlendi (kullanıcının manuel ekran görüntüsüyle teyit
+                # edildi) -- muhtemelen DevExpress'in arka planda yaptığı bir
+                # doğrulama, yazılan metni geçerli bir liste öğesiyle
+                # eşleştiremeyip alanı sıfırlıyor. Bunu YAKALAMAK için artık
+                # iki kontrol yapılıyor: (1) hemen sonra dolu mu, (2) fazladan
+                # bir bekleme sonrası HÂLÂ beklenen değeri içeriyor mu. İkinci
+                # kontrol başarısız olursa net bir "değer geri döndü" hatası
+                # veriliyor -- belirsiz bir timeout yerine.
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
@@ -217,23 +271,12 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
 
-                try:
-                    yazilan_ucret_tipi = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I") or "").strip()
-                except Exception:
-                    yazilan_ucret_tipi = ""
+                yazilan_ucret_tipi = _lookup_alani_dogrula(
+                    aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I",
+                    ucret_tipi, kaynak_yuk_no, "Ücret Tipi", "debug_ucrettipi_hata"
+                )
 
-                if not yazilan_ucret_tipi:
-                    try:
-                        aktif_sayfa.screenshot(path=f"debug_ucrettipi_hata_{kaynak_yuk_no}.png")
-                    except Exception:
-                        pass
-                    raise RuntimeError(
-                        f"[{kaynak_yuk_no}] HATA: 'Ücret Tipi' alanı seçilemedi (beklenen: '{ucret_tipi}', "
-                        f"alanda görülen: '{yazilan_ucret_tipi}'). Bu satırın işlenmesi durduruldu. "
-                        f"Ekran görüntüsü: debug_ucrettipi_hata_{kaynak_yuk_no}.png"
-                    )
-
-                # NOT: Aynı Enter-kaldırma düzeltmesi burada da geçerli.
+                # NOT: Aynı sağlam doğrulama Operasyon Kodu için de geçerli.
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
@@ -242,21 +285,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
 
-                try:
-                    yazilan_op_kodu = (aktif_sayfa.input_value("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I") or "").strip()
-                except Exception:
-                    yazilan_op_kodu = ""
+                yazilan_op_kodu = _lookup_alani_dogrula(
+                    aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I",
+                    op_kodu, kaynak_yuk_no, "Operasyon Kodu", "debug_operasyonkodu_hata"
+                )
 
-                if not yazilan_op_kodu:
-                    try:
-                        aktif_sayfa.screenshot(path=f"debug_operasyonkodu_hata_{kaynak_yuk_no}.png")
-                    except Exception:
-                        pass
-                    raise RuntimeError(
-                        f"[{kaynak_yuk_no}] HATA: 'Operasyon Kodu' alanı seçilemedi (beklenen: '{op_kodu}', "
-                        f"alanda görülen: '{yazilan_op_kodu}'). Bu satırın işlenmesi durduruldu. "
-                        f"Ekran görüntüsü: debug_operasyonkodu_hata_{kaynak_yuk_no}.png"
-                    )
+                print(f"[{kaynak_yuk_no}] Ücret Tipi ve Operasyon Kodu doğrulandı ve KALICI: "
+                      f"Ücret Tipi='{yazilan_ucret_tipi}', Operasyon Kodu='{yazilan_op_kodu}'")
 
                 # TEŞHİS: Ücret Tipi + Operasyon Kodu dolduktan hemen sonra
                 # ekran görüntüsü al -- bir sonraki adımda (Tutar/Fatura)
