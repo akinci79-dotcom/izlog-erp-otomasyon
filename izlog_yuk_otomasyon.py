@@ -665,40 +665,19 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             except Exception:
                 pass
 
-            # ⚠️ YENİ KONTROL [test edilecek yeni hipotez]: Kullanıcı, Navlun
-            # satırını Kaydet'e bastığında ERP'de ANINDA yeni satıra geçtiğini
-            # teyit etti -- yani "ERP yavaş" teorisi de çürütüldü. Bu durumda
-            # asıl şüphe şuna kayıyor: `a[id*='editnew']:has-text('Kaydet')`
-            # seçicisi sayfa genelinde arama yapıp `.first` ile eşleşeni
-            # alıyor -- DOM'da bu deseni eşleştiren görünmez/yanlış bir eleman
-            # varsa (örn. bir şablon veya farklı bir satıra ait kalıntı),
-            # `force=True` sayesinde Playwright HİÇBİR HATA vermeden "tıkladım"
-            # der ama ekranda GERÇEKTEN hiçbir şey olmaz -- satır sonsuza kadar
-            # düzenleme modunda ("Kaydet Vazgeç") kalır. Bunu 90 saniye
-            # beklemeden ÖNCE, ANINDA tespit ediyoruz: tıklamadan hemen sonra
-            # satırın GERÇEKTEN düzenleme modundan çıkıp çıkmadığını kontrol
-            # ediyoruz (grid metninde "Vazgeç" hâlâ varsa, tıklama etkisiz
-            # kalmış demektir).
-            try:
-                grid_metni_kaydet_sonrasi = aktif_sayfa.locator(
-                    "#TabControl_grd_LGoodsOpDetailCollection_DXMainTable"
-                ).inner_text(timeout=3000)
-            except Exception:
-                grid_metni_kaydet_sonrasi = ""
-
-            if "Vazgeç" in grid_metni_kaydet_sonrasi:
-                teshis_dosyasi = f"debug_KAYDET_TIKLAMASI_ETKISIZ_{satir_etiketi}_{kaynak_yuk_no}.png"
-                try:
-                    aktif_sayfa.screenshot(path=teshis_dosyasi)
-                except Exception:
-                    pass
-                raise RuntimeError(
-                    f"[{kaynak_yuk_no}] HATA: Satır {satir_index} ({op_kodu}) için satır bazlı 'Kaydet' "
-                    f"linkine tıklandı, ama satır HÂLÂ düzenleme modunda görünüyor (grid metninde 'Vazgeç' "
-                    f"hâlâ var). Tıklama muhtemelen yanlış/etkisiz bir DOM elemanına denk geldi -- ERP'nin "
-                    f"kendisi yavaş değil, tıklama hiç gerçek bir etki yaratmamış olabilir. "
-                    f"Ekran görüntüsü: {teshis_dosyasi}"
-                )
+            # ❌ KALDIRILDI [kendi hatam, DOĞRULANMIŞ]: Burada daha önce
+            # grid metninde "Vazgeç" kelimesi kalıp kalmadığını kontrol edip
+            # varsa "Kaydet tıklaması etkisiz kaldı" hatası fırlatan bir
+            # kontrol vardı. Bu kontrol YANLIŞTI ve YANLIŞ ALARM üretiyordu:
+            # kullanıcının bildirdiği gibi ERP, Kaydet sonrası OTOMATİK
+            # olarak YENİ bir boş satır açıyor -- o yeni satır da haliyle
+            # "Kaydet Vazgeç" gösteriyor! Yani grid'de "Vazgeç" görmek HER
+            # ZAMAN normal (yeni satır otomatik açıldığı için), bu ORİJİNAL
+            # satırın hâlâ kaydedilmediği anlamına gelmiyor. Canlı testte bu
+            # kontrol, satır GERÇEKTEN başarıyla kaydedilip fatura bağlanmışken
+            # bile "etkisiz kaldı" diye hata verdi (ekran görüntüsü bunu net
+            # gösterdi: alt satır zaten doğru şekilde kaydedilmiş görünüyordu).
+            # Kaldırıldı.
 
             # ⚠️ GÜNCEL BULGU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
             # "Kopya"nın kaynak Yük'ün mevcut fiyat satırlarını da kopyaladığı

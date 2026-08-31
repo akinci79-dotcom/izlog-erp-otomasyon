@@ -336,13 +336,19 @@ düzenleme modundayken), sonsuza kadar (90sn) bekleyip timeout'a düşüyordu.
  satırın Kaydet'i sonrası hangi senaryo gerçekleşirse gerçekleşsin (buton
  görünür OLUR ya da yeni satır otomatik açılır), ikisi de "hazır" sayılıyor.
 
-**⚠️ Ayrıca eklenen (hâlâ geçerli) teşhis**: "Kaydet" tıklamasının yanlış/
-etkisiz bir elemana denk gelip gelmediğini ANINDA test eden bir kontrol da
-kod içinde duruyor -- tıklamadan hemen sonra grid metninde hâlâ "Vazgeç"
-kelimesi var mı diye bakılıyor, varsa net bir "Kaydet tıklaması etkisiz
-kaldı" hatası + ekran görüntüsü (`debug_KAYDET_TIKLAMASI_ETKISIZ_satir{N}_
-*.png`) üretiliyor. Yukarıdaki "otomatik yeni satır açılması" düzeltmesi
-doğruysa bu kontrol hiç tetiklenmemeli (tıklama gerçekten etkili).
+**❌ ÇÜRÜTÜLDÜ (KENDİ HATAM) — "Kaydet tıklaması etkisiz kaldı" kontrolü
+YANLIŞ ALARM üretiyordu [DOĞRULANMIŞ, canlı testte ekran görüntüsüyle
+kanıtlandı]**: Bir önceki turda, Kaydet tıklamasının gerçek bir etkisi olup
+olmadığını test etmek için grid metninde "Vazgeç" kelimesi kalıp kalmadığına
+bakan bir kontrol eklenmişti. Canlı testte bu kontrol tam olarak yukarıdaki
+"ERP otomatik yeni satır açıyor" bulgusuyla ÇAKIŞTI: satır GERÇEKTEN
+başarıyla kaydedilip fatura bağlanmışken (ekran görüntüsünde net görüldü --
+alt satır doğru Navlun+Fatura+Tutar ile dolu), ERP'nin otomatik açtığı YENİ
+boş satır da "Kaydet Vazgeç" gösterdiği için kontrol "Vazgeç hâlâ var, demek
+ki tıklama etkisiz kaldı" diye YANLIŞ bir hata fırlattı. Bu kontrol
+TAMAMEN KALDIRILDI. Ders: "Vazgeç" kelimesinin grid'de var olması normal
+bir durum haline geldi (otomatik açılan yeni satır yüzünden), bu yüzden bu
+tür bir metin kontrolü artık "satır hâlâ kaydedilmedi" anlamına gelmiyor.
 
 ### Sevk/Nakliye grid'i — Sevk formu
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)
