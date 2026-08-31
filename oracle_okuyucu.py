@@ -7,6 +7,29 @@ import ayarlar
 # ==========================================
 oracledb.init_oracle_client(lib_dir=r"C:\instantclient\instantclient_19_32")
 
+# ⚠️ "Ücret Tipi" (ERP dropdown seçenekleri: Navlun, Hizmet, Diğer, Avans,
+# Ek_Navlun, Yakit) Oracle'da HİÇBİR YERDE saklanmıyor [DOĞRULANMIŞ, kapsamlı
+# keşifle kanıtlandı]: INVD_EXPENSE'deki NAVLUN ve UĞRAMA kayıtlarının TÜM
+# kategori kolonları (CATEGORIES1-10_ID) sıfır, EXPENSE_TYPE ikisinde de aynı
+# -- ayırt edici hiçbir alan yok. Şema genelinde "Ek_Navlun"/"Hizmet"/"Avans"/
+# "Yakit" metinleri arandığında TEK bulunan yer bir DENETİM/DEĞİŞİKLİK GÜNLÜĞÜ
+# tablosuydu (DBA_TRACK_DETAIL), gerçek bir sözlük tablosu değil. Bu, "Ücret
+# Tipi"nin muhtemelen ERP'nin kendi UYGULAMA KODUNA gömülü sabit bir kural
+# olduğunu, Oracle'dan sorgulanamayacağını gösteriyor.
+#
+# Bu yüzden burada KÖR TAHMİN yapmak yerine (örn. "NAVLUN değilse hep
+# Ek_Navlun yaz" -- bu YANLIŞ çıktı, çünkü gerçek seçenekler arasında Hizmet/
+# Diğer/Avans/Yakit de var), sadece CANLI TESTTE TEYİT EDİLMİŞ eşlemeler
+# burada tutuluyor. Bilinmeyen bir Operasyon Kodu geldiğinde kod SESSİZCE
+# YANLIŞ bir değer yazmak yerine NET bir hata verip kullanıcıdan doğru Ücret
+# Tipini bu sözlüğe eklemesini istiyor -- ERP'ye yanlış veri girmektense
+# durup sormak çok daha güvenli.
+OPERASYON_KODU_UCRET_TIPI_ESLEME = {
+    "NAVLUN": "NAVLUN",
+    "UĞRAMA": "Ek_Navlun",
+}
+
+
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
     KULLANICI = ayarlar.DB_KULLANICI
     SIFRE = ayarlar.DB_SIFRE
@@ -88,11 +111,20 @@ def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
             op_metni_ham = veri.get("OPERATION_CODE")
             op_metni = str(op_metni_ham).strip() if op_metni_ham and str(op_metni_ham).strip() else "NAVLUN"
 
-            # Bkz. yukarıdaki NOT: Ücret Tipi, Operasyon Kodu'ndan türetiliyor.
-            tip_metni = "NAVLUN" if op_metni.upper() == "NAVLUN" else "Ek_Navlun"
+            # Bkz. yukarıdaki NOT: Ücret Tipi Oracle'da bulunamıyor, sadece
+            # canlı testte teyit edilen kodlar için sözlükten okunuyor.
+            tip_metni = OPERASYON_KODU_UCRET_TIPI_ESLEME.get(op_metni.strip().upper())
+            if tip_metni is None:
+                raise ValueError(
+                    f"[{kaynak_yuk_no}] HATA: '{op_metni}' operasyon kodu için Ücret Tipi bilinmiyor "
+                    f"(şu an sadece NAVLUN ve UĞRAMA için biliniyor). ERP'de bu satırın Ücret Tipi "
+                    f"alanının ne olduğunu kontrol edip oracle_okuyucu.py'deki "
+                    f"OPERASYON_KODU_UCRET_TIPI_ESLEME sözlüğüne '{op_metni.strip().upper()}': '<Ücret Tipi>' "
+                    f"şeklinde ekleyin (yanlış tahmin ile ERP'ye hatalı veri girmemek için otomasyon burada durduruldu)."
+                )
 
             print(f"[Bilgi] Satış satırı: OPERASYON_KODU='{op_metni}' (ham Oracle değeri: {op_metni_ham!r}), "
-                  f"türetilen UCRET_TIPI='{tip_metni}', AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
+                  f"eşlenen UCRET_TIPI='{tip_metni}', AMT='{ham_fiyat}', FATURA_NO='{veri.get('FATURA_NO')}'")
 
             satis_satirlari.append({
                 "OPERASYON_KODU": op_metni,

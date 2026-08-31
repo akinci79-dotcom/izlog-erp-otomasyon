@@ -312,16 +312,29 @@ tesadüfen doğru çıktı -- ama GENSET, MESAİ, BEKLEME gibi başka operasyon
 kodlarının gerçek Ücret Tipi "Hizmet", "Yakit", "Avans" ya da "Diğer" OLABİLİR,
 bu durumda kod yine yanlış değer yazmaya çalışıp aynı sınıf hataya düşer.
 
-**Salt-okunur keşif scripti eklendi**: `ucret_tipi_kesif.py` -- `INVD_EXPENSE`
-tablosunun tüm kolonlarını (muhtemelen bir üst kategori/PARENT_ID kolonu
-içeriyor, çünkü Operasyon Kodu zaten bu tablodan geliyor -- bkz. yukarıdaki
-"Operasyon Kodu" [DOĞRULANMIŞ] bölümü), kaynak yükün operasyon kodu
-kayıtlarının TAM ham verisini, ve şemada "Ek_Navlun"/"Hizmet"/"Avans"/
-"Yakit" metinleri geçen tablo.kolon kombinasyonlarını arar. Bu script
-çalıştırılıp gerçek "Ücret Tipi" kaynağı bulunana kadar, `UCRET_TIPI`
-alanı hâlâ HATALI/EKSİK bir varsayıma dayanıyor -- yeni bir operasyon
-kodu (GENSET, MESAİ, BEKLEME gibi) canlı test edilmeden önce bu script
-çalıştırılıp sonucu görülmeli.
+**✅ SONUÇ: "Ücret Tipi" Oracle'da HİÇ SAKLANMIYOR [DOĞRULANMIŞ, kapsamlı
+keşifle kanıtlandı]**: `ucret_tipi_kesif.py` çalıştırıldı. Bulgular:
+- `INVD_EXPENSE`'deki NAVLUN (id=732) ve UĞRAMA (id=745) kayıtlarının TÜM
+ kategori kolonları (`CATEGORIES1_ID`...`CATEGORIES10_ID`) sıfır,
+ `EXPENSE_TYPE` ikisinde de aynı (1) -- Ücret Tipi'ni ayırt edecek HİÇBİR
+ alan yok.
+- Şema genelinde ("Ek_Navlun", "Hizmet", "Avans", "Yakit" metinleri, tüm
+ metin kolonlarında) arandığında TEK bulunan yer `DBA_TRACK_DETAIL.DETAIL`
+ -- bu bir DENETİM/DEĞİŞİKLİK GÜNLÜĞÜ tablosu (kullanıcı bir alanı
+ değiştirdiğinde otomatik oluşan iz kaydı), GERÇEK bir sözlük/lookup
+ tablosu DEĞİL.
+
+**Sonuç**: "Ücret Tipi" muhtemelen ERP'nin kendi UYGULAMA KODUNA gömülü
+sabit bir kural/eşleme -- Oracle'dan sorgulanamıyor. Bu yüzden
+`oracle_okuyucu.py`'de `OPERASYON_KODU_UCRET_TIPI_ESLEME` adında bir Python
+sözlüğü tutuluyor, SADECE canlı testte teyit edilen eşlemeler içeriyor:
+`{"NAVLUN": "NAVLUN", "UĞRAMA": "Ek_Navlun"}`. **Bilinmeyen bir Operasyon
+Kodu (GENSET, MESAİ, BEKLEME, YAKIT vb.) geldiğinde kod artık KÖR TAHMİN
+YAPMIYOR** -- net bir `ValueError` fırlatıp kullanıcıdan ERP'de o satırın
+gerçek Ücret Tipi'ni kontrol edip bu sözlüğe eklemesini istiyor. Yeni bir
+operasyon kodu ile karşılaşıldığında: kullanıcıdan ERP ekranında o satırın
+Ücret Tipi'nin ne olduğu sorulmalı, sonra `OPERASYON_KODU_UCRET_TIPI_ESLEME`
+sözlüğüne eklenmeli.
 
 **❌ ÇÜRÜTÜLDÜ — "ERP faturalı Kaydet sonrası yavaş" teorisi de yanlış
 çıktı [kullanıcı canlı testte teyit etti]**: Kullanıcı, Navlun satırını
