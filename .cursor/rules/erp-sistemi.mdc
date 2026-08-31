@@ -433,6 +433,35 @@ tür bir metin kontrolü artık "satır hâlâ kaydedilmedi" anlamına gelmiyor.
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)
 - `_EmptyRow_btnNew`, `_DXEditor4_I` (Tutar).
 
+### ⚠️ Sevk Oluştur fazı HENÜZ CANLI/DERİN TESTTE HİÇ ÇALIŞTIRILMADI [VARSAYIM/TODO, önden sağlamlaştırıldı]
+`DERIN_TEST_MODU` sadece Yük fazını test ediyor (ana `#btnSave_CD`'ye hiç
+basmıyor), Sevk fazı gerçek bir kaydedilmiş Yük referans numarasına ihtiyaç
+duyduğu için DERİN_TEST_MODU'da hiç çalışmıyor. Yani şu ana kadar Sevk
+Oluştur adımı **hiçbir şekilde** (ne DRY_RUN ne DERİN_TEST) test edilmedi;
+ilk gerçek deneme canlı veriyle olacak.
+
+Bu riski azaltmak için, Yük tarafında defalarca sorun çıkardığı DOĞRULANMIŞ
+iki desen ÖNCEDEN (canlı test beklenmeden) Sevk koduna da uygulandı:
+- **Plaka (`#TabControl_bte_TractorSerialNoPlateNo_I`) ve Sevk Fiyatı
+  (`#TabControl_grd_LTransOpDetailCollection_DXEditor4_I`) alanlarında
+  `.fill()` KALDIRILDI**, yerine Yük'ün Tarih/Tutar alanlarında kanıtlanmış
+  güvenli desen kullanılıyor: tıkla → `Ctrl+A` + `Delete` → karakter karakter
+  `type()` → yazılan değerin GERÇEKTEN tutup tutmadığı `input_value()` ile
+  doğrulanıyor (tutmazsa ekran görüntüsüyle birlikte net bir `RuntimeError`).
+- **`_emptyrow_bekle_teshisli` fonksiyonu genelleştirildi** (`grid_onek`
+  parametresi eklendi, varsayılan Yük'ün `LGoodsOpDetailCollection` grid'i).
+  Sevk fiyat satırının Kaydet'ine basıldıktan SONRA, ana Kaydet'e
+  (`#btnSave_CD`) basmadan ÖNCE artık sabit 500ms yerine bu teşhisli
+  bekleme (`grid_onek="TabControl_grd_LTransOpDetailCollection"`, 30sn)
+  kullanılıyor -- Yük tarafında satır bazlı Kaydet sonrası grid'in "hazır"
+  duruma dönmesinin bazen uzun sürdüğü (30-90sn) gözlemlendiği için, aynı
+  riskin Sevk'te de olabileceği varsayılıyor.
+
+Bu düzeltmeler HENÜZ canlı ekranla teyit edilmedi (sadece Yük tarafındaki
+benzer sorunlardan çıkarılan öngörüyle önden uygulandı) -- ilk canlı Sevk
+denemesinde bir hata çıkarsa, önce buradaki yeni `RuntimeError` mesajlarına
+ve `debug_sevk_*` ekran görüntülerine bakılmalı.
+
 ## Format Kuralları [DOĞRULANMIŞ]
 
 - **Tarih**: Excel/Oracle'dan `GG.AA.YYYY` string olarak gelir; ekrana

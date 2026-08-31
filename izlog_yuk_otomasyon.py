@@ -177,7 +177,8 @@ def _teshis_gorunur_popup_metni(sayfa):
     return " | ".join(parcalar)[:500]
 
 
-def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi, timeout, asama):
+def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi, timeout, asama,
+                              grid_onek="TabControl_grd_LGoodsOpDetailCollection"):
     """
     Bir satır Kaydet edildikten sonra grid'in bir SONRAKİ satır için hazır
     olmasını bekler. Bu, İKİ farklı şekilde gerçekleşebilir (kullanıcının
@@ -190,6 +191,12 @@ def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_e
     görünür olsun) bekleyip gereksiz yere timeout'a düşüyordu. Artık İKİSİNDEN
     HERHANGİ BİRİ yeterli sayılıyor (CSS virgülüyle "veya" mantığı).
 
+    `grid_onek`: Yük'ün "Yurtiçi Yük Tanımı" grid'i (`LGoodsOpDetailCollection`,
+    varsayılan) ile Sevk'in fiyat grid'i (`LTransOpDetailCollection`) AYNI
+    DevExpress id kalıbını (`{onek}_EmptyRow_btnNew` / `{onek}_DXEditor4_I`)
+    kullanıyor -- bu yüzden fonksiyon genelleştirildi, Sevk fazında da satır
+    bazlı Kaydet sonrası aynı güvenli bekleme kullanılabiliyor.
+
     Timeout olduğunda SADECE generic "Timeout ...ms exceeded" hatası fırlatmak
     yerine: satır indeksi + Operasyon Kodu + (varsa) görünür popup metni +
     satıra özel bir teşhis ekran görüntüsü ile zenginleştirilmiş bir
@@ -197,8 +204,8 @@ def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_e
     """
     try:
         sayfa.wait_for_selector(
-            "#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew, "
-            "#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I",
+            f"#{grid_onek}_EmptyRow_btnNew, "
+            f"#{grid_onek}_DXEditor4_I",
             state="visible", timeout=timeout
         )
     except Exception as orijinal_hata:
@@ -753,9 +760,38 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
     devexpress_tarih_yaz(aktif_sayfa, "#TabControl_dte_DocDate_I", saf_tarih)
 
-    aktif_sayfa.fill("#TabControl_bte_TractorSerialNoPlateNo_I", plaka)
-    aktif_sayfa.press("#TabControl_bte_TractorSerialNoPlateNo_I", "Enter")
+    # ⚠️ HENÜZ CANLI/DERİN TESTTE HİÇ DENENMEDİ [VARSAYIM/TODO]: DERİN_TEST_MODU
+    # Sevk fazını hiç çalıştırmıyor (gerçek bir Yük referans numarasına
+    # ihtiyaç duyduğu için), bu yüzden aşağıdaki Plaka ve Sevk Fiyatı alanları
+    # şimdiye kadar SADECE gerçek/canlı çalıştırmada test edilebilecek. Yük
+    # tarafındaki Tarih/Tutar/Ücret Tipi/Operasyon Kodu alanlarında `.fill()`
+    # DEFALARCA güvenilmez çıktığı (bkz. `devexpress_tarih_yaz` ve OP_DET Tutar
+    # alanındaki NOT'lar) için, aynı sürprizi burada canlı denemede yaşamamak
+    # adına bu iki alan ÖNCEDEN aynı kanıtlanmış güvenli desenle (tıkla ->
+    # tümünü seç -> sil -> karakter karakter yaz -> doğrula) yazıldı.
+    plaka_selector = "#TabControl_bte_TractorSerialNoPlateNo_I"
+    aktif_sayfa.click(plaka_selector)
+    aktif_sayfa.keyboard.press("Control+A")
+    aktif_sayfa.keyboard.press("Delete")
+    aktif_sayfa.type(plaka_selector, plaka, delay=50)
+    aktif_sayfa.press(plaka_selector, "Enter")
     aktif_sayfa.wait_for_timeout(2000)
+
+    try:
+        yazilan_plaka = (aktif_sayfa.input_value(plaka_selector) or "").strip()
+    except Exception:
+        yazilan_plaka = ""
+
+    if not yazilan_plaka:
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_plaka_hata_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Sevk formunda Plaka alanı doldurulamadı "
+            f"(beklenen: '{plaka}', alanda görülen: '{yazilan_plaka}'). "
+            f"Ekran görüntüsü: debug_sevk_plaka_hata_{kaynak_yuk_no}.png"
+        )
 
     aktif_sayfa.click("#TabControl_grd_LTransOpDetailCollection_EmptyRow_btnNew")
     aktif_sayfa.wait_for_selector("#TabControl_grd_LTransOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
@@ -763,11 +799,41 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     sevk_guvenli = Decimal(str(sevk_alis_fiyati)) if sevk_alis_fiyati else Decimal('0.00')
     formatli_sevk_fiyati = f"{sevk_guvenli:.2f}".replace(".", ",")
 
-    aktif_sayfa.fill("#TabControl_grd_LTransOpDetailCollection_DXEditor4_I", formatli_sevk_fiyati)
-    aktif_sayfa.press("#TabControl_grd_LTransOpDetailCollection_DXEditor4_I", "Tab")
+    sevk_tutar_selector = "#TabControl_grd_LTransOpDetailCollection_DXEditor4_I"
+    aktif_sayfa.click(sevk_tutar_selector, force=True)
+    aktif_sayfa.keyboard.press("Control+A")
+    aktif_sayfa.keyboard.press("Delete")
+    aktif_sayfa.type(sevk_tutar_selector, formatli_sevk_fiyati, delay=50)
+    aktif_sayfa.press(sevk_tutar_selector, "Tab")
+    aktif_sayfa.wait_for_timeout(400)
+
+    try:
+        yazilan_sevk_tutari = (aktif_sayfa.input_value(sevk_tutar_selector) or "").strip()
+    except Exception:
+        yazilan_sevk_tutari = ""
+
+    if yazilan_sevk_tutari in ("", "0,00", "0", "0,00000000", "0.00"):
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_tutar_hata_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Sevk Fiyatı alanı doğru yazılamadı (beklenen ~'{formatli_sevk_fiyati}', "
+            f"alanda görülen: '{yazilan_sevk_tutari}'). Ekran görüntüsü: debug_sevk_tutar_hata_{kaynak_yuk_no}.png"
+        )
 
     aktif_sayfa.click("a[id*='editnew']:has-text('Kaydet')", force=True)
-    aktif_sayfa.wait_for_timeout(500)
+
+    # NOT: Yük tarafında satır bazlı Kaydet sonrası grid'in "hazır" duruma
+    # dönmesi bazen 30-90sn sürebiliyordu (bkz. `_emptyrow_bekle_teshisli`
+    # ve ilgili NOT'lar). Ana Kaydet'e (#btnSave_CD) basmadan ÖNCE Sevk fiyat
+    # satırının da GERÇEKTEN kaydedildiğinden emin olmak için aynı teşhisli
+    # bekleme burada da kullanılıyor (eskiden sadece sabit 500ms bekleniyordu).
+    _emptyrow_bekle_teshisli(
+        aktif_sayfa, kaynak_yuk_no, 1, "SEVK_FIYATI", "sevk_fiyat_satiri",
+        timeout=30000, asama="Sevk fiyat satırı Kaydet",
+        grid_onek="TabControl_grd_LTransOpDetailCollection"
+    )
 
     aktif_sayfa.click("#btnSave_CD", force=True)
 
