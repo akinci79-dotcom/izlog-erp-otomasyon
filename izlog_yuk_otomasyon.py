@@ -199,17 +199,22 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # duyduğu gizli ID'yi bir öğe SEÇİLMEDEN set etmeyebilir).
                 # Bu yüzden aynı sağlam desen uygulanıyor: tıkla -> temizle ->
                 # karakter karakter yaz -> açılan öneri listesinin gelmesini
-                # bekle -> ilk öneriyi ok tuşu + Enter ile SEÇ (sadece Tab ile
-                # kutudan çıkmak yerine). Ardından değerin gerçekten dolduğu
-                # doğrulanıyor; dolmadıysa net bir hata ile durduruluyor.
+                # bekle -> Tab ile kutudan çık. Ardından değerin gerçekten
+                # dolduğu doğrulanıyor; dolmadıysa net bir hata ile durduruluyor.
+                #
+                # ÖNEMLİ DÜZELTME: Önceki denemede burada "ArrowDown + Enter"
+                # ile öneriyi seçmeye çalışılıyordu, ama DevExpress GridView
+                # satırlarında Enter tuşu genellikle SATIRI ERKEN/EKSİK VERİYLE
+                # KAYDETMEYE çalışır (Tutar ve Fatura henüz girilmeden) --
+                # canlı testte satırın "Navlun" üzerinde takılıp bir süre sonra
+                # kapanması bu yüzden olabilir. Enter tamamen kaldırıldı,
+                # sadece Tab kullanılıyor (Tutar alanında olduğu gibi).
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", ucret_tipi, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
-                aktif_sayfa.keyboard.press("ArrowDown")
-                aktif_sayfa.wait_for_timeout(200)
-                aktif_sayfa.keyboard.press("Enter")
+                aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
 
                 try:
@@ -228,14 +233,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                         f"Ekran görüntüsü: debug_ucrettipi_hata_{kaynak_yuk_no}.png"
                     )
 
+                # NOT: Aynı Enter-kaldırma düzeltmesi burada da geçerli.
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", op_kodu, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
-                aktif_sayfa.keyboard.press("ArrowDown")
-                aktif_sayfa.wait_for_timeout(200)
-                aktif_sayfa.keyboard.press("Enter")
+                aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
 
                 try:
@@ -253,6 +257,15 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                         f"alanda görülen: '{yazilan_op_kodu}'). Bu satırın işlenmesi durduruldu. "
                         f"Ekran görüntüsü: debug_operasyonkodu_hata_{kaynak_yuk_no}.png"
                     )
+
+                # TEŞHİS: Ücret Tipi + Operasyon Kodu dolduktan hemen sonra
+                # ekran görüntüsü al -- bir sonraki adımda (Tutar/Fatura)
+                # bir şey ters giderse, bu alanların o anda GERÇEKTEN doğru
+                # göründüğünü (veya görünmediğini) teyit edebilmek için.
+                try:
+                    aktif_sayfa.screenshot(path=f"debug_ucrettipi_operasyonkodu_sonrasi_{kaynak_yuk_no}.png")
+                except Exception:
+                    pass
 
             # Güvenli Decimal Çevirimi
             ham_fiyat = satis.get('SATIS_FIYATI')

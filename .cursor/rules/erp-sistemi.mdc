@@ -209,13 +209,26 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
  Düz metin kutusu DEĞİL, DevExpress ARAMA/LOOKUP kutusu -- `.fill()` +
  `Tab` güvenilir değil (Tutar/Tarih alanlarındaki gibi). Değer Oracle'dan
  çekilmiyor, Operasyon Kodu'ndan türetiliyor (bkz. aşağıdaki "Operasyon
- Kodu" [DOĞRULANMIŞ] bölümü). **[VARSAYIM/TODO]**: Doldurma yöntemi (tıkla
- ->temizle->yaz->öneri listesini bekle (900ms)->ArrowDown+Enter ile seç)
- henüz canlı testte teyit edilmedi.
+ Kodu" [DOĞRULANMIŞ] bölümü).
 - `_DXEditor9_I` — Operasyon Kodu (NAVLUN değilse doldurulur, örn.
  "UĞRAMA"). Aynı lookup/arama kutusu davranışı. Değer `INVD_EXPENSE.
- EXPENSE_CODE`'dan geliyor [DOĞRULANMIŞ] (bkz. aşağıdaki bölüm). **[VARSAYIM/TODO]**:
- Doldurma yöntemi henüz canlı testte teyit edilmedi.
+ EXPENSE_CODE`'dan geliyor [DOĞRULANMIŞ] (bkz. aşağıdaki bölüm).
+
+ **⚠️ BUG (KENDİ HATAM) — ArrowDown+Enter satırı erken/eksik kaydediyor
+ olabilir [VARSAYIM/TODO, henüz canlı testte kesin teyit edilmedi ama
+ güçlü şüphe var]**: İlk denemede bu iki alana yazdıktan sonra öneriyi
+ "seçmek" için `ArrowDown` + `Enter` kullanılıyordu. Canlı testte
+ kullanıcı, ikinci satırın Ücret Tipi kutusunda "Navlun" yazılı halde bir
+ süre takılıp kendiliğinden kapandığını gözlemledi (herhangi bir Python
+ hatası/istisnası fırlamadan). DevExpress ASPxGridView satırlarında Enter
+ tuşu genellikle o SATIRI O ANKİ (eksik) veriyle KAYDETMEYE çalışır --
+ Tutar ve Fatura henüz girilmeden satırın yanlışlıkla kaydedilmeye
+ çalışılması, tam gözlemlenen "takılma" davranışını açıklıyor. Düzeltme:
+ `ArrowDown`+`Enter` tamamen kaldırıldı, sadece `Tab` ile kutudan
+ çıkılıyor (Tutar alanında olduğu gibi, orada zaten güvenilir çalışıyordu).
+ Bu alanlar doldurulduktan hemen sonra `debug_ucrettipi_operasyonkodu_
+ sonrasi_{yuk_no}.png` ekran görüntüsü alınıyor -- sorun devam ederse bu
+ dosya paylaşılmalı.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 
