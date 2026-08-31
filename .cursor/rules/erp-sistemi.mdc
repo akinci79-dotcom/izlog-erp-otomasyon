@@ -242,15 +242,32 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
  değere GERİ DÖNDÜRÜYOR olabilir -- kontrolümüz bu geri dönüşten ÖNCE
  çalıştığı için yanlışlıkla "başarılı" sanıyor olabilir.
 
- **Uygulanan düzeltme**: `_lookup_alani_dogrula()` adında yeni bir yardımcı
- fonksiyon eklendi -- artık İKİ AŞAMALI kontrol yapıyor: (1) yazıldıktan
+ **Uygulanan düzeltme (ara adım)**: `_lookup_alani_dogrula()` adında yeni bir
+ yardımcı fonksiyon eklendi -- İKİ AŞAMALI kontrol yapıyor: (1) yazıldıktan
  hemen sonra dolu mu, (2) fazladan 1500ms bekleyip HÂLÂ beklenen değeri
- içeriyor mu (case-insensitive substring karşılaştırması). İkinci kontrol
- başarısız olursa (değer geri döndüyse) net bir "... değerine GERİ
- DÖNDÜRÜLDÜ" hatası ve ayrı bir ekran görüntüsü (`..._geri_donus_
- {yuk_no}.png`) üretiliyor -- artık belirsiz bir 30 saniyelik
- `EmptyRow_btnNew` timeout'u yerine, tam bu noktada net bir teşhis
- alınacak. Bir sonraki test bu teoriyi ya doğrulayacak ya da çürütecek.
+ içeriyor mu. Canlı testte bu kontrol HİÇBİR HATA VERMEDİ (yani
+ `input_value()` doğru değeri okudu) ama ekran görüntüsünde alan hâlâ eski
+ varsayılan değerde ("Navlun"/"NAVLUN") kaldı -- yani Playwright'ın okuduğu
+ ham DOM değeri ile DevExpress'in "gerçekten seçilmiş" kabul ettiği değer
+ FARKLI şeyler.
+
+ **✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, kullanıcı F12 + canlı testle teyit
+ etti]**: Önce her iki alanın ID'si F12 ile doğrulandı (`DXEditor1_I` =
+ Ücret Tipi, `DXEditor9_I` = Operasyon Kodu -- ikisi de doğruydu, ID
+ tahmini sorun değildi). Asıl kök neden: **TAM kelimeyi ("Ek_Navlun",
+ "UĞRAMA") yazıp Tab'a basmak, DevExpress'in otomatik tamamlama/seçim
+ mekanizmasını TETİKLEMİYOR** -- `input_value()` yazdığımız metni okusa da
+ alan "gerçekten seçilmiş" sayılmıyor ve ekranda eski değere geri dönüyor.
+ Kullanıcı canlı ERP'de KISA BİR ÖNEK yazıp Tab'a bastığında (örn. "ek" ->
+ otomatik "Ek_Navlun" oldu, "uğ" -> otomatik "UĞRAMA" oldu) bunun DOĞRU
+ çalıştığını teyit etti. Düzeltme: kod artık TAM değer yerine değerin İLK
+ 3 KARAKTERİNİ yazıp Tab'a basıyor (`ucret_tipi[:3]`, `op_kodu[:3]`) --
+ kullanıcının elle yaptığı ile birebir aynı davranış. Not: "Ücret Tipi"
+ kutusunda yazarken görünür bir öneri listesi (dropdown) açılıyor
+ (`onchange="ASPx.ETextChanged(...)"`), "Operasyon Kodu" kutusunda ise
+ hiçbir liste görünmüyor ama yine de önek+Tab ile doğru otomatik
+ tamamlanıyor (`onchange="ASPx.EValueChanged(...)"`) -- ikisi farklı
+ DevExpress editör alt türleri olsa da aynı önek+Tab deseniyle çalışıyor.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 

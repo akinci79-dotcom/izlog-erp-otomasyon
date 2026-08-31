@@ -252,21 +252,24 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # bekle -> Tab ile kutudan çık. Ardından değerin gerçekten
                 # dolduğu VE (bir süre sonra) HÂLÂ doğru kaldığı doğrulanıyor.
                 #
-                # ÖNEMLİ NOT: Canlı testte, alan yazıldıktan hemen sonraki
-                # kontrolde "dolu" görünmesine rağmen, ekranda kalıcı olarak
-                # eski varsayılan değere ("Navlun"/"NAVLUN") GERİ DÖNDÜĞÜ
-                # gözlemlendi (kullanıcının manuel ekran görüntüsüyle teyit
-                # edildi) -- muhtemelen DevExpress'in arka planda yaptığı bir
-                # doğrulama, yazılan metni geçerli bir liste öğesiyle
-                # eşleştiremeyip alanı sıfırlıyor. Bunu YAKALAMAK için artık
-                # iki kontrol yapılıyor: (1) hemen sonra dolu mu, (2) fazladan
-                # bir bekleme sonrası HÂLÂ beklenen değeri içeriyor mu. İkinci
-                # kontrol başarısız olursa net bir "değer geri döndü" hatası
-                # veriliyor -- belirsiz bir timeout yerine.
+                # ÖNEMLİ DÜZELTME [DOĞRULANMIŞ, kullanıcı F12 + canlı testle
+                # teyit etti]: TAM kelimeyi ("Ek_Navlun", "UĞRAMA") yazıp Tab'a
+                # basmak alanı GERÇEKTEN seçilmiş yapmıyor -- ekranda kalıcı
+                # olarak eski varsayılan değere ("Navlun"/"NAVLUN") geri
+                # dönüyordu (`input_value()` yazdığımızı okusa da, DevExpress'in
+                # kendi "seçili öğe" durumu güncellenmiyordu). Kullanıcı canlı
+                # ERP'de KISA BİR ÖNEK yazıp Tab'a bastığında (örn. "ek" ->
+                # "Ek_Navlun", "uğ" -> "UĞRAMA") otomatik tamamlamanın DOĞRU
+                # ÇALIŞTIĞINI teyit etti -- TAM eşleşen metin yazıldığında bu
+                # otomatik tamamlama/seçim mekanizması tetiklenmiyor gibi
+                # görünüyor. Bu yüzden kod artık TAM değer yerine KISA BİR
+                # ÖNEK yazıp Tab'a basıyor (kullanıcının elle yaptığı ile
+                # birebir aynı davranış).
+                onek_ucret_tipi = ucret_tipi[:3]
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
-                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", ucret_tipi, delay=50)
+                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", onek_ucret_tipi, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
@@ -276,11 +279,12 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                     ucret_tipi, kaynak_yuk_no, "Ücret Tipi", "debug_ucrettipi_hata"
                 )
 
-                # NOT: Aynı sağlam doğrulama Operasyon Kodu için de geçerli.
+                # NOT: Aynı önek+Tab düzeltmesi Operasyon Kodu için de geçerli.
+                onek_op_kodu = op_kodu[:3]
                 aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
                 aktif_sayfa.keyboard.press("Control+A")
                 aktif_sayfa.keyboard.press("Delete")
-                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", op_kodu, delay=50)
+                aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", onek_op_kodu, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
                 aktif_sayfa.wait_for_timeout(400)
