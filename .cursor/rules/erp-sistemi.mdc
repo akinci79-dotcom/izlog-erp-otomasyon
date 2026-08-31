@@ -302,6 +302,28 @@ LGoodsOpDetailCollection_DXMainTable`) "Düzelt" metni var mı diye bakan
 kontrol hâlâ kodda duruyor (`debug_KOPYADA_MEVCUT_SATIR_UYARISI_{yuk_no}.png`)
 ama artık normal koşullarda hiç tetiklenmemesi bekleniyor.
 
+**❌ ÇÜRÜTÜLDÜ — "ERP faturalı Kaydet sonrası yavaş" teorisi de yanlış
+çıktı [kullanıcı canlı testte teyit etti]**: Kullanıcı, Navlun satırını
+Kaydet'e bastığında ekranın ANINDA yeni satıra geçtiğini gördüğünü
+belirtti -- yani 90sn'ye çıkarılan bekleme süresi muhtemelen sorunu tek
+başına ÇÖZMEYECEK, çünkü sorun "yavaşlık" değil.
+
+**⚠️ YENİ TEŞHİS EKLENDİ — "Kaydet" tıklaması yanlış/etkisiz bir elemana
+denk geliyor olabilir [VARSAYIM/TODO, henüz canlı testle teyit edilmedi]**:
+`a[id*='editnew']:has-text('Kaydet')` seçicisi sayfa genelinde arama yapıp
+`.first` ile eşleşeni alıyor, ve `force=True` kullanılıyor. Eğer DOM'da bu
+deseni eşleştiren görünmez/yanlış bir eleman varsa (bir şablon veya
+kalıntı), `force=True` sayesinde Playwright HİÇBİR HATA vermeden "tıkladım"
+der ama ekranda GERÇEKTEN bir şey olmaz -- satır sonsuza kadar düzenleme
+modunda ("Kaydet Vazgeç") kalır, ve 90 saniyelik bekleme boşuna geçer.
+Bunu ANINDA (90sn beklemeden) yakalamak için, Kaydet tıklamasından hemen
+sonra grid metninde hâlâ "Vazgeç" kelimesi var mı diye kontrol eden yeni
+bir adım eklendi (`izlog_yuk_otomasyon.py`, satır bazlı Kaydet sonrası).
+Varsa, net bir "Kaydet tıklaması etkisiz kaldı" hatası + ekran görüntüsü
+(`debug_KAYDET_TIKLAMASI_ETKISIZ_satir{N}_*.png`) üretiliyor. Bir sonraki
+canlı test, sorunun "tıklama etkisiz" mi yoksa "tıklama etkili ama SONRASI
+takılıyor" mu olduğunu kesin olarak ayıracak.
+
 ### Sevk/Nakliye grid'i — Sevk formu
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)
 - `_EmptyRow_btnNew`, `_DXEditor4_I` (Tutar).
