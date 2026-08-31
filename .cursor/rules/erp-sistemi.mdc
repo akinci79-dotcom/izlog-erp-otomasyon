@@ -515,6 +515,97 @@ bu, aşağıdaki eşlemeleri kesin olarak doğruladı:
 kaldırıldı -- artık kesinleşmiş, sabit SQL kullanılıyor. Geçici teşhis
 scripti `operasyon_ucret_kesif.py` de görevini tamamladığı için silindi.
 
+## ⚠️ AÇIK SORUN — Önek+Tab düzeltmesinden SONRA da `EmptyRow_btnNew` timeout'u devam ediyor [VARSAYIM/TODO, tek ekran görüntüsüyle kısmen aydınlatıldı, kesin kök neden HÂLÂ TEYİT EDİLMEDİ]
+
+Commit `13ff545` (Ücret Tipi/Operasyon Kodu için tam kelime yerine kısa
+önek+Tab) sonrası yapılan canlı testte otomasyon YİNE aynı noktada
+(`#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew` için
+`Page.wait_for_selector: Timeout 30000ms exceeded`) çöktü. `dir /o-d`
+çıktısında `debug_ucrettipi_operasyonkodu_sonrasi_Y-575733.png` HİÇ YOKTU;
+sadece `debug_tutar_sonrasi_Y-575733.png`, `debug_kaydet_sonrasi_Y-575733.png`
+ve `hata_Y-575733_144529.png` vardı.
+
+**Kullanıcının yüklediği ekran görüntüsü analiz edildi** (hangi dosya
+olduğu METİNLE teyit edilmedi, ama alan durumundan çıkarım yapıldı):
+Yük No alanı `Y-577612` (Kopya sonrası oluşan YENİ pencerenin referans no'su
+-- `kaynak_yuk_no` olan `Y-575733`'ten farklı olması NORMAL, dosya adları
+kaynak no'yu kullanıyor ama ekrandaki pencere kendi yeni no'sunu gösteriyor),
+"Yurtiçi Yük Tanımı" sekmesi, Finans Bilgileri grid'inde **SADECE TEK BİR
+satır** görünüyor ve o satır "Kaydet/Vazgeç" (düzenleme) modunda: Ücret
+Tipi=`Navlun`, Operasyon Kodu=`NAVLUN` (varsayılan, henüz değiştirilmemiş),
+Tutar=`78.279,00` (**SIFIR DEĞİL** -- önceki belirsiz/teyitsiz ekran
+görüntüsü turundaki "Tutar hâlâ 0,00" endişesini bu spesifik satır için
+ÇÜRÜTÜYOR), Fatura No/Fatura Tarihi ise **BOŞ**.
+
+**Çıkarım**: Bu alan durumu (Tutar dolu, Fatura No boş, tek satır, satır
+düzenleme modunda) kod akışında SADECE `debug_tutar_sonrasi_{kaynak_yuk_no}.png`
+alma anına birebir uyuyor (bkz. `izlog_yuk_otomasyon.py`, Tutar doğrulaması
+hemen sonrası, fatura işleme başlamadan ÖNCE). Grid'de İKİNCİ bir (kaydedilmiş)
+satır GÖRÜNMÜYOR olması da önemli bir ipucu: bu, ekran görüntüsünün 2. satır
+(UĞRAMA) değil **1. satır (NAVLUN)** işlenirken alındığını gösteriyor --
+çünkü 2. satır düzenlenirken zaten kaydedilmiş 1. satır grid'de yukarıda
+görünür olurdu.
+
+**Bu, önceki teşhis varsayımını (sorunun 2. satırın Ücret Tipi/Operasyon
+Kodu lookup alanlarında olduğu) YENİDEN SORGULATIYOR**: `debug_kaydet_sonrasi_
+Y-575733.png` dosyasının VAR OLMASI (fatura yok/"_faturasiz" son eki OLMADAN)
++ `debug_ucrettipi_operasyonkodu_sonrasi_Y-575733.png` dosyasının HİÇ
+OLUŞMAMASI birlikte değerlendirildiğinde, en tutarlı açıklama şu: hata 2.
+satıra hiç ulaşılmadan, **1. satırın (NAVLUN, faturalı) kendi satır Kaydet'i
+sonrası `EmptyRow_btnNew` beklemesinde** oluşmuş olabilir -- 1. satır zaten
+NAVLUN olduğu için lookup kutusu (Ücret Tipi/Operasyon Kodu) hiç
+düzenlenmiyor, bu yüzden o ekran görüntüsü zaten hiç ALINMAYACAKTI (bu kısım
+NORMAL/beklenen), ama asıl mesele 1. satırın kendisinin faturalı-Kaydet
+sonrası takılmış olması. Daha önce "Fatura eşleştirme mantığı TEK satırda
+başarıyla çalıştı" diye doğrulanmış olsa da, bu defa İKİ satır AYNI faturaya
+(`IZK2026000000073`) bağlanıyor -- aynı faturanın birden fazla satırda
+kullanılmasının ERP tarafında (örn. fatura tutarı/bakiyesi kontrolü, görünmez
+bir doğrulama uyarısı) farklı bir davranışa yol açması mantıksal olarak
+mümkün, ama bu HENÜZ CANLI OLARAK TEYİT EDİLMEDİ.
+
+**ÖNEMLİ**: Yukarıdaki "1. satırda takıldı" çıkarımı, ekran görüntüsünün
+gerçekten `debug_tutar_sonrasi_Y-575733.png` olduğu varsayımına dayanıyor --
+kullanıcı bunu METİNLE teyit ETMEDİ. Eğer bu aslında manuel bir ekran
+görüntüsüyse (otomasyon tarafından değil, kullanıcı tarafından elle
+alınmışsa) bu çıkarımın hiçbir geçerliliği yok. **Bu yüzden bu bölüm
+[VARSAYIM/TODO] olarak işaretlendi, kullanıcı teyidi olmadan üzerine kesin
+bir kod düzeltmesi YAPILMADI.**
+
+**Uygulanan düzeltme (kesin kök neden bulunana kadar, sadece TEŞHİS
+katmanı, davranış DEĞİŞTİRMİYOR)**:
+1. Tüm debug/hata ekran görüntüsü dosya adlarına `satir{N}_{OPERASYON_KODU}`
+   etiketi eklendi (`satir_etiketi` değişkeni, `enumerate(satis_satirlari,
+   start=1)`). Daha önce dosya adları SADECE `kaynak_yuk_no` içeriyordu --
+   birden fazla satış satırı varsa, 2. satırın ekran görüntüleri 1. satırınkinin
+   ÜZERİNE YAZILIYORDU, bu yüzden "bu dosya hangi satıra ait?" sorusu kod
+   incelemesiyle bile kesin cevaplanamıyordu (yukarıdaki tüm belirsizliğin
+   kök nedeni buydu). Artık her satır kendi benzersiz dosya adına sahip
+   (örn. `debug_tutar_sonrasi_satir1_NAVLUN_Y-575733.png`,
+   `debug_tutar_sonrasi_satir2_UĞRAMA_Y-575733.png`).
+2. Yeni `_emptyrow_bekle_teshisli()` yardımcı fonksiyonu eklendi:
+   `EmptyRow_btnNew` beklemesi timeout olursa artık SADECE generic
+   "Timeout 30000ms exceeded" fırlatmıyor -- hatayı satır indeksi +
+   Operasyon Kodu + (varsa) ekranda görünür bilinen bir DevExpress
+   popup/mesaj kutusu deseninin (`div.dxpc-content`, `div.dx-popup-content`,
+   `[class*='MessageBox']`, `div.uyum-popup-menu`, `table[id*='pm_']`) metni
+   ile zenginleştirip yeniden fırlatıyor, ayrıca satıra özel bir
+   `debug_EMPTYROW_TIMEOUT_satir{N}_...png` ekran görüntüsü alıyor. Bu
+   fonksiyon SADECE OKUYOR, hiçbir tıklama/etkileşim yapmıyor -- akışı
+   DEĞİŞTİRMİYOR, sadece bir sonraki hatayı çok daha bilgilendirici hale
+   getiriyor (artık Excel'in `HATA_ACIKLAMASI` kolonunda dahi hangi satırda
+   ve muhtemelen neden takıldığı doğrudan okunabilecek).
+3. Faturasız satırın Kaydet sonrası beklemesi de aynı yardımcı fonksiyona
+   taşındı (tutarlılık için, davranış aynı kaldı, sadece teşhis katmanı
+   eklendi).
+
+**Bir sonraki testte NET olarak görülecekler**: (a) `HATA_ACIKLAMASI`
+kolonunda artık "Satır 1 (NAVLUN)" mü yoksa "Satır 2 (UĞRAMA)" mı takıldığı
+DOĞRUDAN yazacak -- ekran görüntüsüne bile gerek kalmadan. (b) Ekranda
+görünür bir popup/uyarı varsa metni doğrudan hata mesajında görünecek. (c)
+Üretilen `debug_*_satir{N}_*.png` dosyalarının HİÇBİRİ birbirinin üzerine
+yazılmayacak, bu yüzden 1. ve 2. satırın TAM veri akışı ayrı ayrı
+incelenebilecek.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle

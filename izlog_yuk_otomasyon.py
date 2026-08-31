@@ -141,6 +141,78 @@ def _satirda_tutar_var_mi(satir_metni, hedef_tutar, tolerans=Decimal("0.01")):
     return False
 
 
+def _teshis_gorunur_popup_metni(sayfa):
+    """
+    Bir Playwright timeout hatasından hemen ÖNCE, ekranda kullanıcı
+    etkileşimi bekleyen görünür bir DevExpress popup/mesaj kutusu olup
+    olmadığını anlamaya çalışır -- varsa metnini döndürür (yoksa boş string).
+
+    NEDEN BÖYLE: `EmptyRow_btnNew` timeout'u şimdiye kadar hep "generic"
+    (sebepsiz) bir `Timeout 30000ms exceeded` olarak gözlemlendi. Olası bir
+    açıklama: satır Kaydet'i tıklandıktan sonra ERP, GÖRÜNMEZ/gözden kaçan
+    bir doğrulama uyarısı ("Sevk Oluştur" menüsündeki gibi özel bir
+    `div.uyum-popup-menu` tarzı öğe) gösteriyor ve satır bu yüzden
+    kaydedilmeden asılı kalıyor olabilir. Bu fonksiyon SADECE OKUR, hiçbir
+    tıklama/etkileşim YAPMAZ -- akışı değiştirmez, sadece bir sonraki hata
+    mesajına ekstra teşhis bilgisi ekler.
+    """
+    adaylar = [
+        "div.dxpc-content:visible",
+        "div.dx-popup-content:visible",
+        "div[class*='MessageBox']:visible",
+        "div[class*='messagebox']:visible",
+        "div.uyum-popup-menu:visible",
+        "table[id*='pm_']:visible",
+    ]
+    parcalar = []
+    for secici in adaylar:
+        try:
+            metinler = sayfa.locator(secici).all_inner_texts()
+        except Exception:
+            continue
+        for metin in metinler:
+            metin = (metin or "").strip()
+            if metin and metin not in parcalar:
+                parcalar.append(metin)
+    return " | ".join(parcalar)[:500]
+
+
+def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi, timeout, asama):
+    """
+    `#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew` elemanının
+    tekrar görünür olmasını bekler (bir satır Kaydet edildikten sonra grid'in
+    "yeni satır ekle" durumuna dönmesi beklenir). Bu bekleme daha önce
+    timeout olduğunda SADECE generic "Timeout 30000ms exceeded" hatası
+    fırlatıyordu -- hangi satırda (1. mi 2. mi, hangi Operasyon Kodu) ve o an
+    ekranda görünür bir popup/uyarı olup olmadığı BELİRSİZDİ. Artık timeout
+    anında: satır indeksi + Operasyon Kodu + (varsa) görünür popup metni +
+    satıra özel bir teşhis ekran görüntüsü ile zenginleştirilmiş bir
+    RuntimeError fırlatılıyor.
+    """
+    try:
+        sayfa.wait_for_selector(
+            "#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=timeout
+        )
+    except Exception as orijinal_hata:
+        popup_metni = _teshis_gorunur_popup_metni(sayfa)
+        teshis_dosyasi = f"debug_EMPTYROW_TIMEOUT_{satir_etiketi}_{kaynak_yuk_no}.png"
+        try:
+            sayfa.screenshot(path=teshis_dosyasi)
+        except Exception:
+            pass
+
+        if popup_metni:
+            ek_bilgi = f"Ekranda görünür bir popup/uyarı metni tespit edildi: '{popup_metni}'."
+        else:
+            ek_bilgi = "Ekranda bilinen bir popup/uyarı deseni tespit edilemedi (bilinen desenler yetersiz kalmış olabilir, ekran görüntüsüne bakılmalı)."
+
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Satır {satir_index} ({op_kodu}) için '{asama}' sonrası "
+            f"grid {timeout}ms içinde 'yeni satır ekle' durumuna dönmedi. {ek_bilgi} "
+            f"Teşhis ekran görüntüsü: {teshis_dosyasi}. (Orijinal hata: {orijinal_hata})"
+        ) from orijinal_hata
+
+
 # ==========================================
 # UYUMSOFT ERP PLAYWRIGHT OPERASYONU V4.1 (FATURA TUTAR EŞLEŞTİRME DÜZELTMESİ)
 # ==========================================
@@ -223,12 +295,26 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         # Yük'ün kendi ana Kaydet'inden ÖNCE ekleniyor. Bu yüzden derin test
         # modunda tüm satırlar normal şekilde işlenir; tek fark, döngü
         # bittiğinde ana "Kaydet"e (#btnSave_CD) basılmamasıdır (aşağıda).
-        for satis in satis_satirlari:
+        # NOT: `satir_index` (1'den başlar) TEŞHİS AMAÇLI eklendi -- daha önce
+        # tüm debug/hata ekran görüntüleri sadece `kaynak_yuk_no` ile
+        # adlandırılıyordu (satır indeksi YOKTU). Birden fazla satış satırı
+        # olduğunda (örn. aynı faturaya bağlı 2 satır), 2. satırın ekran
+        # görüntüleri 1. satırınkilerin ÜZERİNE YAZILIYORDU -- bu da canlı
+        # teşhiste "bu dosya hangi satıra ait?" belirsizliğine yol açtı
+        # (örn. `debug_ucrettipi_operasyonkodu_sonrasi_*.png` hiç oluşmamış
+        # gibi görünüp aslında 2. satırın hiç işlenemediğini mi yoksa başka
+        # bir şeyin mi olduğunu ayırt etmek imkansızdı). Artık HER debug/hata
+        # dosyası `satir{N}_{OPERASYON_KODU}` etiketiyle adlandırılıyor,
+        # üzerine yazma tamamen ortadan kalkıyor.
+        for satir_index, satis in enumerate(satis_satirlari, start=1):
             aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew")
             aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
 
             op_kodu = satis.get('OPERASYON_KODU', 'NAVLUN')
             ucret_tipi = satis.get('UCRET_TIPI', 'NAVLUN')
+            satir_etiketi = f"satir{satir_index}_{op_kodu.strip().upper() or 'BILINMEYEN'}"
+            print(f"[{kaynak_yuk_no}] --- Satış satırı {satir_index}/{len(satis_satirlari)} işleniyor "
+                  f"(Operasyon Kodu='{op_kodu}', Ücret Tipi='{ucret_tipi}') ---")
 
             # NOT: Bu karşılaştırma büyük/küçük harften BAĞIMSIZ olmalı --
             # canlı testte Oracle tarafında (oracle_okuyucu.py) varsayılan
@@ -276,7 +362,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
                 yazilan_ucret_tipi = _lookup_alani_dogrula(
                     aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I",
-                    ucret_tipi, kaynak_yuk_no, "Ücret Tipi", "debug_ucrettipi_hata"
+                    ucret_tipi, kaynak_yuk_no, "Ücret Tipi", f"debug_ucrettipi_hata_{satir_etiketi}"
                 )
 
                 # NOT: Aynı önek+Tab düzeltmesi Operasyon Kodu için de geçerli.
@@ -291,7 +377,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
                 yazilan_op_kodu = _lookup_alani_dogrula(
                     aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I",
-                    op_kodu, kaynak_yuk_no, "Operasyon Kodu", "debug_operasyonkodu_hata"
+                    op_kodu, kaynak_yuk_no, "Operasyon Kodu", f"debug_operasyonkodu_hata_{satir_etiketi}"
                 )
 
                 print(f"[{kaynak_yuk_no}] Ücret Tipi ve Operasyon Kodu doğrulandı ve KALICI: "
@@ -302,7 +388,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # bir şey ters giderse, bu alanların o anda GERÇEKTEN doğru
                 # göründüğünü (veya görünmediğini) teyit edebilmek için.
                 try:
-                    aktif_sayfa.screenshot(path=f"debug_ucrettipi_operasyonkodu_sonrasi_{kaynak_yuk_no}.png")
+                    aktif_sayfa.screenshot(path=f"debug_ucrettipi_operasyonkodu_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
                 except Exception:
                     pass
 
@@ -344,7 +430,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # sonradan (fatura bağlama veya Kaydet sırasında) sıfırlanıp
             # sıfırlanmadığını görmek için.
             try:
-                aktif_sayfa.screenshot(path=f"debug_tutar_sonrasi_{kaynak_yuk_no}.png")
+                aktif_sayfa.screenshot(path=f"debug_tutar_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
             except Exception:
                 pass
 
@@ -357,10 +443,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 aktif_sayfa.wait_for_timeout(500)
                 # TEŞHİS: Faturasız satırda Kaydet sonrası ekran görüntüsü.
                 try:
-                    aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_faturasiz_{kaynak_yuk_no}.png")
+                    aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_faturasiz_{satir_etiketi}_{kaynak_yuk_no}.png")
                 except Exception:
                     pass
-                aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=15000)
+                _emptyrow_bekle_teshisli(
+                    aktif_sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi,
+                    timeout=15000, asama="faturasız Kaydet"
+                )
                 continue
 
             fatura_no_str = str(fatura_no_raw).strip()
@@ -499,7 +588,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
             # TEŞHİS: Satır Kaydet'e basıldıktan hemen sonra ekran görüntüsü al.
             try:
-                aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_{kaynak_yuk_no}.png")
+                aktif_sayfa.screenshot(path=f"debug_kaydet_sonrasi_{satir_etiketi}_{kaynak_yuk_no}.png")
             except Exception:
                 pass
 
@@ -507,7 +596,20 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # ERP tarafi dogrulama/postback tetikleyebiliyor (canli testte 1.
             # satirda calisti ama suresi belirsiz). Bu yuzden bekleme suresi
             # faturasiz satirdakinden (15sn) daha yuksek tutuluyor (30sn).
-            aktif_sayfa.wait_for_selector("#TabControl_grd_LGoodsOpDetailCollection_EmptyRow_btnNew", state="visible", timeout=30000)
+            #
+            # ✅ YENİ TEŞHİS KATMANI [bkz. `_emptyrow_bekle_teshisli`]: Bu
+            # bekleme daha önce SESSİZCE (generic "Timeout 30000ms exceeded")
+            # patlıyordu -- hangi satırda (1. mi 2. mi) ve ekranda o an GÖRÜNÜR
+            # bir popup/uyarı olup olmadığı hiç bilinmiyordu. Artık timeout
+            # olursa: (1) satır indeksi + operasyon kodu hata mesajına ekleniyor,
+            # (2) ekranda görünür bilinen bir DevExpress popup/mesaj kutusu
+            # deseni varsa metni okunup hataya ekleniyor, (3) ayrı, satıra özel
+            # bir teşhis ekran görüntüsü alınıyor -- HİÇBİRİ tıklama/etkileşim
+            # yapmıyor, sadece OKUYOR (akışı değiştirmiyor).
+            _emptyrow_bekle_teshisli(
+                aktif_sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_etiketi,
+                timeout=30000, asama="faturalı Kaydet"
+            )
 
         if derin_test:
             print(f"[{kaynak_yuk_no}] DERİN TEST TAMAMLANDI: Tüm satış satırları (fatura eşleştirmesi dahil) "
