@@ -66,6 +66,25 @@ güvenilmemeli.
    aşamasında, Yük zaten oluşmuş) olarak işaretlenir; bir sonraki çalıştırmada
    `HATA_SEVK`/`YÜK OLUŞTU` durumundan devam edilir (Faz 1-3 tekrar yapılmaz).
 
+**✅ Çoklu Yük — Excel'deki SIRADAKİ satıra geçiş [DOĞRULANMIŞ, kod
+incelemesiyle teyit edildi]**: `main()`'deki ana döngü `islem_listesi.xlsx`
+içindeki her satır için `uyumsoft_islemlerini_yap()`'ı ayrı ayrı çağırır.
+Bu fonksiyonun EN BAŞINDA her zaman `page.goto(ayarlar.ERP_YUK_LISTESI_URL)`
+ile Yük Listesi ekranına dönülüp, o satırın Yük numarası filtre kutusuna
+(`#myListPage_DXFREditorcol1_I`) yazılıp Enter'a basılır -- yani her Yük için
+liste ekranı YENİDEN KULLANILIYOR, otomasyon kapanıp yeniden açılmıyor. Tüm
+Excel satırları bitince (`main()`'in sonunda) "ERP'den güvenli çıkış
+yapılıyor..." mesajıyla `div.logout-main` tıklanıp tarayıcı kapatılıyor --
+bu SADECE en son satırdan sonra, satırlar arasında DEĞİL.
+
+**✅ Çıkış logout tıklamasına kısa timeout eklendi [DOĞRULANMIŞ]**: Önceden
+`page.click("div.logout-main")` çağrısında `timeout=` verilmiyordu; buton
+anlık olarak tıklanabilir durumda değilse Playwright'ın varsayılan
+actionability timeout'u (30sn) devreye giriyor, hata da `except: pass` ile
+sessizce yutulduğu için kullanıcı sadece "ekran bir süre takılı kalıp sonra
+kapanıyor" izlenimini alıyordu (kullanıcı canlı testte tek Excel satırıyla
+bunu gözlemledi). `timeout=5000` eklenerek bu gereksiz bekleme kısaltıldı.
+
 ## Bilinen Ekran/Alan Seçicileri [DOĞRULANMIŞ]
 
 ### Giriş ekranı
