@@ -919,7 +919,14 @@ def main():
 
         print("\nERP'den güvenli çıkış yapılıyor...")
         try:
-            page.click("div.logout-main")
+            # NOT: Önceden burada `timeout=` verilmiyordu -- eğer buton anlık
+            # olarak tıklanabilir durumda değilse (örn. önceki işlemden kalan
+            # bir yükleme/overlay yüzünden), Playwright'ın varsayılan
+            # actionability timeout'u (30sn) devreye giriyordu ve bu hata
+            # sessizce (`except: pass`) yutulduğu için tek görülen şey
+            # ekranın "bir süre takılı kalıp sonra kapanması" oluyordu. Kısa
+            # bir timeout ile bu gereksiz bekleme ortadan kaldırıldı.
+            page.click("div.logout-main", timeout=5000)
             page.wait_for_timeout(2000)
         except Exception:
             pass
