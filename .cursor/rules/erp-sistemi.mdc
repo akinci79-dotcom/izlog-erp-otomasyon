@@ -271,6 +271,23 @@ ekstra bir "ekran doğrulama" katmanına gerek yok.
 - `_DXEditor4_I` — Tutar.
 - Satır bazlı kaydet butonu: `a[id*='editnew']:has-text('Kaydet')`.
 
+**⚠️ TEŞHİS — "Kopya" butonu kaynak Yük'ün mevcut fiyat satırlarını da
+kopyalıyor olabilir [VARSAYIM/TODO, henüz canlı ekranla kesin teyit
+edilmedi]**: `#btnCopy_CD` ile açılan yeni pencerede, satış satırı
+döngüsü (`_EmptyRow_btnNew` ile yeni satır ekleme) başlamadan HEMEN ÖNCE,
+grid'de (`#TabControl_grd_LGoodsOpDetailCollection_DXMainTable`) zaten
+"Düzelt" metni (mevcut bir satırın düzenle linki) görünüp görünmediği
+kontrol ediliyor. Eğer görünüyorsa, "Kopya" butonunun kaynak Yük'ün
+zaten kayıtlı fiyat satırlarını da beraberinde kopyalamış olma ihtimali
+var -- bu hem "aynı fatura ikinci kez bağlanmaya çalışılınca ERP'nin
+takılması" semptomuyla örtüşüyor hem de GERÇEK (`DRY_RUN=False`)
+çalıştırmalarda MÜKERRER KAYIT riski taşıyor. Kod şu an bu durumu sadece
+NET bir konsol uyarısı + `debug_KOPYADA_MEVCUT_SATIR_UYARISI_{yuk_no}.png`
+ekran görüntüsü ile logluyor, akışı DURDURMUYOR. Bir sonraki canlı testte
+bu uyarı çıkarsa hipotez doğrulanmış sayılmalı ve kullanıcıya sorulup
+(a) kopyalanan mevcut satırların silinip silinmeyeceği ya da (b) döngünün
+atlanıp atlanmayacağı netleştirilmeli.
+
 ### Sevk/Nakliye grid'i — Sevk formu
 Öneki: `#TabControl_grd_LTransOpDetailCollection_*` (yukarıdakiyle aynı kalıp)
 - `_EmptyRow_btnNew`, `_DXEditor4_I` (Tutar).
