@@ -65,6 +65,32 @@ else:
 
 print()
 print("=" * 70)
+print("3b. AŞAMA: INVD_BRANCH_EXPENSE tablosu (rapor SQL'inde JOIN ediliyor")
+print("    ama kolonu hiç SELECT edilmiyor -- 'Ücret Tipi' burada olabilir)")
+print("=" * 70)
+try:
+    cursor.execute("SELECT * FROM INVD_BRANCH_EXPENSE WHERE 1=0")
+    kolonlar_be = [col[0] for col in cursor.description]
+    print("Kolonlar:", kolonlar_be)
+
+    cursor.execute("""
+        SELECT DISTINCT FHK.*
+        FROM LMST_L_GOODS_OP_DET OPDET
+        LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
+        LEFT JOIN INVD_BRANCH_EXPENSE FHK ON FHK.EXPENSE_ID = OPDET.OPERATION_ID
+            AND FHK.BRANCH_ID = YK.BRANCH_ID
+        WHERE YK.REFERENCE_NO = :yuk_no
+          AND OPDET.PURCHASE_SALES_TYPE IN (2,4)
+    """, {"yuk_no": KAYNAK_YUK_NO})
+    for satir in cursor.fetchall():
+        for k, v in zip(kolonlar_be, satir):
+            print(f"  {k}: {v}")
+        print("-" * 40)
+except Exception as e:
+    print(f"HATA: {e}")
+
+print()
+print("=" * 70)
 print("4. AŞAMA: 'Ek_Navlun', 'Hizmet', 'Avans', 'Yakit' metinlerini içeren")
 print("   TÜM tablo/kolon kombinasyonlarını ara (biraz sürebilir)")
 print("=" * 70)
