@@ -36,8 +36,16 @@ playwright install chromium
 Oracle Instant Client'ın `ayarlar.py`/`oracle_okuyucu.py` içinde belirtilen yolda
 (`C:\instantclient\instantclient_19_32`) kurulu olması gerekir.
 
-`ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek şifrelerinizle
-doldurun. **Bu dosyayı gerçek şifrelerle git'e commit etmeyin.**
+`ayarlar.py` artık depoya dahil değil (`.gitignore`'da), böylece gerçek
+şifreleriniz asla git'e commit edilmez ve `git pull` bu dosyaya hiç dokunmaz.
+İlk kurulumda şablon dosyayı kopyalayıp kendi bilgilerinizi girin:
+
+```bash
+copy ayarlar.example.py ayarlar.py
+```
+
+Sonra `ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek
+şifrelerinizle doldurun. **Bu dosyayı gerçek şifrelerle git'e commit etmeyin.**
 
 ## Excel şablonu
 

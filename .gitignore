@@ -7,3 +7,8 @@ venv/
 islem_listesi.xlsx
 yedek_islem_listesi_*.xlsx
 hata_*.png
+debug_*.png
+
+# Gerçek şifreleri içeren yerel dosya -- ASLA commit edilmemeli.
+# Şablonu için ayarlar.example.py'ye bakın.
+ayarlar.py
