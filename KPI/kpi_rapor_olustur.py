@@ -1,15 +1,19 @@
 """
 Üst yönetim KPI Excel raporu oluşturucu.
 
-Kullanım:
-  python kpi_rapor_olustur.py              # Oracle'dan canlı veri
-  python kpi_rapor_olustur.py --ornek      # Örnek veri ile şablon testi
+Kullanım (proje kökünden):
+  python KPI/kpi_rapor_olustur.py              # Oracle'dan canlı veri
+  python KPI/kpi_rapor_olustur.py --ornek      # Örnek veri ile şablon testi
 """
 from __future__ import annotations
 
 import sys
 from decimal import Decimal
 from pathlib import Path
+
+_PROJE_KOKU = Path(__file__).resolve().parent.parent
+if str(_PROJE_KOKU) not in sys.path:
+    sys.path.insert(0, str(_PROJE_KOKU))
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side

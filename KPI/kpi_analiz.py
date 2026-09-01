@@ -7,6 +7,13 @@ SQL'i ile doğrulanmış tablolara dayanır.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_PROJE_KOKU = Path(__file__).resolve().parent.parent
+if str(_PROJE_KOKU) not in sys.path:
+    sys.path.insert(0, str(_PROJE_KOKU))
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal

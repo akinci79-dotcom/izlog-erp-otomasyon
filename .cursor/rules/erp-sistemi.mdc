@@ -577,21 +577,22 @@ Windows sunucusunda Oracle'a bağlanarak üst yönetim KPI raporu üretir:
 | Dosya | Görevi |
 |---|---|
 | `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı (Thick Mode Windows) |
-| `kpi_analiz.py` | KPI sorguları + operasyonel problem tespiti |
-| `kpi_rapor_olustur.py` | Çok sayfalı Excel rapor (`raporlar/kpi_rapor.xlsx`) |
-| `yollar.py` | Otomasyon/KPI klasör yollarını merkezi yönetir |
-| `klasorleri_olustur.py` | `otomasyon/` ve `raporlar/` klasörlerini oluşturur |
+| `KPI/kpi_analiz.py` | KPI sorguları + operasyonel problem tespiti |
+| `KPI/kpi_rapor_olustur.py` | Çok sayfalı Excel rapor (`KPI/kpi_rapor.xlsx`) |
+| `yollar.py` | CANLI/KPI klasör yollarını merkezi yönetir |
+| `klasorleri_olustur.py` | `CANLI/` ve `KPI/` klasörlerini oluşturur |
 
 **Klasör ayrımı [DOĞRULANMIŞ — kod incelemesi]**:
-- `otomasyon/` — `islem_listesi.xlsx`, yedekler, `debug_*.png`, `hata_*.png`
+Proje kökü örneği: `C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon`
+- `CANLI/` — `islem_listesi.xlsx`, yedekler, `debug_*.png`, `hata_*.png`
   (`izlog_yuk_otomasyon.py` çıktıları)
-- `raporlar/` — `kpi_rapor.xlsx` (`kpi_rapor_olustur.py` çıktısı)
+- `KPI/` — `kpi_analiz.py`, `kpi_rapor_olustur.py`, `kpi_rapor.xlsx`
 - Pull sonrası: `python klasorleri_olustur.py`
-- Eski kök dizindeki `islem_listesi.xlsx` → `otomasyon/` altına taşınmalı
+- Eski kök dizindeki `islem_listesi.xlsx` → `CANLI/` altına taşınmalı
 
-Çalıştırma: `python kpi_rapor_olustur.py` (dönem `ayarlar.py` →
+Çalıştırma: `python KPI/kpi_rapor_olustur.py` (dönem `ayarlar.py` →
 `KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI`). Şablon testi:
-`python kpi_rapor_olustur.py --ornek`.
+`python KPI/kpi_rapor_olustur.py --ornek`.
 
 **Rapor KPI'ları** (doğrulanmış tablolardan):
 - Yük/sevk hacmi ve sevk tamamlama oranı (`LMST_L_GOODS`, `LMST_L_TRANSPORT`)

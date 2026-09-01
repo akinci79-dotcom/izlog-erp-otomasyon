@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 
 import ayarlar
 from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritabaninda_guncelle
-from yollar import ekran_goruntusu_yolu, islem_listesi_yolu, klasorleri_olustur, yedek_excel_yolu
+from yollar import ekran_goruntusu_yolu, islem_listesi_yolu, klasorleri_olustur, yedek_excel_yolu, alt_klasor_etiketi
 
 # NOT: Aktif geliştirme/hata ayıklama sırasında HER başarılı satırda ek
 # "sağlama" ekran görüntüsü almak faydalıydı, ama normal çalışmada klasörü
@@ -112,7 +112,7 @@ def _lookup_alani_dogrula(sayfa, selector, beklenen_deger, kaynak_yuk_no, alan_a
         raise RuntimeError(
             f"[{kaynak_yuk_no}] HATA: '{alan_adi}' alanı seçilemedi (beklenen: '{beklenen_deger}', "
             f"alanda görülen: '{ilk_deger}'). Bu satırın işlenmesi durduruldu. "
-            f"Ekran görüntüsü: otomasyon/{hata_dosya_onek}_{kaynak_yuk_no}.png"
+            f"Ekran görüntüsü: {alt_klasor_etiketi()}/{hata_dosya_onek}_{kaynak_yuk_no}.png"
         )
 
     # İkinci aşama: biraz daha bekleyip HÂLÂ doğru mu diye tekrar kontrol et
@@ -132,7 +132,7 @@ def _lookup_alani_dogrula(sayfa, selector, beklenen_deger, kaynak_yuk_no, alan_a
             f"[{kaynak_yuk_no}] HATA: '{alan_adi}' alanına '{beklenen_deger}' yazıldı ama kısa süre "
             f"sonra ERP tarafından '{son_deger}' değerine GERİ DÖNDÜRÜLDÜ (muhtemelen ERP bu metni "
             f"geçerli bir liste öğesiyle eşleştiremedi). Bu satırın işlenmesi durduruldu. "
-            f"Ekran görüntüsü: otomasyon/{hata_dosya_onek}_geri_donus_{kaynak_yuk_no}.png"
+            f"Ekran görüntüsü: {alt_klasor_etiketi()}/{hata_dosya_onek}_geri_donus_{kaynak_yuk_no}.png"
         )
 
     return son_deger
@@ -823,7 +823,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         raise RuntimeError(
             f"[{kaynak_yuk_no}] HATA: Sevk formunda Plaka alanı doldurulamadı "
             f"(beklenen: '{plaka}', alanda görülen: '{yazilan_plaka}'). "
-            f"Ekran görüntüsü: otomasyon/debug_sevk_plaka_hata_{kaynak_yuk_no}.png"
+            f"Ekran görüntüsü: {alt_klasor_etiketi()}/debug_sevk_plaka_hata_{kaynak_yuk_no}.png"
         )
 
     aktif_sayfa.click("#TabControl_grd_LTransOpDetailCollection_EmptyRow_btnNew")
@@ -853,7 +853,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         raise RuntimeError(
             f"[{kaynak_yuk_no}] HATA: Sevk Fiyatı alanı doğru yazılamadı (beklenen ~'{formatli_sevk_fiyati}', "
             f"alanda görülen: '{yazilan_sevk_tutari}'). "
-            f"Ekran görüntüsü: otomasyon/debug_sevk_tutar_hata_{kaynak_yuk_no}.png"
+            f"Ekran görüntüsü: {alt_klasor_etiketi()}/debug_sevk_tutar_hata_{kaynak_yuk_no}.png"
         )
 
     aktif_sayfa.click("a[id*='editnew']:has-text('Kaydet')", force=True)
@@ -901,7 +901,7 @@ def main():
     if not os.path.exists(excel_dosyasi):
         print(f"HATA: '{excel_dosyasi}' dosyası bulunamadı.")
         print("  Önce: python excel_olustur.py")
-        print("  veya mevcut islem_listesi.xlsx dosyanızı otomasyon/ klasörüne taşıyın.")
+        print("  veya mevcut islem_listesi.xlsx dosyanızı CANLI/ klasörüne taşıyın.")
         return
 
     yedek_isim = yedek_excel_yolu(datetime.now().strftime('%Y%m%d_%H%M%S'))
@@ -1006,7 +1006,7 @@ def main():
 
                 ws.cell(row=i, column=11).value = hata_mesaji
                 wb.save(excel_dosyasi)
-                print(f"Hata detayı kaydedildi. Ekran Görüntüsü: otomasyon/{hata_foto}")
+                print(f"Hata detayı kaydedildi. Ekran Görüntüsü: {alt_klasor_etiketi()}/{hata_foto}")
 
                 try:
                     page.goto(ayarlar.ERP_YUK_LISTESI_URL)

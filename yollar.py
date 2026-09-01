@@ -1,8 +1,9 @@
 """
 Proje klasör yapısı ve dosya yolları.
 
-Otomasyon çıktıları (Excel, ekran görüntüleri) `otomasyon/` altında;
-KPI raporları `raporlar/` altında tutulur. İki iş hattının çıktıları karışmaz.
+Varsayılan yapı (Cursor ERP Otomasyon kök klasörü):
+  CANLI/  — yük/sevk otomasyonu (Excel, ekran görüntüleri)
+  KPI/    — KPI analiz raporları
 """
 from __future__ import annotations
 
@@ -14,24 +15,34 @@ _PROJE_KOKU = os.path.dirname(os.path.abspath(__file__))
 
 
 def _klasor_yolu(ayar_adi: str, varsayilan: str) -> str:
-    deger = getattr(ayarlar, ayar_adi, varsayilan)
+    deger = getattr(ayarlar, ayar_adi, None)
+    if deger is None and ayar_adi == "KPI_KLASORU":
+        # Eski ayar adı geriye dönük uyumluluk
+        deger = getattr(ayarlar, "RAPORLAR_KLASORU", varsayilan)
+    if deger is None:
+        deger = varsayilan
     if os.path.isabs(deger):
         return deger
     return os.path.join(_PROJE_KOKU, deger)
 
 
 def otomasyon_klasoru() -> str:
-    return _klasor_yolu("OTOMASYON_KLASORU", "otomasyon")
+    return _klasor_yolu("OTOMASYON_KLASORU", "CANLI")
+
+
+def kpi_klasoru() -> str:
+    return _klasor_yolu("KPI_KLASORU", "KPI")
 
 
 def raporlar_klasoru() -> str:
-    return _klasor_yolu("RAPORLAR_KLASORU", "raporlar")
+    """Geriye dönük uyumluluk — kpi_klasoru() ile aynı."""
+    return kpi_klasoru()
 
 
 def klasorleri_olustur():
     """Gerekli alt klasörleri oluşturur (yoksa)."""
     os.makedirs(otomasyon_klasoru(), exist_ok=True)
-    os.makedirs(raporlar_klasoru(), exist_ok=True)
+    os.makedirs(kpi_klasoru(), exist_ok=True)
 
 
 def islem_listesi_yolu() -> str:
@@ -49,8 +60,14 @@ def kpi_rapor_yolu(dosya_adi: str | None = None) -> str:
     dosya = dosya_adi or getattr(ayarlar, "KPI_RAPOR_DOSYASI", "kpi_rapor.xlsx")
     if os.path.isabs(dosya):
         return dosya
-    return os.path.join(raporlar_klasoru(), dosya)
+    return os.path.join(kpi_klasoru(), dosya)
 
 
 def ekran_goruntusu_yolu(dosya_adi: str) -> str:
     return os.path.join(otomasyon_klasoru(), dosya_adi)
+
+
+def alt_klasor_etiketi(klasor_yolu: str | None = None) -> str:
+    """Hata mesajlarında kısa klasör adı (örn. CANLI, KPI)."""
+    yol = klasor_yolu or otomasyon_klasoru()
+    return os.path.basename(os.path.normpath(yol)) or "CANLI"

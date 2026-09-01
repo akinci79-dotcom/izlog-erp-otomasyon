@@ -24,26 +24,28 @@ kesilse veya hata alsa bile bir sonraki çalıştırmada kalınan yerden devam e
 | `excel_olustur.py` | `islem_listesi.xlsx` şablonunu sıfırdan oluşturur |
 | `fatura_bul.py` | Oracle şemasında fatura tablolarını keşfetmek için tek seferlik yardımcı script |
 | `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı katmanı |
-| `kpi_analiz.py` | ERP'den KPI verilerini çeker, operasyonel problemleri tespit eder |
-| `kpi_rapor_olustur.py` | Üst yönetim Excel KPI raporu üretir |
-| `yollar.py` | Otomasyon/KPI klasör yollarını merkezi yönetir |
-| `klasorleri_olustur.py` | `otomasyon/` ve `raporlar/` klasörlerini oluşturur |
+| `KPI/kpi_analiz.py` | ERP'den KPI verilerini çeker, operasyonel problemleri tespit eder |
+| `KPI/kpi_rapor_olustur.py` | Üst yönetim Excel KPI raporu üretir |
+| `yollar.py` | CANLI/KPI klasör yollarını merkezi yönetir |
+| `klasorleri_olustur.py` | `CANLI/` ve `KPI/` klasörlerini oluşturur |
 
 ## Klasör yapısı
 
-Pull sonrası iki iş hattının çıktıları ayrı klasörlerde tutulur:
+Proje kökü (örnek): `C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon`
 
 ```
-izlog-erp-otomasyon/
-├── otomasyon/              ← Yük/sevk otomasyonu (Excel, ekran görüntüleri)
+Cursor ERP Otomasyon/
+├── CANLI/                  ← Yük/sevk otomasyonu (Excel, ekran görüntüleri)
 │   ├── islem_listesi.xlsx
 │   ├── yedek_islem_listesi_*.xlsx
 │   ├── debug_*.png
 │   └── hata_*.png
-├── raporlar/               ← KPI analiz raporları
+├── KPI/                    ← KPI analiz scriptleri ve raporlar
+│   ├── kpi_analiz.py
+│   ├── kpi_rapor_olustur.py
 │   └── kpi_rapor.xlsx
+├── Test/                   ← (sizin test klasörünüz — opsiyonel)
 ├── izlog_yuk_otomasyon.py
-├── kpi_rapor_olustur.py
 └── ayarlar.py              ← pull ile değişmez (sizin dosyanız)
 ```
 
@@ -53,7 +55,7 @@ Pull sonrası bir kez:
 python klasorleri_olustur.py
 ```
 
-Eski kurulumda `islem_listesi.xlsx` repo kökündeyse `otomasyon/` klasörüne taşıyın.
+Eski kurulumda `islem_listesi.xlsx` repo kökündeyse `CANLI\` klasörüne taşıyın.
 
 ## Kurulum (Windows sunucusu)
 
@@ -84,7 +86,7 @@ Sonra `ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek
 python excel_olustur.py
 ```
 
-`otomasyon/islem_listesi.xlsx` şu kolonlarla oluşturulur:
+`CANLI/islem_listesi.xlsx` şu kolonlarla oluşturulur:
 
 | Sütun | İçerik |
 |---|---|
@@ -133,7 +135,7 @@ python izlog_yuk_otomasyon.py
     çalışırken dikkat edilmesi gereken bir durum.
 - Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın (`DERIN_TEST_MODU`
   bu durumda etkisizdir).
-- Hata durumunda ilgili satırın ekran görüntüsü (`otomasyon/hata_<yükno>_<saat>.png`)
+- Hata durumunda ilgili satırın ekran görüntüsü (`CANLI/hata_<yükno>_<saat>.png`)
   alınır ve hata mesajı Excel'e yazılır; otomasyon güvenli şekilde bir
   sonraki satıra geçer.
 - Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
@@ -154,10 +156,10 @@ KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 ```
 
 ```powershell
-python kpi_rapor_olustur.py
+python KPI/kpi_rapor_olustur.py
 ```
 
-Rapor `raporlar/kpi_rapor.xlsx` dosyasına yazılır.
+Rapor `KPI/kpi_rapor.xlsx` dosyasına yazılır.
 
 | Sayfa | İçerik |
 |---|---|
@@ -169,7 +171,7 @@ Rapor `raporlar/kpi_rapor.xlsx` dosyasına yazılır.
 Şablonu Oracle olmadan test etmek için:
 
 ```powershell
-python kpi_rapor_olustur.py --ornek
+python KPI/kpi_rapor_olustur.py --ornek
 ```
 
 ## Bu sürümde yapılan düzeltme

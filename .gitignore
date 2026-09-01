@@ -4,16 +4,18 @@ __pycache__/
 venv/
 .venv/
 
-# Otomasyon çıktıları (otomasyon/ klasörü)
-otomasyon/*.xlsx
-otomasyon/yedek_*.xlsx
-otomasyon/hata_*.png
-otomasyon/debug_*.png
+# CANLI — yük/sevk otomasyon çıktıları
+CANLI/*.xlsx
+CANLI/yedek_*.xlsx
+CANLI/hata_*.png
+CANLI/debug_*.png
 
-# KPI rapor çıktıları (raporlar/ klasörü)
-raporlar/kpi_rapor*.xlsx
+# KPI — analiz rapor çıktıları
+KPI/kpi_rapor*.xlsx
 
-# Eski konumdan kalan dosyalar (geriye dönük uyumluluk)
+# Eski klasör adları (geriye dönük)
+otomasyon/
+raporlar/
 islem_listesi.xlsx
 yedek_islem_listesi_*.xlsx
 kpi_rapor*.xlsx

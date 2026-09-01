@@ -56,12 +56,14 @@ TESHIS_EKRAN_GORUNTUSU_AL = False
 # Tarih formatı: DD.MM.YYYY
 KPI_BASLANGIC_TARIHI = "01.01.2026"
 KPI_BITIS_TARIHI = "31.01.2026"
-KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"  # raporlar/ klasörü içinde oluşur
+KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"  # KPI/ klasörü içinde oluşur
 
-# 6. KLASÖR YAPISI (otomasyon ve KPI çıktıları ayrı tutulur)
-OTOMASYON_KLASORU = "otomasyon"       # Excel, debug/hata ekran görüntüleri
-RAPORLAR_KLASORU = "raporlar"         # KPI Excel raporları
-ISLEM_LISTESI_DOSYASI = "islem_listesi.xlsx"  # otomasyon/ içinde
+# 6. KLASÖR YAPISI
+# Proje kökü örneği: C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon
+# Göreli yollar proje köküne göre çözülür; isterseniz tam yol da verebilirsiniz.
+OTOMASYON_KLASORU = "CANLI"           # Yük/sevk otomasyonu — Excel, ekran görüntüleri
+KPI_KLASORU = "KPI"                   # KPI analiz raporları
+ISLEM_LISTESI_DOSYASI = "islem_listesi.xlsx"  # CANLI/ içinde
 
 # Windows sunucusunda Oracle Instant Client yolu (oracle_baglanti.py tarafından kullanılır)
 ORACLE_CLIENT_LIB_DIR = r"C:\instantclient\instantclient_19_32"
