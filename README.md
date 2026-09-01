@@ -26,6 +26,34 @@ kesilse veya hata alsa bile bir sonraki çalıştırmada kalınan yerden devam e
 | `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı katmanı |
 | `kpi_analiz.py` | ERP'den KPI verilerini çeker, operasyonel problemleri tespit eder |
 | `kpi_rapor_olustur.py` | Üst yönetim Excel KPI raporu üretir |
+| `yollar.py` | Otomasyon/KPI klasör yollarını merkezi yönetir |
+| `klasorleri_olustur.py` | `otomasyon/` ve `raporlar/` klasörlerini oluşturur |
+
+## Klasör yapısı
+
+Pull sonrası iki iş hattının çıktıları ayrı klasörlerde tutulur:
+
+```
+izlog-erp-otomasyon/
+├── otomasyon/              ← Yük/sevk otomasyonu (Excel, ekran görüntüleri)
+│   ├── islem_listesi.xlsx
+│   ├── yedek_islem_listesi_*.xlsx
+│   ├── debug_*.png
+│   └── hata_*.png
+├── raporlar/               ← KPI analiz raporları
+│   └── kpi_rapor.xlsx
+├── izlog_yuk_otomasyon.py
+├── kpi_rapor_olustur.py
+└── ayarlar.py              ← pull ile değişmez (sizin dosyanız)
+```
+
+Pull sonrası bir kez:
+
+```powershell
+python klasorleri_olustur.py
+```
+
+Eski kurulumda `islem_listesi.xlsx` repo kökündeyse `otomasyon/` klasörüne taşıyın.
 
 ## Kurulum (Windows sunucusu)
 
@@ -56,7 +84,7 @@ Sonra `ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek
 python excel_olustur.py
 ```
 
-`islem_listesi.xlsx` şu kolonlarla oluşturulur:
+`otomasyon/islem_listesi.xlsx` şu kolonlarla oluşturulur:
 
 | Sütun | İçerik |
 |---|---|
@@ -105,7 +133,7 @@ python izlog_yuk_otomasyon.py
     çalışırken dikkat edilmesi gereken bir durum.
 - Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın (`DERIN_TEST_MODU`
   bu durumda etkisizdir).
-- Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`)
+- Hata durumunda ilgili satırın ekran görüntüsü (`otomasyon/hata_<yükno>_<saat>.png`)
   alınır ve hata mesajı Excel'e yazılır; otomasyon güvenli şekilde bir
   sonraki satıra geçer.
 - Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
@@ -129,7 +157,7 @@ KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 python kpi_rapor_olustur.py
 ```
 
-Rapor içeriği:
+Rapor `raporlar/kpi_rapor.xlsx` dosyasına yazılır.
 
 | Sayfa | İçerik |
 |---|---|

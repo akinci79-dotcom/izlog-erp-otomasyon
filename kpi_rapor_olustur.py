@@ -17,6 +17,7 @@ from openpyxl.utils import get_column_letter
 
 import ayarlar
 from kpi_analiz import KpiAnalizSonucu, kpi_analizi_yap, ornek_analiz_sonucu
+from yollar import klasorleri_olustur, kpi_rapor_yolu
 
 
 # --- Stil sabitleri ---
@@ -203,7 +204,8 @@ def _veri_sayfasi(wb, baslik, sutunlar, satirlar, deger_formatlayici=None):
 
 
 def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | None = None) -> str:
-    dosya = dosya_adi or getattr(ayarlar, "KPI_RAPOR_DOSYASI", "kpi_rapor.xlsx")
+    klasorleri_olustur()
+    dosya = dosya_adi or kpi_rapor_yolu()
     wb = Workbook()
 
     yonetici_ozeti_sayfasi(wb, analiz)
@@ -245,11 +247,11 @@ def main():
     if ornek_mod:
         print("Örnek veri ile KPI raporu oluşturuluyor...")
         analiz = ornek_analiz_sonucu()
-        dosya = "kpi_rapor_ORNEK.xlsx"
+        dosya = kpi_rapor_yolu("kpi_rapor_ORNEK.xlsx")
     else:
         print("Oracle'dan KPI verileri çekiliyor...")
         analiz = kpi_analizi_yap()
-        dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", "kpi_rapor.xlsx")
+        dosya = kpi_rapor_yolu()
 
     yol = rapor_olustur(analiz, dosya)
     print(f"BAŞARILI: KPI raporu oluşturuldu → {yol}")
