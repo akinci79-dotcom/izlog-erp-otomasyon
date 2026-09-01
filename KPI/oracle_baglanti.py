@@ -61,3 +61,17 @@ def tablo_var_mi(tablo_adi):
             {"tablo": tablo_adi},
         )
         return cursor.fetchone()[0] > 0
+
+
+def tablo_kolonlari(cursor, tablo_adi: str) -> list[str]:
+    """Verilen tablonun kolon adlarını döner (Oracle ALL_TAB_COLUMNS)."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM ALL_TAB_COLUMNS
+        WHERE UPPER(TABLE_NAME) = UPPER(:tablo)
+        ORDER BY COLUMN_ID
+        """,
+        {"tablo": tablo_adi},
+    )
+    return [satir[0] for satir in cursor.fetchall()]

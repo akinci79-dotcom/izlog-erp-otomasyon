@@ -12,7 +12,80 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
-from oracle_baglanti import baglanti_yonet, tablo_var_mi
+from oracle_baglanti import baglanti_yonet, tablo_kolonlari, tablo_var_mi
+
+
+def _kolon_adayindan_bul(kolonlar: list[str], adaylar: list[str]) -> str | None:
+    kolon_haritasi = {k.upper(): k for k in kolonlar}
+    for aday in adaylar:
+        if aday.upper() in kolon_haritasi:
+            return kolon_haritasi[aday.upper()]
+    return None
+
+
+def _transport_semasini_coz(cursor) -> dict:
+    """
+    LMST_L_TRANSPORT tablosunun gerçek kolon adlarını keşfeder.
+    İzlog ERP'de GOODS_ID değil L_GOODS_ID olabiliyor [DOĞRULANMIŞ — ORA-00904].
+    """
+    if not tablo_var_mi("LMST_L_TRANSPORT"):
+        return {"mevcut": False}
+
+    kolonlar = tablo_kolonlari(cursor, "LMST_L_TRANSPORT")
+
+    elle = getattr(ayarlar, "KPI_SEVK_YUK_KOLONU", None)
+    if elle and elle.upper() in {k.upper() for k in kolonlar}:
+        yuk_kolon = next(k for k in kolonlar if k.upper() == elle.upper())
+    else:
+        yuk_kolon = _kolon_adayindan_bul(
+            kolonlar,
+            ["L_GOODS_ID", "GOODS_ID", "LG_GOODS_ID", "SOURCE_GOODS_ID", "SOURCE_L_GOODS_ID"],
+        )
+        if not yuk_kolon:
+            for kolon in kolonlar:
+                if "GOODS" in kolon.upper():
+                    yuk_kolon = kolon
+                    break
+
+    tarih_kolon = _kolon_adayindan_bul(
+        kolonlar,
+        ["DOC_DATE", "DOCUMENT_DATE", "TRANSPORT_DATE", "TRANS_DATE"],
+    )
+
+    return {
+        "mevcut": True,
+        "yuk_kolon": yuk_kolon,
+        "tarih_kolon": tarih_kolon,
+        "kolonlar": kolonlar,
+    }
+
+
+def _sevk_sayisi_hesapla(cursor, bas, bit, transport_sema: dict) -> int:
+    if not transport_sema.get("mevcut"):
+        return 0
+
+    yuk_kolon = transport_sema.get("yuk_kolon")
+    if yuk_kolon:
+        sql = f"""
+            SELECT COUNT(DISTINCT T.TRANSPORT_ID) AS SEVK_SAYISI
+            FROM LMST_L_TRANSPORT T
+            JOIN LMST_L_GOODS YK ON YK.GOODS_ID = T.{yuk_kolon}
+            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        """
+        cursor.execute(sql, {"bas": bas, "bit": bit})
+        return cursor.fetchone()[0]
+
+    tarih_kolon = transport_sema.get("tarih_kolon")
+    if tarih_kolon:
+        sql = f"""
+            SELECT COUNT(DISTINCT T.TRANSPORT_ID) AS SEVK_SAYISI
+            FROM LMST_L_TRANSPORT T
+            WHERE T.{tarih_kolon} BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        """
+        cursor.execute(sql, {"bas": bas, "bit": bit})
+        return cursor.fetchone()[0]
+
+    return 0
 
 
 def _decimal(deger) -> Decimal:
@@ -49,7 +122,7 @@ def _satirlari_dict_yap(sutunlar, satirlar):
     return [dict(zip(sutunlar, satir)) for satir in satirlar]
 
 
-def _temel_hacim_kpi(cursor, bas, bit):
+def _temel_hacim_kpi(cursor, bas, bit, transport_sema: dict):
     """Yük ve sevk hacmi KPI'ları."""
     cursor.execute(
         """
@@ -61,18 +134,7 @@ def _temel_hacim_kpi(cursor, bas, bit):
     )
     yuk_sayisi = cursor.fetchone()[0]
 
-    sevk_sayisi = 0
-    if tablo_var_mi("LMST_L_TRANSPORT"):
-        cursor.execute(
-            """
-            SELECT COUNT(DISTINCT T.TRANSPORT_ID) AS SEVK_SAYISI
-            FROM LMST_L_TRANSPORT T
-            JOIN LMST_L_GOODS YK ON YK.GOODS_ID = T.GOODS_ID
-            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-            """,
-            {"bas": bas, "bit": bit},
-        )
-        sevk_sayisi = cursor.fetchone()[0]
+    sevk_sayisi = _sevk_sayisi_hesapla(cursor, bas, bit, transport_sema)
 
     sevk_orani = round(sevk_sayisi / yuk_sayisi * 100, 1) if yuk_sayisi else 0
 
@@ -227,7 +289,7 @@ def _fatura_gecikmesi(cursor, bas, bit):
     }
 
 
-def _marj_analizi(cursor, bas, bit):
+def _marj_analizi(cursor, bas, bit, transport_sema: dict):
     """
     Brüt marj: satış geliri − sevk alış maliyeti.
     Sevk maliyeti LMST_L_TRANSPORT_OP_DET tablosundan okunur [VARSAYIM/TODO:
@@ -239,8 +301,17 @@ def _marj_analizi(cursor, bas, bit):
             "mesaj": "LMST_L_TRANSPORT_OP_DET tablosu bulunamadı — marj KPI atlandı.",
         }
 
-    cursor.execute(
-        """
+    yuk_kolon = transport_sema.get("yuk_kolon")
+    if not yuk_kolon:
+        return {
+            "mevcut": False,
+            "mesaj": (
+                "LMST_L_TRANSPORT ↔ yük eşleme kolonu bulunamadı — marj KPI atlandı. "
+                f"Mevcut kolonlar: {', '.join(transport_sema.get('kolonlar', [])[:12])}..."
+            ),
+        }
+
+    sql = f"""
         SELECT
             NVL(SUM(satis.AMT), 0) AS TOPLAM_SATIS,
             NVL(SUM(alış.AMT), 0) AS TOPLAM_ALIS
@@ -251,16 +322,15 @@ def _marj_analizi(cursor, bas, bit):
             WHERE PURCHASE_SALES_TYPE IN (2, 4)
             GROUP BY GOODS_ID
         ) satis ON satis.GOODS_ID = YK.GOODS_ID
-        LEFT JOIN LMST_L_TRANSPORT T ON T.GOODS_ID = YK.GOODS_ID
+        LEFT JOIN LMST_L_TRANSPORT T ON T.{yuk_kolon} = YK.GOODS_ID
         LEFT JOIN (
             SELECT TRANSPORT_ID, SUM(AMT) AS AMT
             FROM LMST_L_TRANSPORT_OP_DET
             GROUP BY TRANSPORT_ID
         ) alış ON alış.TRANSPORT_ID = T.TRANSPORT_ID
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-        """,
-        {"bas": bas, "bit": bit},
-    )
+    """
+    cursor.execute(sql, {"bas": bas, "bit": bit})
     row = cursor.fetchone()
     toplam_satis = _decimal(row[0])
     toplam_alis = _decimal(row[1])
@@ -276,7 +346,7 @@ def _marj_analizi(cursor, bas, bit):
     }
 
 
-def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
+def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transport_sema: dict):
     """Üst yönetimin odaklanması gereken operasyonel problemler."""
     problemler = []
 
@@ -337,21 +407,21 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
             }
         )
 
-    # 5) Sevki olmayan yükler (son 30 gün içinde)
-    if tablo_var_mi("LMST_L_TRANSPORT"):
-        cursor.execute(
-            """
+    # 5) Sevki olmayan yükler
+    yuk_kolon = transport_sema.get("yuk_kolon")
+    if transport_sema.get("mevcut") and yuk_kolon:
+        sql = f"""
             SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
             FROM LMST_L_GOODS YK
             LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
-            LEFT JOIN LMST_L_TRANSPORT T ON T.GOODS_ID = YK.GOODS_ID
+            LEFT JOIN LMST_L_TRANSPORT T ON T.{yuk_kolon} = YK.GOODS_ID
             WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
               AND T.TRANSPORT_ID IS NULL
             ORDER BY YK.DOC_DATE DESC
             FETCH FIRST 50 ROWS ONLY
-            """,
-            {"bas": bas, "bit": bit},
-        )
+        """
+        cursor.execute(sql, {"bas": bas, "bit": bit})
+        cursor.execute(sql, {"bas": bas, "bit": bit})
         sevksiz = cursor.fetchall()
         if sevksiz:
             problemler.append(
