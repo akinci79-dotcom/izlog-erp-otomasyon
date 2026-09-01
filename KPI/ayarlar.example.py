@@ -27,3 +27,6 @@ KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 
 # Kapıdan kapıya yükleri hariç tut (rapor SQL'inde IS_DOOR_TO_DOOR = 0)
 KPI_KAPI_KAPI_HARIC = True
+
+# Kalem detay sayfası satır üst sınırı (sevk + yük kalemleri birlikte)
+KPI_KALEM_DETAY_LIMIT = 10000

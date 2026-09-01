@@ -313,6 +313,35 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             },
         )
 
+    if analiz.kalem_detay:
+        _veri_sayfasi(
+            wb,
+            "Kalem Detay",
+            [
+                "TIP", "SEVK_NO", "SEVK_TARIHI", "YUK_NO", "YUK_TARIHI", "PLAKA",
+                "PROJE_KODU", "ALIS_SATIS", "OPERASYON_KODU", "TUTAR",
+                "FATURA_NO", "CARI_ADI", "DOSYA_NO",
+            ],
+            analiz.kalem_detay,
+            {"TUTAR": lambda v: float(v) if v else 0},
+        )
+
+    if analiz.kalem_sevk_kirilim:
+        _veri_sayfasi(
+            wb,
+            "Sevk Yük Kırılım",
+            [
+                "SEVK_NO", "SEVK_TARIHI", "PLAKA", "YUK_SAYISI", "YUK_LISTESI",
+                "SEVK_ALIS_TOPLAM", "YUK_SATIS_TOPLAM", "NET_KAR_ZARAR",
+            ],
+            analiz.kalem_sevk_kirilim,
+            {
+                "SEVK_ALIS_TOPLAM": lambda v: float(v) if v else 0,
+                "YUK_SATIS_TOPLAM": lambda v: float(v) if v else 0,
+                "NET_KAR_ZARAR": lambda v: float(v) if v else 0,
+            },
+        )
+
     wb.save(dosya)
     return str(dosya.resolve())
 

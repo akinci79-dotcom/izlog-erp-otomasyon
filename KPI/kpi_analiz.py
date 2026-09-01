@@ -18,6 +18,14 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
+from kpi_kalem_detay import (
+    kalem_detay_getir,
+    kalem_detay_ozet_hesapla,
+    kalem_detay_problemleri,
+    kalem_detay_semasi_hazir,
+    kalem_sevk_kirilim_hesapla,
+    ornek_kalem_detay_verisi,
+)
 from kpi_kiralk_arac import (
     kiralk_arac_cari_ozet_hesapla,
     kiralk_arac_detay_getir,
@@ -101,6 +109,9 @@ class KpiAnalizSonucu:
     kiralk_arac_ozet: dict[str, Any] = field(default_factory=dict)
     kiralk_arac_detay: list[dict] = field(default_factory=list)
     kiralk_arac_cari: list[dict] = field(default_factory=list)
+    kalem_detay_ozet: dict[str, Any] = field(default_factory=dict)
+    kalem_detay: list[dict] = field(default_factory=list)
+    kalem_sevk_kirilim: list[dict] = field(default_factory=list)
     problemler: list[dict] = field(default_factory=list)
     uyarilar: list[str] = field(default_factory=list)
 
@@ -587,6 +598,17 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         else:
             sonuc.kiralk_arac_ozet = {"mevcut": False, "mesaj": ka_mesaj}
 
+        kd_ok, kd_mesaj = kalem_detay_semasi_hazir()
+        if kd_ok:
+            bind = _bind_ortak(bas, bit)
+            sonuc.kalem_detay, limit_asildi = kalem_detay_getir(cursor, bas, bit, bind)
+            sonuc.kalem_detay_ozet = kalem_detay_ozet_hesapla(
+                sonuc.kalem_detay, limit_asildi=limit_asildi
+            )
+            sonuc.kalem_sevk_kirilim = kalem_sevk_kirilim_hesapla(sonuc.kalem_detay)
+        else:
+            sonuc.kalem_detay_ozet = {"mevcut": False, "mesaj": kd_mesaj}
+
         if getattr(ayarlar, "CO_CODE", None):
             sonuc.uyarilar.append(f"Firma filtresi: CO_CODE = {ayarlar.CO_CODE}")
         if getattr(ayarlar, "BRANCH_CODE", None):
@@ -603,12 +625,24 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
             mesaj = sonuc.kiralk_arac_ozet.get("mesaj")
             if mesaj:
                 sonuc.uyarilar.append(mesaj)
+        if not sonuc.kalem_detay_ozet.get("mevcut"):
+            mesaj = sonuc.kalem_detay_ozet.get("mesaj")
+            if mesaj and "tablo" in mesaj.lower():
+                sonuc.uyarilar.append(mesaj)
+        elif sonuc.kalem_detay_ozet.get("limit_asildi"):
+            limit = getattr(ayarlar, "KPI_KALEM_DETAY_LIMIT", 10000)
+            sonuc.uyarilar.append(
+                f"Kalem detay {limit} satır limitine ulaştı — tam liste için dönemi daraltın."
+            )
 
         sonuc.problemler = _problemleri_tespit_et(
             cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
         )
         sonuc.problemler.extend(
             kiralk_arac_problemleri(sonuc.kiralk_arac_ozet, sonuc.kiralk_arac_detay)
+        )
+        sonuc.problemler.extend(
+            kalem_detay_problemleri(sonuc.kalem_detay_ozet, sonuc.kalem_sevk_kirilim)
         )
         oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
         sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
@@ -659,6 +693,10 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
     sonuc.kiralk_arac_ozet = ka_ozet
     sonuc.kiralk_arac_detay = ka_detay
     sonuc.kiralk_arac_cari = ka_cari
+    kd_ozet, kd_detay, kd_kirilim = ornek_kalem_detay_verisi()
+    sonuc.kalem_detay_ozet = kd_ozet
+    sonuc.kalem_detay = kd_detay
+    sonuc.kalem_sevk_kirilim = kd_kirilim
     sonuc.problemler = [
         {
             "oncelik": "YUKSEK",
@@ -676,6 +714,7 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
         },
     ]
     sonuc.problemler.extend(kiralk_arac_problemleri(ka_ozet, ka_detay))
+    sonuc.problemler.extend(kalem_detay_problemleri(kd_ozet, kd_kirilim))
     oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
     sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
     sonuc.uyarilar = ["Bu rapor ORNEK veri ile üretilmiştir — gerçek analiz için Windows sunucusunda çalıştırın."]

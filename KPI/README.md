@@ -89,3 +89,5 @@ KPI_BITIS_TARIHI = "31.01.2026"
 | Operasyon Dağılımı | NAVLUN, UĞRAMA vb. |
 | Kiralık Araç Detay | Tedarikçi hakediş dosyaları (maliyet/kar) |
 | Kiralık Araç Cari | Tedarikçi bazında filo özeti |
+| Kalem Detay | Sevk/yük kalem satırları (çoklu yük kırılımı) |
+| Sevk Yük Kırılım | Birden fazla yük taşıyan sevklerin kar/zarar özeti |

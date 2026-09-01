@@ -589,6 +589,7 @@ KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördek
 | `KPI/oracle_baglanti.py` | KPI Oracle bağlantısı |
 | `KPI/kpi_analiz.py` | KPI sorguları + problem tespiti |
 | `KPI/kpi_kiralk_arac.py` | Kiralık araç hakediş sorguları |
+| `KPI/kpi_kalem_detay.py` | Sevk/yük kalem detay sorguları |
 | `KPI/kpi_rapor_olustur.py` | Excel rapor üretici |
 | `KPI/raporlar/kpi_rapor.xlsx` | Çıktı |
 
@@ -619,6 +620,13 @@ python kpi_rapor_olustur.py
 - `LMST_SUP_PAYOFF_T_D` — dosya ↔ sevk bağlantısı
 - Maliyet = ödenecek tutar + aldığı mazot + IZLOG OGS (rapor formülü)
 - Kar/zarar = bağlı yük satış toplamı − maliyetler toplamı
+
+**Kalem bazında detay raporu** [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
+- `LMST_L_TRANS_OP_DETAIL` + `TGD` → **Sevk Kalemi** (aynı sevk satırı yük sayısı
+  kadar tekrarlanır — çoklu yük kırılımı)
+- `LMST_L_GOODS_OP_DET` + `TGD` → **Yük Kalemi**
+- Tutar alanı: `AMT_TRA`; fatura: `PSMT_INVOICE_M.DOC_NO`
+- Sevk tarihi filtresi sevk kaleminde `SK.DOC_DATE`, yük kaleminde `YK.DOC_DATE`
 
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,
