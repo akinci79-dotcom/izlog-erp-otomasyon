@@ -18,6 +18,14 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
+from kpi_fatura_detay import (
+    fatura_detay_getir,
+    fatura_detay_ozet_hesapla,
+    fatura_detay_problemleri,
+    fatura_detay_semasi_hazir,
+    faturasiz_kalemler,
+    ornek_fatura_detay_verisi,
+)
 from kpi_kalem_detay import (
     kalem_detay_getir,
     kalem_detay_ozet_hesapla,
@@ -112,6 +120,9 @@ class KpiAnalizSonucu:
     kalem_detay_ozet: dict[str, Any] = field(default_factory=dict)
     kalem_detay: list[dict] = field(default_factory=list)
     kalem_sevk_kirilim: list[dict] = field(default_factory=list)
+    fatura_detay_ozet: dict[str, Any] = field(default_factory=dict)
+    fatura_detay: list[dict] = field(default_factory=list)
+    faturasiz_kalemler: list[dict] = field(default_factory=list)
     problemler: list[dict] = field(default_factory=list)
     uyarilar: list[str] = field(default_factory=list)
 
@@ -609,6 +620,17 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         else:
             sonuc.kalem_detay_ozet = {"mevcut": False, "mesaj": kd_mesaj}
 
+        fd_ok, fd_mesaj = fatura_detay_semasi_hazir()
+        if fd_ok:
+            bind = _bind_ortak(bas, bit)
+            sonuc.fatura_detay, fd_limit = fatura_detay_getir(cursor, bas, bit, bind)
+            sonuc.fatura_detay_ozet = fatura_detay_ozet_hesapla(
+                sonuc.fatura_detay, limit_asildi=fd_limit
+            )
+            sonuc.faturasiz_kalemler = faturasiz_kalemler(sonuc.fatura_detay)
+        else:
+            sonuc.fatura_detay_ozet = {"mevcut": False, "mesaj": fd_mesaj}
+
         if getattr(ayarlar, "CO_CODE", None):
             sonuc.uyarilar.append(f"Firma filtresi: CO_CODE = {ayarlar.CO_CODE}")
         if getattr(ayarlar, "BRANCH_CODE", None):
@@ -634,6 +656,15 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
             sonuc.uyarilar.append(
                 f"Kalem detay {limit} satır limitine ulaştı — tam liste için dönemi daraltın."
             )
+        if not sonuc.fatura_detay_ozet.get("mevcut"):
+            mesaj = sonuc.fatura_detay_ozet.get("mesaj")
+            if mesaj and "tablo" in mesaj.lower():
+                sonuc.uyarilar.append(mesaj)
+        elif sonuc.fatura_detay_ozet.get("limit_asildi"):
+            limit = getattr(ayarlar, "KPI_FATURA_DETAY_LIMIT", 10000)
+            sonuc.uyarilar.append(
+                f"Fatura detay {limit} satır limitine ulaştı — tam liste için dönemi daraltın."
+            )
 
         sonuc.problemler = _problemleri_tespit_et(
             cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
@@ -643,6 +674,9 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         )
         sonuc.problemler.extend(
             kalem_detay_problemleri(sonuc.kalem_detay_ozet, sonuc.kalem_sevk_kirilim)
+        )
+        sonuc.problemler.extend(
+            fatura_detay_problemleri(sonuc.fatura_detay_ozet, sonuc.fatura_detay)
         )
         oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
         sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
@@ -697,6 +731,10 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
     sonuc.kalem_detay_ozet = kd_ozet
     sonuc.kalem_detay = kd_detay
     sonuc.kalem_sevk_kirilim = kd_kirilim
+    fd_ozet, fd_detay, fd_faturasiz = ornek_fatura_detay_verisi()
+    sonuc.fatura_detay_ozet = fd_ozet
+    sonuc.fatura_detay = fd_detay
+    sonuc.faturasiz_kalemler = fd_faturasiz
     sonuc.problemler = [
         {
             "oncelik": "YUKSEK",
@@ -715,6 +753,7 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
     ]
     sonuc.problemler.extend(kiralk_arac_problemleri(ka_ozet, ka_detay))
     sonuc.problemler.extend(kalem_detay_problemleri(kd_ozet, kd_kirilim))
+    sonuc.problemler.extend(fatura_detay_problemleri(fd_ozet, fd_detay))
     oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
     sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
     sonuc.uyarilar = ["Bu rapor ORNEK veri ile üretilmiştir — gerçek analiz için Windows sunucusunda çalıştırın."]

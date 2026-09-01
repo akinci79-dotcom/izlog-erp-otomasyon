@@ -91,3 +91,5 @@ KPI_BITIS_TARIHI = "31.01.2026"
 | Kiralık Araç Cari | Tedarikçi bazında filo özeti |
 | Kalem Detay | Sevk/yük kalem satırları (çoklu yük kırılımı) |
 | Sevk Yük Kırılım | Birden fazla yük taşıyan sevklerin kar/zarar özeti |
+| Fatura Detay | Sevk/yük kalemi ↔ fatura eşleşmesi |
+| Faturasız Kalemler | Fatura no'su olmayan satırlar |

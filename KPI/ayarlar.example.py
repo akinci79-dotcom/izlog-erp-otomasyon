@@ -30,3 +30,6 @@ KPI_KAPI_KAPI_HARIC = True
 
 # Kalem detay sayfası satır üst sınırı (sevk + yük kalemleri birlikte)
 KPI_KALEM_DETAY_LIMIT = 10000
+
+# Fatura detay sayfası satır üst sınırı
+KPI_FATURA_DETAY_LIMIT = 10000

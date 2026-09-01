@@ -342,6 +342,27 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             },
         )
 
+    if analiz.fatura_detay:
+        _veri_sayfasi(
+            wb,
+            "Fatura Detay",
+            [
+                "TIP", "SEVK_YUK_NO", "BELGE_TARIHI", "FATURA_NO", "FATURA_TARIHI",
+                "OPERASYON_KODU", "FATURA_ID", "KAYIT_ID",
+            ],
+            analiz.fatura_detay,
+        )
+
+    if analiz.faturasiz_kalemler:
+        _veri_sayfasi(
+            wb,
+            "Faturasız Kalemler",
+            [
+                "TIP", "SEVK_YUK_NO", "BELGE_TARIHI", "OPERASYON_KODU", "KAYIT_ID",
+            ],
+            analiz.faturasiz_kalemler,
+        )
+
     wb.save(dosya)
     return str(dosya.resolve())
 
