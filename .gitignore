@@ -4,11 +4,17 @@ __pycache__/
 venv/
 .venv/
 
-# CANLI — yük/sevk otomasyon çıktıları
+# CANLI — canlı otomasyon çıktıları
 CANLI/*.xlsx
 CANLI/yedek_*.xlsx
 CANLI/hata_*.png
 CANLI/debug_*.png
+
+# Test — sevk/yük otomasyon test çıktıları
+Test/*.xlsx
+Test/yedek_*.xlsx
+Test/hata_*.png
+Test/debug_*.png
 
 # KPI — analiz rapor çıktıları
 KPI/kpi_rapor*.xlsx

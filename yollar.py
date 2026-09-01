@@ -27,7 +27,7 @@ def _klasor_yolu(ayar_adi: str, varsayilan: str) -> str:
 
 
 def otomasyon_klasoru() -> str:
-    return _klasor_yolu("OTOMASYON_KLASORU", "CANLI")
+    return _klasor_yolu("OTOMASYON_KLASORU", "Test")
 
 
 def kpi_klasoru() -> str:
@@ -40,7 +40,9 @@ def raporlar_klasoru() -> str:
 
 
 def klasorleri_olustur():
-    """Gerekli alt klasörleri oluşturur (yoksa)."""
+    """Test, CANLI ve KPI klasörlerini oluşturur (yoksa)."""
+    for ad in ("Test", "CANLI", "KPI"):
+        os.makedirs(os.path.join(_PROJE_KOKU, ad), exist_ok=True)
     os.makedirs(otomasyon_klasoru(), exist_ok=True)
     os.makedirs(kpi_klasoru(), exist_ok=True)
 
