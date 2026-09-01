@@ -6,6 +6,7 @@ venv/
 
 islem_listesi.xlsx
 yedek_islem_listesi_*.xlsx
+kpi_rapor*.xlsx
 hata_*.png
 debug_*.png
 
