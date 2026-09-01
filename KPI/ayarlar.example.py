@@ -20,5 +20,10 @@ KPI_BITIS_TARIHI = "31.01.2026"
 # Çıktı dosyası — raporlar/ alt klasöründe oluşur
 KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 
-# Opsiyonel: sevk tablosunda yük eşleme kolonu (otomatik bulunamazsa elle girin)
-# KPI_SEVK_YUK_KOLONU = "L_GOODS_ID"
+# Opsiyonel firma/şube filtresi (Uyumsoft yük detay raporu ile aynı mantık)
+# Boş bırakılırsa tüm firma/şubeler dahil edilir.
+# CO_CODE = "IZLOG"
+# BRANCH_CODE = "MERKEZ"
+
+# Kapıdan kapıya yükleri hariç tut (rapor SQL'inde IS_DOOR_TO_DOOR = 0)
+KPI_KAPI_KAPI_HARIC = True

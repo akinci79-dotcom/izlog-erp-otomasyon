@@ -556,7 +556,15 @@ otomatik çalışır). DSN: `172.17.8.11:1521/UYUMSOFT`, kullanıcı: `uyumsoft`
 - `PSMT_INVOICE_M` — Fatura ana tablosu. `INVOICE_M_ID`, `DOC_NO` (Fatura no),
   `DOC_DATE` (Fatura tarihi). `LMST_L_GOODS_OP_DET.INVOICE_M_ID` üzerinden
   doğrudan bağlanıyor (ayrı bir detay tablosuna gerek yok).
-- `LMST_L_TRANSPORT` — Sevk tablosu. `TRANSPORT_NO` (Sevk no, `S-...`).
+- `LMST_L_TRANSPORT` — Sevk tablosu. `TRANSPORT_NO` (Sevk no, `S-...`),
+  `DOC_DATE` (sevk tarihi), `TRANSPORT_ID`.
+- `LMST_L_TRANS_GOODS_DETAIL` — Yük ↔ Sevk ara tablosu [DOĞRULANMIŞ, yük
+  bazında detay raporu SQL'i]. `TGD.GOODS_ID = YK.GOODS_ID`,
+  `TGD.TRANSPORT_ID = SK.TRANSPORT_ID`. Yük'süz sevk satırlarında
+  `TGD.GOODS_ID = 0`.
+- `LMST_L_TRANS_OP_DETAIL` — Sevk alış fiyat satırları [DOĞRULANMIŞ].
+  `PURCHASE_SALES_TYPE IN (1,3)` = alış, `(2,4)` = alış iade.
+  Bir sevkte birden fazla yük varsa alış tutarı `YUK_SAYISI` ile bölünür.
 
 `kaynak_yuk_verilerini_getir(kaynak_yuk_no)` şu sözleşmeyi (contract) döndürür:
 `{"PROJE_KODU": str, "YUK_TARIHI": "GG.AA.YYYY", "SATIS_SATIRLARI":
@@ -591,12 +599,17 @@ copy ayarlar.example.py ayarlar.py
 python kpi_rapor_olustur.py
 ```
 
-**Rapor KPI'ları** (doğrulanmış Oracle tablolarından):
-- Yük/sevk hacmi (`LMST_L_GOODS`, `LMST_L_TRANSPORT`)
-- Satış geliri (`LMST_L_GOODS_OP_DET`, PURCHASE_SALES_TYPE IN 2,4)
-- Fatura bağlama oranı (`PSMT_INVOICE_M`)
-- Proje/operasyon kırılımı
-- Brüt marj — `LMST_L_TRANSPORT_OP_DET` [VARSAYIM/TODO]
+**Rapor KPI'ları** (Uyumsoft yük bazında detay raporu SQL'i ile uyumlu
+[DOĞRULANMIŞ]):
+- Yük/sevk hacmi — `LMST_L_GOODS` + `LMST_L_TRANS_GOODS_DETAIL` +
+  `LMST_L_TRANSPORT`
+- Net satış geliri — `LMST_L_GOODS_OP_DET`: satış `(2,4)` − iade `(1,3)`
+- Fatura bağlama oranı — `PSMT_INVOICE_M` / `INVOICE_M_ID`
+- Proje/operasyon kırılımı — `LMSD_L_AGR_PROJ_TYPE`, `INVD_EXPENSE`
+- Brüt marj — net satış − sevk alış (`LMST_L_TRANS_OP_DETAIL`, yük başına
+  paylaştırılmış)
+- Opsiyonel filtreler: `GNLD_COMPANY.CO_CODE`, `GNLD_BRANCH.BRANCH_CODE`,
+  `YK.IS_DOOR_TO_DOOR = 0` (kapıdan kapıya hariç)
 
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,

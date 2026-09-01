@@ -3,6 +3,12 @@
 
 Otomasyon projesinden tamamen bağımsız; yalnızca KPI/ klasöründeki ayarlar.py
 ve oracle_baglanti.py kullanılır.
+
+Sevk ↔ yük ve fiyat tabloları Uyumsoft "yük bazında detay raporu" SQL'i ile
+uyumludur [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
+  LMST_L_TRANS_GOODS_DETAIL  (TGD.GOODS_ID ↔ YK, TGD.TRANSPORT_ID ↔ SK)
+  LMST_L_TRANS_OP_DETAIL     (sevk alış / alış iade)
+  LMST_L_GOODS_OP_DET        (yük satış / satış iade)
 """
 from __future__ import annotations
 
@@ -12,80 +18,7 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
-from oracle_baglanti import baglanti_yonet, tablo_kolonlari, tablo_var_mi
-
-
-def _kolon_adayindan_bul(kolonlar: list[str], adaylar: list[str]) -> str | None:
-    kolon_haritasi = {k.upper(): k for k in kolonlar}
-    for aday in adaylar:
-        if aday.upper() in kolon_haritasi:
-            return kolon_haritasi[aday.upper()]
-    return None
-
-
-def _transport_semasini_coz(cursor) -> dict:
-    """
-    LMST_L_TRANSPORT tablosunun gerçek kolon adlarını keşfeder.
-    İzlog ERP'de GOODS_ID değil L_GOODS_ID olabiliyor [DOĞRULANMIŞ — ORA-00904].
-    """
-    if not tablo_var_mi("LMST_L_TRANSPORT"):
-        return {"mevcut": False}
-
-    kolonlar = tablo_kolonlari(cursor, "LMST_L_TRANSPORT")
-
-    elle = getattr(ayarlar, "KPI_SEVK_YUK_KOLONU", None)
-    if elle and elle.upper() in {k.upper() for k in kolonlar}:
-        yuk_kolon = next(k for k in kolonlar if k.upper() == elle.upper())
-    else:
-        yuk_kolon = _kolon_adayindan_bul(
-            kolonlar,
-            ["L_GOODS_ID", "GOODS_ID", "LG_GOODS_ID", "SOURCE_GOODS_ID", "SOURCE_L_GOODS_ID"],
-        )
-        if not yuk_kolon:
-            for kolon in kolonlar:
-                if "GOODS" in kolon.upper():
-                    yuk_kolon = kolon
-                    break
-
-    tarih_kolon = _kolon_adayindan_bul(
-        kolonlar,
-        ["DOC_DATE", "DOCUMENT_DATE", "TRANSPORT_DATE", "TRANS_DATE"],
-    )
-
-    return {
-        "mevcut": True,
-        "yuk_kolon": yuk_kolon,
-        "tarih_kolon": tarih_kolon,
-        "kolonlar": kolonlar,
-    }
-
-
-def _sevk_sayisi_hesapla(cursor, bas, bit, transport_sema: dict) -> int:
-    if not transport_sema.get("mevcut"):
-        return 0
-
-    yuk_kolon = transport_sema.get("yuk_kolon")
-    if yuk_kolon:
-        sql = f"""
-            SELECT COUNT(DISTINCT T.TRANSPORT_ID) AS SEVK_SAYISI
-            FROM LMST_L_TRANSPORT T
-            JOIN LMST_L_GOODS YK ON YK.GOODS_ID = T.{yuk_kolon}
-            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-        """
-        cursor.execute(sql, {"bas": bas, "bit": bit})
-        return cursor.fetchone()[0]
-
-    tarih_kolon = transport_sema.get("tarih_kolon")
-    if tarih_kolon:
-        sql = f"""
-            SELECT COUNT(DISTINCT T.TRANSPORT_ID) AS SEVK_SAYISI
-            FROM LMST_L_TRANSPORT T
-            WHERE T.{tarih_kolon} BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-        """
-        cursor.execute(sql, {"bas": bas, "bit": bit})
-        return cursor.fetchone()[0]
-
-    return 0
+from oracle_baglanti import baglanti_yonet, tablo_var_mi
 
 
 def _decimal(deger) -> Decimal:
@@ -102,6 +35,49 @@ def _tarih_araligi():
     bas = getattr(ayarlar, "KPI_BASLANGIC_TARIHI", varsayilan_bas)
     bit = getattr(ayarlar, "KPI_BITIS_TARIHI", varsayilan_bit)
     return bas, bit
+
+
+def _bind_ortak(bas: str, bit: str) -> dict:
+    bind = {"bas": bas, "bit": bit}
+    co_code = getattr(ayarlar, "CO_CODE", None)
+    branch_code = getattr(ayarlar, "BRANCH_CODE", None)
+    if co_code:
+        bind["co_code"] = co_code
+    if branch_code:
+        bind["branch_code"] = branch_code
+    return bind
+
+
+def _yuk_filtre_sql(bind: dict | None = None) -> tuple[str, str]:
+    """
+    Yük (LMST_L_GOODS) sorguları için firma/şube/kapıdan kapıya filtreleri.
+    Returns: (extra_join_sql, extra_where_sql)
+    """
+    bind = bind if bind is not None else {}
+    joins: list[str] = []
+    wheres: list[str] = []
+
+    if getattr(ayarlar, "CO_CODE", None):
+        joins.append("JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID")
+        wheres.append("CO.CO_CODE = :co_code")
+    if getattr(ayarlar, "BRANCH_CODE", None):
+        joins.append("JOIN GNLD_BRANCH BR ON BR.BRANCH_ID = YK.BRANCH_ID")
+        wheres.append("BR.BRANCH_CODE = :branch_code")
+    if getattr(ayarlar, "KPI_KAPI_KAPI_HARIC", True):
+        wheres.append("YK.IS_DOOR_TO_DOOR = 0")
+
+    join_sql = "\n        ".join(joins)
+    where_sql = (" AND " + " AND ".join(wheres)) if wheres else ""
+    return join_sql, where_sql
+
+
+def _sevk_semasi_hazir() -> tuple[bool, str]:
+    """Gerekli sevk tablolarının varlığını kontrol eder."""
+    if not tablo_var_mi("LMST_L_TRANS_GOODS_DETAIL"):
+        return False, "LMST_L_TRANS_GOODS_DETAIL tablosu bulunamadı."
+    if not tablo_var_mi("LMST_L_TRANSPORT"):
+        return False, "LMST_L_TRANSPORT tablosu bulunamadı."
+    return True, ""
 
 
 @dataclass
@@ -122,19 +98,41 @@ def _satirlari_dict_yap(sutunlar, satirlar):
     return [dict(zip(sutunlar, satir)) for satir in satirlar]
 
 
-def _temel_hacim_kpi(cursor, bas, bit, transport_sema: dict):
-    """Yük ve sevk hacmi KPI'ları."""
+def _temel_hacim_kpi(cursor, bas, bit):
+    """Yük ve sevk hacmi KPI'ları (TGD üzerinden sevk eşlemesi)."""
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) AS YUK_SAYISI
-        FROM LMST_L_GOODS
-        WHERE DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        FROM LMST_L_GOODS YK
+        {yuk_join}
+        WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        {yuk_where}
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     yuk_sayisi = cursor.fetchone()[0]
 
-    sevk_sayisi = _sevk_sayisi_hesapla(cursor, bas, bit, transport_sema)
+    sevk_ok, _ = _sevk_semasi_hazir()
+    sevk_sayisi = 0
+    if sevk_ok:
+        cursor.execute(
+            f"""
+            SELECT COUNT(DISTINCT SK.TRANSPORT_ID) AS SEVK_SAYISI
+            FROM LMST_L_GOODS YK
+            JOIN LMST_L_TRANS_GOODS_DETAIL TGD
+              ON TGD.GOODS_ID = YK.GOODS_ID
+             AND TGD.GOODS_ID > 0
+            JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+            {yuk_join}
+            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+            {yuk_where}
+            """,
+            bind,
+        )
+        sevk_sayisi = cursor.fetchone()[0]
 
     sevk_orani = round(sevk_sayisi / yuk_sayisi * 100, 1) if yuk_sayisi else 0
 
@@ -142,28 +140,42 @@ def _temel_hacim_kpi(cursor, bas, bit, transport_sema: dict):
         "yuk_sayisi": yuk_sayisi,
         "sevk_sayisi": sevk_sayisi,
         "sevk_orani_yuzde": sevk_orani,
-        "yuk_basina_ortalama_gelir": Decimal("0"),  # gelir KPI'dan sonra güncellenir
+        "yuk_basina_ortalama_gelir": Decimal("0"),
     }
 
 
 def _gelir_kpi(cursor, bas, bit):
-    """Satış geliri ve operasyon/proje kırılımları."""
+    """
+    Net satış geliri ve fatura sağlığı.
+    Satış: PURCHASE_SALES_TYPE IN (2,4); iade: IN (1,3) — rapor YFT alt sorgusu ile uyumlu.
+    """
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT
-            NVL(SUM(OPDET.AMT), 0) AS TOPLAM_SATIS,
+            NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+            - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
+            AS TOPLAM_SATIS,
             COUNT(DISTINCT YK.GOODS_ID) AS GELIRLI_YUK_SAYISI,
             COUNT(*) AS SATIS_SATIR_SAYISI,
-            NVL(SUM(CASE WHEN OPDET.INVOICE_M_ID IS NULL THEN OPDET.AMT ELSE 0 END), 0) AS FATURASIZ_TUTAR,
-            NVL(SUM(CASE WHEN OPDET.INVOICE_M_ID IS NOT NULL THEN OPDET.AMT ELSE 0 END), 0) AS FATURALI_TUTAR,
-            COUNT(CASE WHEN OPDET.INVOICE_M_ID IS NULL THEN 1 END) AS FATURASIZ_SATIR,
-            COUNT(CASE WHEN OPDET.INVOICE_M_ID IS NOT NULL THEN 1 END) AS FATURALI_SATIR
+            NVL(SUM(CASE WHEN OPDET.INVOICE_M_ID IS NULL AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+                     THEN OPDET.AMT ELSE 0 END), 0) AS FATURASIZ_TUTAR,
+            NVL(SUM(CASE WHEN OPDET.INVOICE_M_ID IS NOT NULL AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+                     THEN OPDET.AMT ELSE 0 END), 0) AS FATURALI_TUTAR,
+            COUNT(CASE WHEN OPDET.INVOICE_M_ID IS NULL AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+                       THEN 1 END) AS FATURASIZ_SATIR,
+            COUNT(CASE WHEN OPDET.INVOICE_M_ID IS NOT NULL AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+                       THEN 1 END) AS FATURALI_SATIR
         FROM LMST_L_GOODS_OP_DET OPDET
         JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-          AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+          AND OPDET.PURCHASE_SALES_TYPE IN (1, 2, 3, 4)
+        {yuk_where}
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     row = cursor.fetchone()
     sutunlar = [c[0] for c in cursor.description]
@@ -172,6 +184,7 @@ def _gelir_kpi(cursor, bas, bit):
     toplam_satis = _decimal(veri["TOPLAM_SATIS"])
     satir_sayisi = veri["SATIS_SATIR_SAYISI"] or 0
     faturasiz_satir = veri["FATURASIZ_SATIR"] or 0
+    satis_satir = (veri["FATURALI_SATIR"] or 0) + faturasiz_satir
 
     return {
         "toplam_satis_geliri": toplam_satis,
@@ -180,92 +193,131 @@ def _gelir_kpi(cursor, bas, bit):
         "faturasiz_tutar": _decimal(veri["FATURASIZ_TUTAR"]),
         "faturali_tutar": _decimal(veri["FATURALI_TUTAR"]),
         "fatura_baglama_orani_yuzde": round(
-            (satir_sayisi - faturasiz_satir) / satir_sayisi * 100, 1
+            (veri["FATURALI_SATIR"] or 0) / satis_satir * 100, 1
         )
-        if satir_sayisi
+        if satis_satir
         else 0,
     }
 
 
 def _aylik_trend(cursor, bas, bit):
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             TO_CHAR(YK.DOC_DATE, 'YYYY-MM') AS AY,
             COUNT(DISTINCT YK.GOODS_ID) AS YUK_SAYISI,
-            NVL(SUM(OPDET.AMT), 0) AS SATIS_GELIRI
+            NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+            - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
+            AS SATIS_GELIRI
         FROM LMST_L_GOODS YK
         LEFT JOIN LMST_L_GOODS_OP_DET OPDET
             ON OPDET.GOODS_ID = YK.GOODS_ID
-           AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+           AND OPDET.PURCHASE_SALES_TYPE IN (1, 2, 3, 4)
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        {yuk_where}
         GROUP BY TO_CHAR(YK.DOC_DATE, 'YYYY-MM')
         ORDER BY 1
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     sutunlar = [c[0] for c in cursor.description]
     return _satirlari_dict_yap(sutunlar, cursor.fetchall())
 
 
 def _proje_performans(cursor, bas, bit):
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             NVL(P.PROJECT_CODE, '(Proje Yok)') AS PROJE_KODU,
             COUNT(DISTINCT YK.GOODS_ID) AS YUK_SAYISI,
-            NVL(SUM(OPDET.AMT), 0) AS SATIS_GELIRI,
+            NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+            - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
+            AS SATIS_GELIRI,
             ROUND(
-                NVL(SUM(OPDET.AMT), 0) * 100.0
-                / NULLIF(SUM(SUM(OPDET.AMT)) OVER (), 0),
+                (NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+                 - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0))
+                * 100.0
+                / NULLIF(
+                    SUM(
+                        SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END)
+                        - SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END)
+                    ) OVER (),
+                    0
+                ),
                 1
             ) AS GELIR_PAYI_YUZDE
         FROM LMST_L_GOODS YK
         LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
         LEFT JOIN LMST_L_GOODS_OP_DET OPDET
             ON OPDET.GOODS_ID = YK.GOODS_ID
-           AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+           AND OPDET.PURCHASE_SALES_TYPE IN (1, 2, 3, 4)
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+        {yuk_where}
         GROUP BY NVL(P.PROJECT_CODE, '(Proje Yok)')
         ORDER BY SATIS_GELIRI DESC
         FETCH FIRST 20 ROWS ONLY
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     sutunlar = [c[0] for c in cursor.description]
     return _satirlari_dict_yap(sutunlar, cursor.fetchall())
 
 
 def _operasyon_dagilimi(cursor, bas, bit):
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             NVL(HK.EXPENSE_CODE, 'BILINMIYOR') AS OPERASYON_KODU,
             COUNT(*) AS SATIR_SAYISI,
-            NVL(SUM(OPDET.AMT), 0) AS TOPLAM_TUTAR,
+            NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+            - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
+            AS TOPLAM_TUTAR,
             ROUND(
-                NVL(SUM(OPDET.AMT), 0) * 100.0
-                / NULLIF(SUM(SUM(OPDET.AMT)) OVER (), 0),
+                (NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
+                 - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0))
+                * 100.0
+                / NULLIF(
+                    SUM(
+                        SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END)
+                        - SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END)
+                    ) OVER (),
+                    0
+                ),
                 1
             ) AS GELIR_PAYI_YUZDE
         FROM LMST_L_GOODS_OP_DET OPDET
         JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
         LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = OPDET.OPERATION_ID
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-          AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+          AND OPDET.PURCHASE_SALES_TYPE IN (1, 2, 3, 4)
+        {yuk_where}
         GROUP BY NVL(HK.EXPENSE_CODE, 'BILINMIYOR')
         ORDER BY TOPLAM_TUTAR DESC
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     sutunlar = [c[0] for c in cursor.description]
     return _satirlari_dict_yap(sutunlar, cursor.fetchall())
 
 
 def _fatura_gecikmesi(cursor, bas, bit):
-    """Yük tarihi ile fatura tarihi arasındaki gün farkı."""
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
     cursor.execute(
-        """
+        f"""
         SELECT
             ROUND(AVG(INV.DOC_DATE - YK.DOC_DATE), 1) AS ORT_GECIKME_GUN,
             ROUND(MAX(INV.DOC_DATE - YK.DOC_DATE), 0) AS MAX_GECIKME_GUN,
@@ -273,10 +325,12 @@ def _fatura_gecikmesi(cursor, bas, bit):
         FROM LMST_L_GOODS_OP_DET OPDET
         JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
         JOIN PSMT_INVOICE_M INV ON INV.INVOICE_M_ID = OPDET.INVOICE_M_ID
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
           AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
+        {yuk_where}
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     row = cursor.fetchone()
     if not row or row[2] == 0:
@@ -289,48 +343,67 @@ def _fatura_gecikmesi(cursor, bas, bit):
     }
 
 
-def _marj_analizi(cursor, bas, bit, transport_sema: dict):
+def _marj_analizi(cursor, bas, bit):
     """
-    Brüt marj: satış geliri − sevk alış maliyeti.
-    Sevk maliyeti LMST_L_TRANSPORT_OP_DET tablosundan okunur [VARSAYIM/TODO:
-    tablo/kolon adı Uyumsoft lojistik modülüyle uyumludur].
+    Brüt marj: net satış − sevk alış maliyeti (yük başına paylaştırılmış).
+    Tablolar: LMST_L_GOODS_OP_DET (satış), LMST_L_TRANS_OP_DETAIL (alış),
+    LMST_L_TRANS_GOODS_DETAIL (yük↔sevk), YUK_SAYISI CTE (rapor SQL'i ile aynı mantık).
     """
-    if not tablo_var_mi("LMST_L_TRANSPORT_OP_DET"):
+    if not tablo_var_mi("LMST_L_TRANS_OP_DETAIL"):
         return {
             "mevcut": False,
-            "mesaj": "LMST_L_TRANSPORT_OP_DET tablosu bulunamadı — marj KPI atlandı.",
+            "mesaj": "LMST_L_TRANS_OP_DETAIL tablosu bulunamadı — marj KPI atlandı.",
         }
 
-    yuk_kolon = transport_sema.get("yuk_kolon")
-    if not yuk_kolon:
-        return {
-            "mevcut": False,
-            "mesaj": (
-                "LMST_L_TRANSPORT ↔ yük eşleme kolonu bulunamadı — marj KPI atlandı. "
-                f"Mevcut kolonlar: {', '.join(transport_sema.get('kolonlar', [])[:12])}..."
-            ),
-        }
+    sevk_ok, sevk_mesaj = _sevk_semasi_hazir()
+    if not sevk_ok:
+        return {"mevcut": False, "mesaj": sevk_mesaj}
 
-    sql = f"""
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+
+    cursor.execute(
+        f"""
+        WITH YUK_SAYISI AS (
+            SELECT TGD.TRANSPORT_ID, COUNT(*) AS YUK_ADEDI
+            FROM LMST_L_TRANS_GOODS_DETAIL TGD
+            WHERE TGD.GOODS_ID > 0
+            GROUP BY TGD.TRANSPORT_ID
+        ),
+        YFT AS (
+            SELECT
+                GOD.GOODS_ID,
+                SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (2, 4) THEN GOD.AMT ELSE 0 END) AS SATIS,
+                SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (1, 3) THEN GOD.AMT ELSE 0 END) AS SATIS_IADE
+            FROM LMST_L_GOODS_OP_DET GOD
+            GROUP BY GOD.GOODS_ID
+        ),
+        SFT AS (
+            SELECT
+                TGD.GOODS_ID,
+                SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (1, 3) THEN TOD.AMT ELSE 0 END)
+                    / NVL(YS.YUK_ADEDI, 1) AS ALIS,
+                SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (2, 4) THEN TOD.AMT ELSE 0 END)
+                    / NVL(YS.YUK_ADEDI, 1) AS ALIS_IADE
+            FROM LMST_L_TRANS_GOODS_DETAIL TGD
+            JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+            JOIN LMST_L_TRANS_OP_DETAIL TOD ON TOD.TRANSPORT_ID = SK.TRANSPORT_ID
+            LEFT JOIN YUK_SAYISI YS ON YS.TRANSPORT_ID = SK.TRANSPORT_ID
+            WHERE TGD.GOODS_ID > 0
+            GROUP BY TGD.GOODS_ID, NVL(YS.YUK_ADEDI, 1)
+        )
         SELECT
-            NVL(SUM(satis.AMT), 0) AS TOPLAM_SATIS,
-            NVL(SUM(alış.AMT), 0) AS TOPLAM_ALIS
+            NVL(SUM(NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0)), 0) AS TOPLAM_SATIS,
+            NVL(SUM(NVL(SFT.ALIS, 0) - NVL(SFT.ALIS_IADE, 0)), 0) AS TOPLAM_ALIS
         FROM LMST_L_GOODS YK
-        LEFT JOIN (
-            SELECT GOODS_ID, SUM(AMT) AS AMT
-            FROM LMST_L_GOODS_OP_DET
-            WHERE PURCHASE_SALES_TYPE IN (2, 4)
-            GROUP BY GOODS_ID
-        ) satis ON satis.GOODS_ID = YK.GOODS_ID
-        LEFT JOIN LMST_L_TRANSPORT T ON T.{yuk_kolon} = YK.GOODS_ID
-        LEFT JOIN (
-            SELECT TRANSPORT_ID, SUM(AMT) AS AMT
-            FROM LMST_L_TRANSPORT_OP_DET
-            GROUP BY TRANSPORT_ID
-        ) alış ON alış.TRANSPORT_ID = T.TRANSPORT_ID
+        LEFT JOIN YFT ON YFT.GOODS_ID = YK.GOODS_ID
+        LEFT JOIN SFT ON SFT.GOODS_ID = YK.GOODS_ID
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-    """
-    cursor.execute(sql, {"bas": bas, "bit": bit})
+        {yuk_where}
+        """,
+        bind,
+    )
     row = cursor.fetchone()
     toplam_satis = _decimal(row[0])
     toplam_alis = _decimal(row[1])
@@ -346,11 +419,9 @@ def _marj_analizi(cursor, bas, bit, transport_sema: dict):
     }
 
 
-def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transport_sema: dict):
-    """Üst yönetimin odaklanması gereken operasyonel problemler."""
+def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
     problemler = []
 
-    # 1) Faturasız satış satırları
     if ozet.get("fatura_baglama_orani_yuzde", 100) < 95:
         problemler.append(
             {
@@ -365,7 +436,6 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
             }
         )
 
-    # 2) Sevk oranı düşük
     if ozet.get("yuk_sayisi", 0) > 0 and ozet.get("sevk_orani_yuzde", 100) < 90:
         problemler.append(
             {
@@ -380,7 +450,6 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
             }
         )
 
-    # 3) Proje konsantrasyon riski
     if proje_listesi:
         top3_pay = sum(_decimal(p.get("GELIR_PAYI_YUZDE", 0)) for p in proje_listesi[:3])
         if top3_pay > 60:
@@ -395,32 +464,38 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
                 }
             )
 
-    # 4) Negatif / düşük marj
     if marj.get("mevcut") and marj.get("brut_marj_orani_yuzde", 0) < 10:
         problemler.append(
             {
                 "oncelik": "YUKSEK",
                 "kategori": "Karlılık",
                 "baslik": "Brüt marj oranı kritik seviyede",
-                "detay": f"Brüt marj oranı: %{marj['brut_marj_orani_yuzde']} (satış − sevk alış)",
+                "detay": f"Brüt marj oranı: %{marj['brut_marj_orani_yuzde']} (net satış − sevk alış)",
                 "aksiyon": "Düşük marjlı yükleri proje/operasyon bazında analiz edin; fiyatlandırma revizyonu değerlendirin.",
             }
         )
 
-    # 5) Sevki olmayan yükler
-    yuk_kolon = transport_sema.get("yuk_kolon")
-    if transport_sema.get("mevcut") and yuk_kolon:
-        sql = f"""
+    sevk_ok, _ = _sevk_semasi_hazir()
+    if sevk_ok:
+        bind = _bind_ortak(bas, bit)
+        yuk_join, yuk_where = _yuk_filtre_sql(bind)
+        cursor.execute(
+            f"""
             SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
             FROM LMST_L_GOODS YK
             LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
-            LEFT JOIN LMST_L_TRANSPORT T ON T.{yuk_kolon} = YK.GOODS_ID
+            LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD
+              ON TGD.GOODS_ID = YK.GOODS_ID
+             AND TGD.GOODS_ID > 0
+            {yuk_join}
             WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-              AND T.TRANSPORT_ID IS NULL
+              AND TGD.TRANSPORT_ID IS NULL
+            {yuk_where}
             ORDER BY YK.DOC_DATE DESC
             FETCH FIRST 50 ROWS ONLY
-        """
-        cursor.execute(sql, {"bas": bas, "bit": bit})
+            """,
+            bind,
+        )
         sevksiz = cursor.fetchall()
         if sevksiz:
             problemler.append(
@@ -433,17 +508,20 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
                 }
             )
 
-    # 6) Sıfır tutarlı satış satırları
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*)
         FROM LMST_L_GOODS_OP_DET OPDET
         JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
+        {yuk_join}
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
           AND OPDET.PURCHASE_SALES_TYPE IN (2, 4)
           AND NVL(OPDET.AMT, 0) = 0
+        {yuk_where}
         """,
-        {"bas": bas, "bit": bit},
+        bind,
     )
     sifir_tutar = cursor.fetchone()[0]
     if sifir_tutar > 0:
@@ -463,15 +541,13 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
 
 
 def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
-    """Oracle'dan KPI verilerini çeker ve analiz sonucunu döner."""
     bas, bit = baslangic or _tarih_araligi()[0], bitis or _tarih_araligi()[1]
     sonuc = KpiAnalizSonucu(baslangic=bas, bitis=bit)
 
     with baglanti_yonet() as baglanti:
         cursor = baglanti.cursor()
-        transport_sema = _transport_semasini_coz(cursor)
 
-        hacim = _temel_hacim_kpi(cursor, bas, bit, transport_sema)
+        hacim = _temel_hacim_kpi(cursor, bas, bit)
         gelir = _gelir_kpi(cursor, bas, bit)
 
         yuk_sayisi = hacim["yuk_sayisi"] or 0
@@ -489,28 +565,25 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         sonuc.proje_performans = _proje_performans(cursor, bas, bit)
         sonuc.operasyon_dagilimi = _operasyon_dagilimi(cursor, bas, bit)
         sonuc.fatura_sagligi = _fatura_gecikmesi(cursor, bas, bit)
-        sonuc.marj_analizi = _marj_analizi(cursor, bas, bit, transport_sema)
+        sonuc.marj_analizi = _marj_analizi(cursor, bas, bit)
 
-        if transport_sema.get("mevcut") and transport_sema.get("yuk_kolon"):
-            sonuc.uyarilar.append(
-                f"Sevk-yük eşlemesi: LMST_L_TRANSPORT.{transport_sema['yuk_kolon']} kullanıldı."
-            )
-        elif transport_sema.get("mevcut"):
-            sonuc.uyarilar.append(
-                "LMST_L_TRANSPORT'ta yük eşleme kolonu bulunamadı — sevk KPI'ları kısıtlı."
-            )
+        if getattr(ayarlar, "CO_CODE", None):
+            sonuc.uyarilar.append(f"Firma filtresi: CO_CODE = {ayarlar.CO_CODE}")
+        if getattr(ayarlar, "BRANCH_CODE", None):
+            sonuc.uyarilar.append(f"Şube filtresi: BRANCH_CODE = {ayarlar.BRANCH_CODE}")
+        if getattr(ayarlar, "KPI_KAPI_KAPI_HARIC", True):
+            sonuc.uyarilar.append("Kapıdan kapıya yükler hariç (IS_DOOR_TO_DOOR = 0).")
         if not sonuc.marj_analizi.get("mevcut"):
             sonuc.uyarilar.append(sonuc.marj_analizi.get("mesaj", "Marj analizi atlandı."))
 
         sonuc.problemler = _problemleri_tespit_et(
-            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi, transport_sema
+            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
         )
 
     return sonuc
 
 
 def ornek_analiz_sonucu() -> KpiAnalizSonucu:
-    """Oracle bağlantısı olmadan rapor şablonunu test etmek için örnek veri."""
     sonuc = KpiAnalizSonucu(
         baslangic="01.01.2026",
         bitis="31.01.2026",
