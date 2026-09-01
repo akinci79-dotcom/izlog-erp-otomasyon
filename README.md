@@ -23,6 +23,9 @@ kesilse veya hata alsa bile bir sonraki çalıştırmada kalınan yerden devam e
 | `oracle_okuyucu.py` | Oracle'dan yük/satış/fatura verisini çeken ve başarılı kayıtların "iz"ini temizleyen katman |
 | `excel_olustur.py` | `islem_listesi.xlsx` şablonunu sıfırdan oluşturur |
 | `fatura_bul.py` | Oracle şemasında fatura tablolarını keşfetmek için tek seferlik yardımcı script |
+| `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı katmanı |
+| `kpi_analiz.py` | ERP'den KPI verilerini çeker, operasyonel problemleri tespit eder |
+| `kpi_rapor_olustur.py` | Üst yönetim Excel KPI raporu üretir |
 
 ## Kurulum (Windows sunucusu)
 
@@ -108,6 +111,38 @@ python izlog_yuk_otomasyon.py
 - Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
   ile veritabanında "iz temizliği" (create/update kullanıcı ve tarih alanlarının
   Uyumsoft standardına sıfırlanması) yapılır. `DRY_RUN` aktifken bu adım da atlanır.
+
+## KPI Analiz ve Üst Yönetim Raporu
+
+Oracle'dan operasyonel/finansal göstergeleri çekip Excel raporu üretir.
+**Windows sunucusunda** çalıştırın (`ayarlar.py` içinde Oracle bağlantı bilgileri dolu olmalı).
+
+`ayarlar.py` içinde dönem aralığını ayarlayın:
+
+```python
+KPI_BASLANGIC_TARIHI = "01.01.2026"
+KPI_BITIS_TARIHI = "31.01.2026"
+KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
+```
+
+```powershell
+python kpi_rapor_olustur.py
+```
+
+Rapor içeriği:
+
+| Sayfa | İçerik |
+|---|---|
+| Yönetici Özeti | Yük/sevk hacmi, satış geliri, fatura oranı, brüt marj, problem listesi |
+| Aylık Trend | Aylık yük sayısı ve satış geliri |
+| Proje Performansı | Top 20 proje — gelir ve pay |
+| Operasyon Dağılımı | NAVLUN, UĞRAMA vb. operasyon kodu kırılımı |
+
+Şablonu Oracle olmadan test etmek için:
+
+```powershell
+python kpi_rapor_olustur.py --ornek
+```
 
 ## Bu sürümde yapılan düzeltme
 

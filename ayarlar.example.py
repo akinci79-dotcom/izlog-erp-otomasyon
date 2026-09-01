@@ -51,3 +51,12 @@ HEDEF_KULLANICI_ID = 11310
 # çalışmada klasörü hızla debug_*.png dosyalarıyla dolduruyor. Yeni bir
 # hata türü araştırılırken geçici olarak True yapılabilir.
 TESHIS_EKRAN_GORUNTUSU_AL = False
+
+# 5. KPI ANALİZ VE ÜST YÖNETİM RAPORU AYARLARI
+# Tarih formatı: DD.MM.YYYY
+KPI_BASLANGIC_TARIHI = "01.01.2026"
+KPI_BITIS_TARIHI = "31.01.2026"
+KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
+
+# Windows sunucusunda Oracle Instant Client yolu (oracle_baglanti.py tarafından kullanılır)
+ORACLE_CLIENT_LIB_DIR = r"C:\instantclient\instantclient_19_32"

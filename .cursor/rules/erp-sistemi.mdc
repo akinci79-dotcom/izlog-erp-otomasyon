@@ -570,6 +570,36 @@ değerlerine (`01.01.0001` / `0`) döndürür. `DRY_RUN` aktifken tamamen atlan�
 **Fatura tablolarını keşfetmek için kullanılan yardımcı script**: `fatura_bul.py`
 (`all_objects` üzerinden `%INVOICE_M` / `FIND_INVOICE%` desenli tablo/görünüm arar).
 
+## KPI Analiz ve Üst Yönetim Raporu [DOĞRULANMIŞ — kod incelemesi, canlı Oracle testi bekliyor]
+
+Windows sunucusunda Oracle'a bağlanarak üst yönetim KPI raporu üretir:
+
+| Dosya | Görevi |
+|---|---|
+| `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı (Thick Mode Windows) |
+| `kpi_analiz.py` | KPI sorguları + operasyonel problem tespiti |
+| `kpi_rapor_olustur.py` | Çok sayfalı Excel rapor (`kpi_rapor.xlsx`) |
+
+Çalıştırma: `python kpi_rapor_olustur.py` (dönem `ayarlar.py` →
+`KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI`). Şablon testi:
+`python kpi_rapor_olustur.py --ornek`.
+
+**Rapor KPI'ları** (doğrulanmış tablolardan):
+- Yük/sevk hacmi ve sevk tamamlama oranı (`LMST_L_GOODS`, `LMST_L_TRANSPORT`)
+- Satış geliri, yük başına ortalama gelir (`LMST_L_GOODS_OP_DET`, PURCHASE_SALES_TYPE IN 2,4)
+- Fatura bağlama oranı ve ortalama fatura gecikmesi (`PSMT_INVOICE_M`)
+- Proje bazlı gelir dağılımı (`LMSD_L_AGR_PROJ_TYPE`)
+- Operasyon kodu kırılımı (`INVD_EXPENSE.EXPENSE_CODE`)
+- Brüt marj (satış − sevk alış) — `LMST_L_TRANSPORT_OP_DET` [VARSAYIM/TODO, tablo adı henüz canlı teyit edilmedi]
+
+**Otomatik problem tespiti** (Yönetici Özeti sayfasına yazılır):
+- Fatura bağlama oranı <%95
+- Sevk oranı <%90
+- Proje konsantrasyonu (top 3 proje >%60 gelir)
+- Brüt marj <%10
+- Sevki olmayan yükler
+- Sıfır tutarlı satış satırları
+
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,
 Türkçe özel karakterlerin (ğ, ü, ş, ı, ö, ç, İ) bozulmasına yol açabiliyor
