@@ -421,7 +421,6 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, transpor
             FETCH FIRST 50 ROWS ONLY
         """
         cursor.execute(sql, {"bas": bas, "bit": bit})
-        cursor.execute(sql, {"bas": bas, "bit": bit})
         sevksiz = cursor.fetchall()
         if sevksiz:
             problemler.append(
@@ -470,8 +469,9 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
 
     with baglanti_yonet() as baglanti:
         cursor = baglanti.cursor()
+        transport_sema = _transport_semasini_coz(cursor)
 
-        hacim = _temel_hacim_kpi(cursor, bas, bit)
+        hacim = _temel_hacim_kpi(cursor, bas, bit, transport_sema)
         gelir = _gelir_kpi(cursor, bas, bit)
 
         yuk_sayisi = hacim["yuk_sayisi"] or 0
@@ -489,17 +489,21 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         sonuc.proje_performans = _proje_performans(cursor, bas, bit)
         sonuc.operasyon_dagilimi = _operasyon_dagilimi(cursor, bas, bit)
         sonuc.fatura_sagligi = _fatura_gecikmesi(cursor, bas, bit)
-        sonuc.marj_analizi = _marj_analizi(cursor, bas, bit)
+        sonuc.marj_analizi = _marj_analizi(cursor, bas, bit, transport_sema)
 
-        if not tablo_var_mi("LMST_L_TRANSPORT"):
+        if transport_sema.get("mevcut") and transport_sema.get("yuk_kolon"):
             sonuc.uyarilar.append(
-                "LMST_L_TRANSPORT tablosu okunamadı — sevk KPI'ları kısıtlı."
+                f"Sevk-yük eşlemesi: LMST_L_TRANSPORT.{transport_sema['yuk_kolon']} kullanıldı."
+            )
+        elif transport_sema.get("mevcut"):
+            sonuc.uyarilar.append(
+                "LMST_L_TRANSPORT'ta yük eşleme kolonu bulunamadı — sevk KPI'ları kısıtlı."
             )
         if not sonuc.marj_analizi.get("mevcut"):
             sonuc.uyarilar.append(sonuc.marj_analizi.get("mesaj", "Marj analizi atlandı."))
 
         sonuc.problemler = _problemleri_tespit_et(
-            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
+            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi, transport_sema
         )
 
     return sonuc

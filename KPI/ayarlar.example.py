@@ -19,3 +19,6 @@ KPI_BITIS_TARIHI = "31.01.2026"
 
 # Çıktı dosyası — raporlar/ alt klasöründe oluşur
 KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
+
+# Opsiyonel: sevk tablosunda yük eşleme kolonu (otomatik bulunamazsa elle girin)
+# KPI_SEVK_YUK_KOLONU = "L_GOODS_ID"
