@@ -51,28 +51,3 @@ HEDEF_KULLANICI_ID = 11310
 # çalışmada klasörü hızla debug_*.png dosyalarıyla dolduruyor. Yeni bir
 # hata türü araştırılırken geçici olarak True yapılabilir.
 TESHIS_EKRAN_GORUNTUSU_AL = False
-
-# 5. KPI ANALİZ VE ÜST YÖNETİM RAPORU AYARLARI
-# Tarih formatı: DD.MM.YYYY
-KPI_BASLANGIC_TARIHI = "01.01.2026"
-KPI_BITIS_TARIHI = "31.01.2026"
-KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"  # KPI/ klasörü içinde oluşur
-
-# 6. KLASÖR YAPISI
-# Proje kökü: C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon
-#
-# Üç bağımsız iş hattı:
-#   Test/   — Yük/sevk otomasyon geliştirme ve sevk testleri (UAT)
-#   CANLI/  — Onaylanmış otomasyon; sevk testleri geçince buraya geçilir
-#   KPI/    — KPI analiz ve raporlar; otomasyondan TAMAMEN bağımsız
-#
-# Sevk testleri devam ederken:
-OTOMASYON_KLASORU = "Test"
-# Canlıya geçince yalnızca bu satırı değiştirin (kod taşımaya gerek yok):
-# OTOMASYON_KLASORU = "CANLI"
-#
-KPI_KLASORU = "KPI"                   # Her zaman KPI/ — Test/CANLI ile karışmaz
-ISLEM_LISTESI_DOSYASI = "islem_listesi.xlsx"
-
-# Windows sunucusunda Oracle Instant Client yolu (oracle_baglanti.py tarafından kullanılır)
-ORACLE_CLIENT_LIB_DIR = r"C:\instantclient\instantclient_19_32"

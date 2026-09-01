@@ -23,39 +23,6 @@ kesilse veya hata alsa bile bir sonraki çalıştırmada kalınan yerden devam e
 | `oracle_okuyucu.py` | Oracle'dan yük/satış/fatura verisini çeken ve başarılı kayıtların "iz"ini temizleyen katman |
 | `excel_olustur.py` | `islem_listesi.xlsx` şablonunu sıfırdan oluşturur |
 | `fatura_bul.py` | Oracle şemasında fatura tablolarını keşfetmek için tek seferlik yardımcı script |
-| `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı katmanı |
-| `KPI/kpi_analiz.py` | ERP'den KPI verilerini çeker, operasyonel problemleri tespit eder |
-| `KPI/kpi_rapor_olustur.py` | Üst yönetim Excel KPI raporu üretir |
-| `yollar.py` | CANLI/KPI klasör yollarını merkezi yönetir |
-| `klasorleri_olustur.py` | `CANLI/` ve `KPI/` klasörlerini oluşturur |
-
-## Klasör yapısı
-
-Proje kökü (örnek): `C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon`
-
-```
-Cursor ERP Otomasyon/
-├── CANLI/                  ← Yük/sevk otomasyonu (Excel, ekran görüntüleri)
-│   ├── islem_listesi.xlsx
-│   ├── yedek_islem_listesi_*.xlsx
-│   ├── debug_*.png
-│   └── hata_*.png
-├── KPI/                    ← KPI analiz scriptleri ve raporlar
-│   ├── kpi_analiz.py
-│   ├── kpi_rapor_olustur.py
-│   └── kpi_rapor.xlsx
-├── Test/                   ← (sizin test klasörünüz — opsiyonel)
-├── izlog_yuk_otomasyon.py
-└── ayarlar.py              ← pull ile değişmez (sizin dosyanız)
-```
-
-Pull sonrası bir kez:
-
-```powershell
-python klasorleri_olustur.py
-```
-
-Eski kurulumda `islem_listesi.xlsx` repo kökündeyse `CANLI\` klasörüne taşıyın.
 
 ## Kurulum (Windows sunucusu)
 
@@ -86,7 +53,7 @@ Sonra `ayarlar.py` içindeki `DB_SIFRE` ve `ERP_SIFRE` alanlarını gerçek
 python excel_olustur.py
 ```
 
-`CANLI/islem_listesi.xlsx` şu kolonlarla oluşturulur:
+`islem_listesi.xlsx` şu kolonlarla oluşturulur:
 
 | Sütun | İçerik |
 |---|---|
@@ -135,44 +102,12 @@ python izlog_yuk_otomasyon.py
     çalışırken dikkat edilmesi gereken bir durum.
 - Gerçek kayıt/veritabanı işlemleri için `DRY_RUN = False` yapın (`DERIN_TEST_MODU`
   bu durumda etkisizdir).
-- Hata durumunda ilgili satırın ekran görüntüsü (`CANLI/hata_<yükno>_<saat>.png`)
+- Hata durumunda ilgili satırın ekran görüntüsü (`hata_<yükno>_<saat>.png`)
   alınır ve hata mesajı Excel'e yazılır; otomasyon güvenli şekilde bir
   sonraki satıra geçer.
 - Başarılı Yük/Sevk kayıtları sonunda `oracle_okuyucu.yeni_kayitlari_veritabaninda_guncelle()`
   ile veritabanında "iz temizliği" (create/update kullanıcı ve tarih alanlarının
   Uyumsoft standardına sıfırlanması) yapılır. `DRY_RUN` aktifken bu adım da atlanır.
-
-## KPI Analiz ve Üst Yönetim Raporu
-
-Oracle'dan operasyonel/finansal göstergeleri çekip Excel raporu üretir.
-**Windows sunucusunda** çalıştırın (`ayarlar.py` içinde Oracle bağlantı bilgileri dolu olmalı).
-
-`ayarlar.py` içinde dönem aralığını ayarlayın:
-
-```python
-KPI_BASLANGIC_TARIHI = "01.01.2026"
-KPI_BITIS_TARIHI = "31.01.2026"
-KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
-```
-
-```powershell
-python KPI/kpi_rapor_olustur.py
-```
-
-Rapor `KPI/kpi_rapor.xlsx` dosyasına yazılır.
-
-| Sayfa | İçerik |
-|---|---|
-| Yönetici Özeti | Yük/sevk hacmi, satış geliri, fatura oranı, brüt marj, problem listesi |
-| Aylık Trend | Aylık yük sayısı ve satış geliri |
-| Proje Performansı | Top 20 proje — gelir ve pay |
-| Operasyon Dağılımı | NAVLUN, UĞRAMA vb. operasyon kodu kırılımı |
-
-Şablonu Oracle olmadan test etmek için:
-
-```powershell
-python KPI/kpi_rapor_olustur.py --ornek
-```
 
 ## Bu sürümde yapılan düzeltme
 
@@ -191,3 +126,8 @@ bir fark olduğunda satır bulunamıyor ve akış hata veriyordu. Bu sürümde:
 - `wait_for_load_state("networkidle")` çağrıları, ERP'nin sürekli arka plan
   isteği attığı durumlarda sonsuz beklemeye/timeout'a düşmesin diye güvenli bir
   yedek beklemeyle sarmalandı (`_agsakinligini_bekle`).
+
+## KPI Analiz (ayrı modül)
+
+Üst yönetim KPI raporu **otomasyondan bağımsız** `KPI/` klasöründedir.
+Otomasyon dosyalarına dokunmaz. Bkz. [`KPI/README.md`](KPI/README.md).

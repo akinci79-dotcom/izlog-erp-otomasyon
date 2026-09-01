@@ -1,19 +1,17 @@
 """
 Üst yönetim KPI Excel raporu oluşturucu.
 
-Kullanım (proje kökünden):
-  python KPI/kpi_rapor_olustur.py              # Oracle'dan canlı veri
-  python KPI/kpi_rapor_olustur.py --ornek      # Örnek veri ile şablon testi
+Kullanım (KPI klasöründen):
+  cd KPI
+  python kpi_rapor_olustur.py              # Oracle'dan canlı veri
+  python kpi_rapor_olustur.py --ornek      # Örnek veri ile şablon testi
 """
 from __future__ import annotations
 
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
-
-_PROJE_KOKU = Path(__file__).resolve().parent.parent
-if str(_PROJE_KOKU) not in sys.path:
-    sys.path.insert(0, str(_PROJE_KOKU))
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -21,7 +19,21 @@ from openpyxl.utils import get_column_letter
 
 import ayarlar
 from kpi_analiz import KpiAnalizSonucu, kpi_analizi_yap, ornek_analiz_sonucu
-from yollar import klasorleri_olustur, kpi_rapor_yolu
+
+_KPI_KOKU = Path(__file__).resolve().parent
+
+
+def _raporlar_klasoru() -> Path:
+    klasor = _KPI_KOKU / "raporlar"
+    klasor.mkdir(exist_ok=True)
+    return klasor
+
+
+def _kpi_rapor_yolu(dosya_adi: str | None = None) -> Path:
+    dosya = dosya_adi or getattr(ayarlar, "KPI_RAPOR_DOSYASI", "kpi_rapor.xlsx")
+    if os.path.isabs(dosya):
+        return Path(dosya)
+    return _raporlar_klasoru() / dosya
 
 
 # --- Stil sabitleri ---
@@ -207,9 +219,9 @@ def _veri_sayfasi(wb, baslik, sutunlar, satirlar, deger_formatlayici=None):
     return ws
 
 
-def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | None = None) -> str:
-    klasorleri_olustur()
-    dosya = dosya_adi or kpi_rapor_yolu()
+def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) -> str:
+    dosya = Path(dosya_adi) if dosya_adi else _kpi_rapor_yolu()
+    dosya.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
 
     yonetici_ozeti_sayfasi(wb, analiz)
@@ -242,7 +254,7 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | None = None) -> str:
         )
 
     wb.save(dosya)
-    return str(Path(dosya).resolve())
+    return str(dosya.resolve())
 
 
 def main():
@@ -251,11 +263,11 @@ def main():
     if ornek_mod:
         print("Örnek veri ile KPI raporu oluşturuluyor...")
         analiz = ornek_analiz_sonucu()
-        dosya = kpi_rapor_yolu("kpi_rapor_ORNEK.xlsx")
+        dosya = _kpi_rapor_yolu("kpi_rapor_ORNEK.xlsx")
     else:
         print("Oracle'dan KPI verileri çekiliyor...")
         analiz = kpi_analizi_yap()
-        dosya = kpi_rapor_yolu()
+        dosya = _kpi_rapor_yolu()
 
     yol = rapor_olustur(analiz, dosya)
     print(f"BAŞARILI: KPI raporu oluşturuldu → {yol}")

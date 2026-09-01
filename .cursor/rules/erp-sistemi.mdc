@@ -570,45 +570,33 @@ değerlerine (`01.01.0001` / `0`) döndürür. `DRY_RUN` aktifken tamamen atlan�
 **Fatura tablolarını keşfetmek için kullanılan yardımcı script**: `fatura_bul.py`
 (`all_objects` üzerinden `%INVOICE_M` / `FIND_INVOICE%` desenli tablo/görünüm arar).
 
-## KPI Analiz ve Üst Yönetim Raporu [DOĞRULANMIŞ — kod incelemesi, canlı Oracle testi bekliyor]
+## KPI Analiz Modülü (otomasyondan TAMAMEN bağımsız) [DOĞRULANMIŞ — kod incelemesi]
 
-Windows sunucusunda Oracle'a bağlanarak üst yönetim KPI raporu üretir:
+KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördeki otomasyon
+(`izlog_yuk_otomasyon.py`, `ayarlar.py`, `oracle_okuyucu.py`) ile **ortak dosya yok**.
 
 | Dosya | Görevi |
 |---|---|
-| `oracle_baglanti.py` | Paylaşımlı Oracle bağlantı (Thick Mode Windows) |
-| `KPI/kpi_analiz.py` | KPI sorguları + operasyonel problem tespiti |
-| `KPI/kpi_rapor_olustur.py` | Çok sayfalı Excel rapor (`KPI/kpi_rapor.xlsx`) |
-| `yollar.py` | CANLI/KPI klasör yollarını merkezi yönetir |
-| `klasorleri_olustur.py` | `CANLI/` ve `KPI/` klasörlerini oluşturur |
+| `KPI/ayarlar.py` | KPI'ya özel Oracle ayarları (otomasyon `ayarlar.py`'den BAĞIMSIZ) |
+| `KPI/oracle_baglanti.py` | KPI Oracle bağlantısı |
+| `KPI/kpi_analiz.py` | KPI sorguları + problem tespiti |
+| `KPI/kpi_rapor_olustur.py` | Excel rapor üretici |
+| `KPI/raporlar/kpi_rapor.xlsx` | Çıktı |
 
-**Klasör ayrımı [DOĞRULANMIŞ — kod incelemesi]**:
-Proje kökü örneği: `C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon`
-- `CANLI/` — `islem_listesi.xlsx`, yedekler, `debug_*.png`, `hata_*.png`
-  (`izlog_yuk_otomasyon.py` çıktıları)
-- `KPI/` — `kpi_analiz.py`, `kpi_rapor_olustur.py`, `kpi_rapor.xlsx`
-- Pull sonrası: `python klasorleri_olustur.py`
-- Eski kök dizindeki `islem_listesi.xlsx` → `CANLI/` altına taşınmalı
+Kurulum ve çalıştırma: bkz. `KPI/README.md`
 
-Çalıştırma: `python KPI/kpi_rapor_olustur.py` (dönem `ayarlar.py` →
-`KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI`). Şablon testi:
-`python KPI/kpi_rapor_olustur.py --ornek`.
+```powershell
+cd KPI
+copy ayarlar.example.py ayarlar.py
+python kpi_rapor_olustur.py
+```
 
-**Rapor KPI'ları** (doğrulanmış tablolardan):
-- Yük/sevk hacmi ve sevk tamamlama oranı (`LMST_L_GOODS`, `LMST_L_TRANSPORT`)
-- Satış geliri, yük başına ortalama gelir (`LMST_L_GOODS_OP_DET`, PURCHASE_SALES_TYPE IN 2,4)
-- Fatura bağlama oranı ve ortalama fatura gecikmesi (`PSMT_INVOICE_M`)
-- Proje bazlı gelir dağılımı (`LMSD_L_AGR_PROJ_TYPE`)
-- Operasyon kodu kırılımı (`INVD_EXPENSE.EXPENSE_CODE`)
-- Brüt marj (satış − sevk alış) — `LMST_L_TRANSPORT_OP_DET` [VARSAYIM/TODO, tablo adı henüz canlı teyit edilmedi]
-
-**Otomatik problem tespiti** (Yönetici Özeti sayfasına yazılır):
-- Fatura bağlama oranı <%95
-- Sevk oranı <%90
-- Proje konsantrasyonu (top 3 proje >%60 gelir)
-- Brüt marj <%10
-- Sevki olmayan yükler
-- Sıfır tutarlı satış satırları
+**Rapor KPI'ları** (doğrulanmış Oracle tablolarından):
+- Yük/sevk hacmi (`LMST_L_GOODS`, `LMST_L_TRANSPORT`)
+- Satış geliri (`LMST_L_GOODS_OP_DET`, PURCHASE_SALES_TYPE IN 2,4)
+- Fatura bağlama oranı (`PSMT_INVOICE_M`)
+- Proje/operasyon kırılımı
+- Brüt marj — `LMST_L_TRANSPORT_OP_DET` [VARSAYIM/TODO]
 
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,
