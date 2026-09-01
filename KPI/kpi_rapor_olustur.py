@@ -71,6 +71,14 @@ def _format_sayi(deger) -> str:
     return f"{int(deger):,}".replace(",", ".")
 
 
+def _decimal_safe(deger):
+    if deger is None:
+        return Decimal("0")
+    if isinstance(deger, Decimal):
+        return deger
+    return Decimal(str(deger))
+
+
 def _hucre_stil(hucre, font=NORMAL_FONT, fill=None, align="left"):
     hucre.font = font
     hucre.alignment = Alignment(horizontal=align, vertical="center", wrap_text=True)
@@ -147,11 +155,30 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
             uyari=marj_orani < 10,
         )
 
+    # Kiralık araç özeti
+    ka = analiz.kiralk_arac_ozet
+    if ka.get("mevcut"):
+        _kpi_kutusu(ws, 7, 4, "Kiralık Dosya Sayısı", _format_sayi(ka.get("dosya_sayisi")))
+        kz = ka.get("toplam_kar_zarar", 0)
+        _kpi_kutusu(
+            ws, 7, 5, "Kiralık Filo Kar/Zarar",
+            _format_para(kz),
+            uyari=_decimal_safe(kz) < 0,
+        )
+        kar_orani = ka.get("kar_orani_yuzde", 0)
+        _kpi_kutusu(
+            ws, 7, 6, "Kiralık Kar Oranı",
+            f"%{kar_orani}",
+            uyari=kar_orani < 5,
+        )
+
     # Fatura gecikmesi
     fg = analiz.fatura_sagligi
     if fg.get("ort_gecikme_gun") is not None:
+        fg_col = 4 if not ka.get("mevcut") else 1
+        fg_row = 10 if ka.get("mevcut") else 7
         _kpi_kutusu(
-            ws, 7, 4, "Ort. Fatura Gecikmesi",
+            ws, fg_row, fg_col, "Ort. Fatura Gecikmesi",
             f"{fg['ort_gecikme_gun']} gün",
             uyari=fg["ort_gecikme_gun"] > 7,
         )
@@ -251,6 +278,39 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             ["OPERASYON_KODU", "SATIR_SAYISI", "TOPLAM_TUTAR", "GELIR_PAYI_YUZDE"],
             analiz.operasyon_dagilimi,
             {"TOPLAM_TUTAR": lambda v: float(v) if v else 0},
+        )
+
+    if analiz.kiralk_arac_detay:
+        _veri_sayfasi(
+            wb,
+            "Kiralık Araç Detay",
+            [
+                "DOSYA_NO", "DOSYA_TARIHI", "DOSYA_DURUM", "ARAC_KODU", "CARI_ADI",
+                "TOPLAM_KM", "HAKEDIS_KIRA_TUTARI", "ALDIGI_YAKIT_TUTARI",
+                "OTOBAN_KOPRU_VS", "MALIYETLER_TOPLAMI", "TOPLAM_SATIS", "KAR_ZARAR",
+            ],
+            analiz.kiralk_arac_detay,
+            {
+                "HAKEDIS_KIRA_TUTARI": lambda v: float(v) if v else 0,
+                "ALDIGI_YAKIT_TUTARI": lambda v: float(v) if v else 0,
+                "OTOBAN_KOPRU_VS": lambda v: float(v) if v else 0,
+                "MALIYETLER_TOPLAMI": lambda v: float(v) if v else 0,
+                "TOPLAM_SATIS": lambda v: float(v) if v else 0,
+                "KAR_ZARAR": lambda v: float(v) if v else 0,
+            },
+        )
+
+    if analiz.kiralk_arac_cari:
+        _veri_sayfasi(
+            wb,
+            "Kiralık Araç Cari",
+            ["CARI_KODU", "CARI_ADI", "DOSYA_SAYISI", "TOPLAM_MALIYET", "TOPLAM_SATIS", "KAR_ZARAR"],
+            analiz.kiralk_arac_cari,
+            {
+                "TOPLAM_MALIYET": lambda v: float(v) if v else 0,
+                "TOPLAM_SATIS": lambda v: float(v) if v else 0,
+                "KAR_ZARAR": lambda v: float(v) if v else 0,
+            },
         )
 
     wb.save(dosya)

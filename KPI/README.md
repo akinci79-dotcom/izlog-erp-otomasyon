@@ -87,3 +87,5 @@ KPI_BITIS_TARIHI = "31.01.2026"
 | Aylık Trend | Aylık hacim ve gelir |
 | Proje Performansı | Top 20 proje |
 | Operasyon Dağılımı | NAVLUN, UĞRAMA vb. |
+| Kiralık Araç Detay | Tedarikçi hakediş dosyaları (maliyet/kar) |
+| Kiralık Araç Cari | Tedarikçi bazında filo özeti |

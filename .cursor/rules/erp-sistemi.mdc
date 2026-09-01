@@ -588,6 +588,7 @@ KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördek
 | `KPI/ayarlar.py` | KPI'ya özel Oracle ayarları (otomasyon `ayarlar.py`'den BAĞIMSIZ) |
 | `KPI/oracle_baglanti.py` | KPI Oracle bağlantısı |
 | `KPI/kpi_analiz.py` | KPI sorguları + problem tespiti |
+| `KPI/kpi_kiralk_arac.py` | Kiralık araç hakediş sorguları |
 | `KPI/kpi_rapor_olustur.py` | Excel rapor üretici |
 | `KPI/raporlar/kpi_rapor.xlsx` | Çıktı |
 
@@ -610,6 +611,14 @@ python kpi_rapor_olustur.py
   paylaştırılmış)
 - Opsiyonel filtreler: `GNLD_COMPANY.CO_CODE`, `GNLD_BRANCH.BRANCH_CODE`,
   `YK.IS_DOOR_TO_DOOR = 0` (kapıdan kapıya hariç)
+
+**Kiralık araç maliyet KPI'ları** (tedarikçi hakediş raporu SQL'i ile uyumlu
+[DOĞRULANMIŞ]):
+- `LMST_SUP_PAYOFF_M` — hakediş dosyası (CASE_CODE, DOC_DATE, CASE_STATUS)
+- `LMST_SUP_PAYOFF_OPDET` — dosya kalemleri (AMT_TRA, PURCHASE_SALES_TYPE)
+- `LMST_SUP_PAYOFF_T_D` — dosya ↔ sevk bağlantısı
+- Maliyet = ödenecek tutar + aldığı mazot + IZLOG OGS (rapor formülü)
+- Kar/zarar = bağlı yük satış toplamı − maliyetler toplamı
 
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,

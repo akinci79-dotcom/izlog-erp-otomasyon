@@ -18,6 +18,14 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
+from kpi_kiralk_arac import (
+    kiralk_arac_cari_ozet_hesapla,
+    kiralk_arac_detay_getir,
+    kiralk_arac_ozet_hesapla,
+    kiralk_arac_problemleri,
+    kiralk_arac_semasi_hazir,
+    ornek_kiralk_arac_verisi,
+)
 from oracle_baglanti import baglanti_yonet, tablo_var_mi
 
 
@@ -90,6 +98,9 @@ class KpiAnalizSonucu:
     operasyon_dagilimi: list[dict] = field(default_factory=list)
     fatura_sagligi: dict[str, Any] = field(default_factory=dict)
     marj_analizi: dict[str, Any] = field(default_factory=dict)
+    kiralk_arac_ozet: dict[str, Any] = field(default_factory=dict)
+    kiralk_arac_detay: list[dict] = field(default_factory=list)
+    kiralk_arac_cari: list[dict] = field(default_factory=list)
     problemler: list[dict] = field(default_factory=list)
     uyarilar: list[str] = field(default_factory=list)
 
@@ -567,6 +578,15 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         sonuc.fatura_sagligi = _fatura_gecikmesi(cursor, bas, bit)
         sonuc.marj_analizi = _marj_analizi(cursor, bas, bit)
 
+        ka_ok, ka_mesaj = kiralk_arac_semasi_hazir()
+        if ka_ok:
+            bind = _bind_ortak(bas, bit)
+            sonuc.kiralk_arac_detay = kiralk_arac_detay_getir(cursor, bas, bit, bind)
+            sonuc.kiralk_arac_ozet = kiralk_arac_ozet_hesapla(sonuc.kiralk_arac_detay)
+            sonuc.kiralk_arac_cari = kiralk_arac_cari_ozet_hesapla(sonuc.kiralk_arac_detay)
+        else:
+            sonuc.kiralk_arac_ozet = {"mevcut": False, "mesaj": ka_mesaj}
+
         if getattr(ayarlar, "CO_CODE", None):
             sonuc.uyarilar.append(f"Firma filtresi: CO_CODE = {ayarlar.CO_CODE}")
         if getattr(ayarlar, "BRANCH_CODE", None):
@@ -575,10 +595,23 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
             sonuc.uyarilar.append("Kapıdan kapıya yükler hariç (IS_DOOR_TO_DOOR = 0).")
         if not sonuc.marj_analizi.get("mevcut"):
             sonuc.uyarilar.append(sonuc.marj_analizi.get("mesaj", "Marj analizi atlandı."))
+        if not sonuc.kiralk_arac_ozet.get("mevcut"):
+            mesaj = sonuc.kiralk_arac_ozet.get("mesaj")
+            if mesaj and "bulunamadı" in mesaj.lower() and "tablo" in mesaj.lower():
+                sonuc.uyarilar.append(mesaj)
+        elif sonuc.kiralk_arac_ozet.get("dosya_sayisi", 0) == 0:
+            mesaj = sonuc.kiralk_arac_ozet.get("mesaj")
+            if mesaj:
+                sonuc.uyarilar.append(mesaj)
 
         sonuc.problemler = _problemleri_tespit_et(
             cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
         )
+        sonuc.problemler.extend(
+            kiralk_arac_problemleri(sonuc.kiralk_arac_ozet, sonuc.kiralk_arac_detay)
+        )
+        oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
+        sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
 
     return sonuc
 
@@ -622,6 +655,10 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
         "brut_marj": Decimal("6652300"),
         "brut_marj_orani_yuzde": 13.6,
     }
+    ka_ozet, ka_detay, ka_cari = ornek_kiralk_arac_verisi()
+    sonuc.kiralk_arac_ozet = ka_ozet
+    sonuc.kiralk_arac_detay = ka_detay
+    sonuc.kiralk_arac_cari = ka_cari
     sonuc.problemler = [
         {
             "oncelik": "YUKSEK",
@@ -638,6 +675,9 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
             "aksiyon": "Müşteri çeşitlendirme planını gözden geçirin.",
         },
     ]
+    sonuc.problemler.extend(kiralk_arac_problemleri(ka_ozet, ka_detay))
+    oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
+    sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
     sonuc.uyarilar = ["Bu rapor ORNEK veri ile üretilmiştir — gerçek analiz için Windows sunucusunda çalıştırın."]
     return sonuc
 
