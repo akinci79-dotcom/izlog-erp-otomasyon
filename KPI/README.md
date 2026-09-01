@@ -20,17 +20,42 @@ Cursor ERP Otomasyon\
         └── kpi_rapor.xlsx  ← üretilen rapor
 ```
 
-## Kurulum (Windows)
+## Kurulum (Windows) — tek seferde
+
+### Yöntem A: Tek blok kopyala-yapıştır (PowerShell)
+
+PowerShell'i **Yönetici olarak açmanıza gerek yok.** Aşağıdaki bloğun **tamamını** seçip yapıştırın, Enter'a bir kez basın — hepsi sırayla çalışır:
+
+```powershell
+$Base = "C:\Users\hakinci\Desktop\Kodlarım"
+$KpiDir = "$Base\Cursor ERP Otomasyon\KPI"
+$Temp = "$Base\izlog-kpi-temp"
+Set-Location $Base
+if (Test-Path $Temp) { Remove-Item $Temp -Recurse -Force }
+git clone -b cursor/kpi-analiz-rapor-0bd3 --depth 1 https://github.com/akinci79-dotcom/izlog-erp-otomasyon.git izlog-kpi-temp
+New-Item -ItemType Directory -Force -Path $KpiDir | Out-Null
+Copy-Item "$Temp\KPI\*" $KpiDir -Recurse -Force
+Remove-Item $Temp -Recurse -Force
+Set-Location $KpiDir
+if (-not (Test-Path ayarlar.py)) { Copy-Item ayarlar.example.py ayarlar.py }
+pip install -r requirements.txt
+python kpi_rapor_olustur.py --ornek
+Write-Host "Bitti! Rapor: $KpiDir\raporlar\kpi_rapor_ORNEK.xlsx" -ForegroundColor Green
+```
+
+Sonra `ayarlar.py` içinde `DB_SIFRE` doldurun.
+
+### Yöntem B: Çift tıkla (dosyalar indikten sonra)
+
+`KPI\kpi_kur.bat` dosyasına çift tıklayın — geri kalanını script yapar.
+
+### Yöntem C: Manuel (adım adım)
 
 ```powershell
 cd "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
 copy ayarlar.example.py ayarlar.py
-```
-
-`ayarlar.py` içinde `DB_SIFRE` alanını doldurun.
-
-```powershell
 pip install -r requirements.txt
+python kpi_rapor_olustur.py --ornek
 ```
 
 Oracle Instant Client: `C:\instantclient\instantclient_19_32`
