@@ -15,13 +15,12 @@ from oracle_baglanti import tablo_var_mi
 
 
 def _yuk_filtre_parcasi() -> tuple[str, str]:
-    joins: list[str] = []
+    joins: list[str] = ["LEFT JOIN GNLD_BRANCH BR ON BR.BRANCH_ID = YK.BRANCH_ID"]
     wheres: list[str] = []
     if getattr(ayarlar, "CO_CODE", None):
         joins.append("JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID")
         wheres.append("CO.CO_CODE = :co_code")
     if getattr(ayarlar, "BRANCH_CODE", None):
-        joins.append("JOIN GNLD_BRANCH BR ON BR.BRANCH_ID = YK.BRANCH_ID")
         wheres.append("BR.BRANCH_CODE = :branch_code")
     if getattr(ayarlar, "KPI_KAPI_KAPI_HARIC", True):
         wheres.append("NVL(YK.IS_DOOR_TO_DOOR, 0) = 0")
@@ -101,6 +100,8 @@ SELECT
     SO.ARAC_TIPI,
     CARI.MUSTERI_KODU,
     CARI.MUSTERI_ADI,
+    BR.BRANCH_CODE AS SUBE_KODU,
+    NVL(BR.BRANCH_DESC, BR.BRANCH_CODE) AS SUBE,
     GPT.GOODS_PRICE_TYPE_CODE AS YUK_FIYAT_TIP_KODU,
     NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0) AS SATIS_TUTAR,
     NVL(SFT.ALIS, 0) - NVL(SFT.ALIS_IADE, 0) AS ALIS_TUTAR,
@@ -131,13 +132,22 @@ ORDER BY YK.DOC_DATE, YK.REFERENCE_NO
 """
 
 
+def _veri_satir_zenginlestir(satir: dict[str, Any]) -> dict[str, Any]:
+    """Pivot şablonundaki alternatif kolon adları için takma alanlar."""
+    satir["TOPLAM_SATIS"] = satir.get("SATIS_TUTAR")
+    satir["TOPLAM_ALIS"] = satir.get("ALIS_TUTAR")
+    satir["NET_KAR_ZARAR"] = satir.get("KAR_ZARAR")
+    satir["MARJ_ORANI"] = satir.get("MARJ_YUZDE")
+    return satir
+
+
 def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[str, Any]]:
     ok, _ = veri_semasi_hazir()
     if not ok:
         return []
     cursor.execute(_veri_sql(), bind)
     sutunlar = [c[0] for c in cursor.description]
-    return [dict(zip(sutunlar, satir)) for satir in cursor.fetchall()]
+    return [_veri_satir_zenginlestir(dict(zip(sutunlar, satir))) for satir in cursor.fetchall()]
 
 
 def hucre_degeri(deger: Any) -> Any:
