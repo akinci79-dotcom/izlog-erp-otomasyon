@@ -59,6 +59,9 @@ _SABLON_KOLON_VARSAYILAN: dict[str, str] = {
     "MARJ_ORANI": "MARJ_ORANI",
     "MARJ": "MARJ_YUZDE",
     "YUK_FIYAT_TIP_KODU": "YUK_FIYAT_TIP_KODU",
+    "MAL_TIPI": "YUK_FIYAT_TIP_KODU",
+    "MAL_TIP": "YUK_FIYAT_TIP_KODU",
+    "MAL_TIP_KODU": "YUK_FIYAT_TIP_KODU",
 }
 
 
@@ -847,11 +850,13 @@ def sablon_rapor_olustur(
     print(f"  VERİ satırı: {veri_adet}")
     print(f"  Filo Detay satırı: {filo_adet}")
     if eslesmeyen_veri:
-        ornek = ", ".join(eslesmeyen_veri[:8])
-        fazla = len(eslesmeyen_veri) - 8
-        ek = f" (+{fazla} kolon daha)" if fazla > 0 else ""
-        print(f"  Uyarı: {len(eslesmeyen_veri)} VERİ kolonu Oracle ile eşleşmedi: {ornek}{ek}")
-        print("  → ayarlar.py içinde KPI_KOLON_ESLEME ile tanımlayın veya python kpi_sablon_kolon_kesif.py çalıştırın")
+        print(f"  Bilgi: {len(eslesmeyen_veri)} VERİ kolonu şablonda var, Oracle sorgusunda yok (boş kalır — pivotlar etkilenmeyebilir).")
+        if getattr(ayarlar, "KPI_ESLEME_UYARISI_DETAY", False):
+            ornek = ", ".join(eslesmeyen_veri[:8])
+            fazla = len(eslesmeyen_veri) - 8
+            ek = f" (+{fazla} kolon daha)" if fazla > 0 else ""
+            print(f"    Örnek: {ornek}{ek}")
+            print("    → python kpi_sablon_kolon_kesif.py  veya  ayarlar.py KPI_KOLON_ESLEME")
     if excel_mesaj:
         print(f"  Uyarı: {excel_mesaj}")
 
