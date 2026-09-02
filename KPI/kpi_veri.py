@@ -187,12 +187,15 @@ def _veri_sql_varsayilan() -> str:
         surucu_join = "LEFT JOIN HRMD_ADVANCE SUR ON SUR.ADVANCE_ID = SK.DRIVER_ID"
     else:
         surucu_join = ""
-    waybill_date = (
-        "MIN(TGD.TRAN_WAYBILL_DATE)"
+    waybill_expr = (
+        "TGD.TRAN_WAYBILL_DATE"
         if _kolon_var("LMST_L_TRANS_GOODS_DETAIL", "TRAN_WAYBILL_DATE")
-        else "MIN(TGD.TRAN_WAYBILL_DOC_DATE)"
+        else "TGD.TRAN_WAYBILL_DOC_DATE"
         if _kolon_var("LMST_L_TRANS_GOODS_DETAIL", "TRAN_WAYBILL_DOC_DATE")
         else "CAST(NULL AS DATE)"
+    )
+    waybill_date = (
+        f"MIN({waybill_expr}) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SOZLESME_TARIHI,"
     )
     gonderici_join = ""
     gonderici_select = "NULL AS GONDERICI_CARI_ADI,"
@@ -244,7 +247,7 @@ SEVK_OZET AS (
                END) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) MULKIYET,
            MIN(PLK_CARI.ENTITY_NAME) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) PLAKA_CARI_ADI,
            MIN(TGD.TRAN_WAYBILL_DOC_NO) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SOZLESME_NO,
-           {waybill_date} KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SOZLESME_TARIHI,
+           {waybill_date}
            MIN(SK.START_KM) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) CIKIS_KM,
            MIN(SK.END_KM) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) VARIS_KM,
            MIN(NVL(SK.EMPTY_KM, NVL(SK.END_KM, 0) - NVL(SK.START_KM, 0)))
@@ -272,7 +275,7 @@ CARI_OZET AS (
     LEFT JOIN FIND_ENTITY FE ON FE.ENTITY_ID = GOD.CHARGED_L_ENTITY_ID
     WHERE GOD.PURCHASE_SALES_TYPE IN (2, 4)
     GROUP BY GOD.GOODS_ID
-),
+)
 {nokta_cte}
 SELECT
     PJ.PROJECT_CODE AS PROJE_KODU,
@@ -348,6 +351,102 @@ ORDER BY YK.DOC_DATE, YK.REFERENCE_NO
 """
 
 
+def _veri_sql_basit() -> str:
+    """Önceki çalışan minimal sorgu — genişletilmiş SQL hata verirse yedek."""
+    yk_join, yk_where = _yuk_filtre_parcasi()
+    return f"""
+WITH YUK_SAYISI AS (
+    SELECT TGD.TRANSPORT_ID, COUNT(*) AS YUK_ADEDI
+    FROM LMST_L_TRANS_GOODS_DETAIL TGD
+    WHERE TGD.GOODS_ID > 0
+    GROUP BY TGD.TRANSPORT_ID
+),
+YFT AS (
+    SELECT GOD.GOODS_ID,
+           SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (2, 4) THEN GOD.AMT ELSE 0 END) SATIS,
+           SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (1, 3) THEN GOD.AMT ELSE 0 END) SATIS_IADE
+    FROM LMST_L_GOODS_OP_DET GOD
+    GROUP BY GOD.GOODS_ID
+),
+SFT AS (
+    SELECT TGD.GOODS_ID,
+           SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (1, 3) THEN TOD.AMT ELSE 0 END)
+               / NVL(YS.YUK_ADEDI, 1) ALIS,
+           SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (2, 4) THEN TOD.AMT ELSE 0 END)
+               / NVL(YS.YUK_ADEDI, 1) ALIS_IADE
+    FROM LMST_L_TRANS_GOODS_DETAIL TGD
+    JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+    JOIN LMST_L_TRANS_OP_DETAIL TOD ON TOD.TRANSPORT_ID = SK.TRANSPORT_ID
+    LEFT JOIN YUK_SAYISI YS ON YS.TRANSPORT_ID = SK.TRANSPORT_ID
+    WHERE TGD.GOODS_ID > 0
+    GROUP BY TGD.GOODS_ID, NVL(YS.YUK_ADEDI, 1)
+),
+SEVK_OZET AS (
+    SELECT TGD.GOODS_ID,
+           MIN(SK.TRANSPORT_NO) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SEVK_NO,
+           MIN(SK.DOC_DATE) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SEVK_TARIHI,
+           MIN(VH.LICENSE_PLATE) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) PLAKA,
+           MIN(TTYPE.DESCRIPTION) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) ARAC_TIPI
+    FROM LMST_L_TRANS_GOODS_DETAIL TGD
+    JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+    LEFT JOIN LMSW_VIEW_TRANSPORT_UNITS TU
+        ON SK.TRACTOR_UNIT_ID = TU.TRANSPORT_UNIT_ID AND SK.TRACTOR_MAPID = TU.MAPID
+    LEFT JOIN FLMD_VEHICLE VH ON TU.TRANSPORT_TYPE = 1 AND TU.UNIT_ID = VH.VEHICLE_ID
+    LEFT JOIN FLMD_L_TRAILER_TYPE TTYPE ON TTYPE.TRAILER_TYPE_ID = VH.TRAILER_TYPE_ID
+    WHERE TGD.GOODS_ID > 0
+    GROUP BY TGD.GOODS_ID
+),
+CARI_OZET AS (
+    SELECT GOD.GOODS_ID,
+           MIN(FE.ENTITY_CODE) MUSTERI_KODU,
+           MIN(FE.ENTITY_NAME) MUSTERI_ADI
+    FROM LMST_L_GOODS_OP_DET GOD
+    LEFT JOIN FIND_ENTITY FE ON FE.ENTITY_ID = GOD.CHARGED_L_ENTITY_ID
+    WHERE GOD.PURCHASE_SALES_TYPE IN (2, 4)
+    GROUP BY GOD.GOODS_ID
+)
+SELECT
+    PJ.PROJECT_CODE AS PROJE_KODU,
+    YK.REFERENCE_NO AS YUK_NO,
+    YK.DOC_DATE AS YUK_TARIHI,
+    SO.SEVK_NO,
+    SO.SEVK_TARIHI,
+    SO.PLAKA,
+    SO.ARAC_TIPI,
+    CARI.MUSTERI_KODU,
+    CARI.MUSTERI_ADI,
+    BR.BRANCH_CODE AS SUBE_KODU,
+    NVL(BR.BRANCH_DESC, BR.BRANCH_CODE) AS SUBE,
+    GPT.GOODS_PRICE_TYPE_CODE AS YUK_FIYAT_TIP_KODU,
+    NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0) AS SATIS_TUTAR,
+    NVL(SFT.ALIS, 0) - NVL(SFT.ALIS_IADE, 0) AS ALIS_TUTAR,
+    (NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0))
+        - (NVL(SFT.ALIS, 0) - NVL(SFT.ALIS_IADE, 0)) AS KAR_ZARAR,
+    CASE
+        WHEN NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0) = 0 THEN 0
+        ELSE ROUND(
+            ((NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0))
+             - (NVL(SFT.ALIS, 0) - NVL(SFT.ALIS_IADE, 0)))
+            * 100
+            / (NVL(YFT.SATIS, 0) - NVL(YFT.SATIS_IADE, 0)),
+            2
+        )
+    END AS MARJ_YUZDE,
+    YK.GOODS_ID
+FROM LMST_L_GOODS YK
+LEFT JOIN LMSD_L_AGR_PROJ_TYPE PJ ON PJ.PROJECT_ID = YK.PROJECT_ID
+LEFT JOIN LMSD_L_GOODSPRICE_TYPE GPT ON GPT.GOODS_PRICE_TYPE_ID = YK.GOODS_PRICE_TYPE_ID
+LEFT JOIN CARI_OZET CARI ON CARI.GOODS_ID = YK.GOODS_ID
+LEFT JOIN YFT ON YFT.GOODS_ID = YK.GOODS_ID
+LEFT JOIN SFT ON SFT.GOODS_ID = YK.GOODS_ID
+LEFT JOIN SEVK_OZET SO ON SO.GOODS_ID = YK.GOODS_ID
+{yk_join}
+WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+{yk_where}
+ORDER BY YK.DOC_DATE, YK.REFERENCE_NO
+"""
+
+
 def _veri_sql() -> str:
     return _veri_sql_kaynak()
 
@@ -377,7 +476,22 @@ def _veri_satir_zenginlestir(satir: dict[str, Any]) -> dict[str, Any]:
 
 
 def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[str, Any]]:
-    cursor.execute(_veri_sql(), bind)
+    sql = _veri_sql()
+    try:
+        cursor.execute(sql, bind)
+    except Exception as exc:
+        if _veri_sql_dosya_yolu() is not None:
+            raise
+        mesaj = str(exc)
+        if "ORA-00923" in mesaj or "ORA-00904" in mesaj or "ORA-00942" in mesaj:
+            print(
+                f"  Uyarı: Genişletilmiş VERİ SQL hatası ({mesaj.splitlines()[0]}) — "
+                "basit sorguya düşülüyor.",
+                flush=True,
+            )
+            cursor.execute(_veri_sql_basit(), bind)
+        else:
+            raise
     sutunlar = [c[0] for c in cursor.description]
     return [_veri_satir_zenginlestir(dict(zip(sutunlar, satir))) for satir in cursor.fetchall()]
 
