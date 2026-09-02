@@ -62,6 +62,12 @@ _SABLON_KOLON_VARSAYILAN: dict[str, str] = {
     "MAL_TIPI": "YUK_FIYAT_TIP_KODU",
     "MAL_TIP": "YUK_FIYAT_TIP_KODU",
     "MAL_TIP_KODU": "YUK_FIYAT_TIP_KODU",
+    "ALIS_TUTARI": "ALIS_TUTAR",
+    "SATIS_TUTARI": "SATIS_TUTAR",
+    "ALIS_IADE_TUTARI": "ALIS_IADE_TUTAR",
+    "SATIS_IADE_TUTARI": "SATIS_IADE_TUTAR",
+    "TOPLAM_KAR_ZARAR": "KAR_ZARAR",
+    "TOPLAM_KAR_ZARAR_TUTAR": "KAR_ZARAR",
 }
 
 
@@ -252,8 +258,21 @@ def _com_satir_oku(deger: Any) -> list[Any]:
 
 
 def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
-    kullanilan = sheet.UsedRange
-    max_col = max(int(kullanilan.Columns.Count), 1)
+    """1. satır başlıkları — Excel tablosu varsa ListColumns adları (pivot kaynağı ile aynı)."""
+    lo = _com_listobject_bul(sheet, baslik_satiri)
+    if lo is not None:
+        try:
+            adet = int(lo.ListColumns.Count)
+            if adet > 0:
+                return [lo.ListColumns(i).Name for i in range(1, adet + 1)]
+        except Exception:
+            pass
+
+    max_col = 60
+    try:
+        max_col = max(int(sheet.UsedRange.Columns.Count), max_col)
+    except Exception:
+        pass
     ham = sheet.Range(
         sheet.Cells(baslik_satiri, 1),
         sheet.Cells(baslik_satiri, max_col),
@@ -262,6 +281,19 @@ def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
     while basliklar and basliklar[-1] is None:
         basliklar.pop()
     return basliklar
+
+
+def _com_kolon_sayisi(sheet, baslik_satiri: int, basliklar: list[Any]) -> int:
+    """Şablon başlık satırı genişliği — her zaman A sütunundan başlar."""
+    if basliklar:
+        return len(basliklar)
+    lo = _com_listobject_bul(sheet, baslik_satiri)
+    if lo is not None:
+        try:
+            return max(int(lo.ListColumns.Count), 1)
+        except Exception:
+            pass
+    return 1
 
 
 def _com_listobject_bul(sheet, baslik_satiri: int):
@@ -283,33 +315,14 @@ def _com_listobject_bul(sheet, baslik_satiri: int):
 
 
 def _com_tablo_kolon_sayisi(sheet, baslik_satiri: int, basliklar: list[Any]) -> int:
-    """Pivot kaynağının sütun sayısını korur — UsedRange pivot alanını içerebilir."""
-    genislik = len(basliklar)
-    lo = _com_listobject_bul(sheet, baslik_satiri)
-    if lo is not None:
-        try:
-            return max(genislik, int(lo.ListColumns.Count), 1)
-        except Exception:
-            pass
-    try:
-        genislik = max(genislik, int(sheet.UsedRange.Columns.Count))
-    except Exception:
-        pass
-    return max(genislik, 1)
+    return _com_kolon_sayisi(sheet, baslik_satiri, basliklar)
 
 
 def _com_tablo_konumu(sheet, baslik_satiri: int) -> tuple[int, int, Any | None]:
-    """(sol_kolon, kolon_sayisi, ListObject) — tablo yoksa (1, genislik, None)."""
+    """Veri her zaman A sütunundan yazılır (başlık satırı ile hizalı)."""
     basliklar = _com_basliklari_oku(sheet, baslik_satiri)
     lo = _com_listobject_bul(sheet, baslik_satiri)
-    if lo is not None:
-        try:
-            tablo_sol = int(lo.Range.Column)
-            tablo_kolon = int(lo.ListColumns.Count)
-            return tablo_sol, max(tablo_kolon, len(basliklar), 1), lo
-        except Exception:
-            pass
-    return 1, _com_tablo_kolon_sayisi(sheet, baslik_satiri, basliklar), lo
+    return 1, _com_kolon_sayisi(sheet, baslik_satiri, basliklar), lo
 
 
 def _com_veri_matrisi_hazirla(
@@ -375,7 +388,8 @@ def _com_sayfaya_yaz(
         return 0, esleme, eslesmeyen, kolon_sayisi
 
     son_satir = baslik_satiri + len(matris)
-    tablo_sag = tablo_sol + kolon_sayisi - 1
+    tablo_sol = 1
+    tablo_sag = kolon_sayisi
     hedef = sheet.Range(
         sheet.Cells(baslik_satiri + 1, tablo_sol),
         sheet.Cells(son_satir, tablo_sag),
@@ -389,20 +403,9 @@ def _com_sayfaya_yaz(
         try:
             lo.Resize(yeni_tablo)
         except Exception:
-            # Pivot / başka tablo altında — Resize atlanır, hücrelere doğrudan yazılır
             pass
 
-    yazildi = False
-    if lo is not None:
-        try:
-            govde = lo.DataBodyRange
-            if govde is not None and int(govde.Rows.Count) >= len(matris):
-                _com_araliga_yaz(govde, matris)
-                yazildi = True
-        except Exception:
-            pass
-    if not yazildi:
-        _com_araliga_yaz(hedef, matris)
+    _com_araliga_yaz(hedef, matris)
 
     return len(satirlar), esleme, eslesmeyen, kolon_sayisi
 

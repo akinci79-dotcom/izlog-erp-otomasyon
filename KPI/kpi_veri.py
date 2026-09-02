@@ -134,10 +134,20 @@ ORDER BY YK.DOC_DATE, YK.REFERENCE_NO
 
 def _veri_satir_zenginlestir(satir: dict[str, Any]) -> dict[str, Any]:
     """Pivot şablonundaki alternatif kolon adları için takma alanlar."""
-    satir["TOPLAM_SATIS"] = satir.get("SATIS_TUTAR")
-    satir["TOPLAM_ALIS"] = satir.get("ALIS_TUTAR")
-    satir["NET_KAR_ZARAR"] = satir.get("KAR_ZARAR")
+    satis = satir.get("SATIS_TUTAR")
+    alis = satir.get("ALIS_TUTAR")
+    kar = satir.get("KAR_ZARAR")
+    satir["TOPLAM_SATIS"] = satis
+    satir["TOPLAM_ALIS"] = alis
+    satir["NET_KAR_ZARAR"] = kar
+    satir["TOPLAM_KAR_ZARAR"] = kar
     satir["MARJ_ORANI"] = satir.get("MARJ_YUZDE")
+    satir["SATIS_TUTARI"] = satis
+    satir["ALIS_TUTARI"] = alis
+    satir["ALIS_IADE_TUTAR"] = None
+    satir["ALIS_IADE_TUTARI"] = None
+    satir["SATIS_IADE_TUTAR"] = None
+    satir["SATIS_IADE_TUTARI"] = None
     return satir
 
 
