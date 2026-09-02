@@ -215,25 +215,31 @@ def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
     return basliklar
 
 
-def _com_sayfaya_yaz(
-    sheet,
-    baslik_satiri: int,
+def _com_listobject_bul(sheet, baslik_satiri: int):
+    """Sayfadaki Excel Tablosunu (ListObject) bulur — pivot kaynağı genelde budur."""
+    try:
+        adet = int(sheet.ListObjects.Count)
+    except Exception:
+        return None
+    for i in range(1, adet + 1):
+        lo = sheet.ListObjects(i)
+        try:
+            if int(lo.HeaderRowRange.Row) == baslik_satiri:
+                return lo
+        except Exception:
+            continue
+    if adet >= 1:
+        return sheet.ListObjects(1)
+    return None
+
+
+def _com_veri_matrisi_hazirla(
+    basliklar: list[Any],
     satirlar: list[dict[str, Any]],
-    sabit_kolonlar: list[str] | None = None,
-) -> int:
-    basliklar = _com_basliklari_oku(sheet, baslik_satiri)
-    kolon_sayisi = len(basliklar) if basliklar else max(int(sheet.UsedRange.Columns.Count), 1)
-
-    kullanilan = sheet.UsedRange
-    eski_son = max(int(kullanilan.Rows.Count), baslik_satiri + len(satirlar))
-    if eski_son > baslik_satiri:
-        sheet.Range(
-            sheet.Cells(baslik_satiri + 1, 1),
-            sheet.Cells(eski_son, kolon_sayisi),
-        ).ClearContents()
-
+    sabit_kolonlar: list[str] | None,
+) -> tuple[list[tuple[Any, ...]], int]:
     if not satirlar:
-        return 0
+        return [], max(len(basliklar), 1)
 
     anahtarlar = sabit_kolonlar or list(satirlar[0].keys())
     esleme = _kolon_esleme(basliklar, anahtarlar)
@@ -255,17 +261,55 @@ def _com_sayfaya_yaz(
             satir_verisi = [None] * kolon_sayisi
             for col_idx, kolon in esleme.items():
                 satir_verisi[col_idx - 1] = hucre_degeri(satir.get(kolon))
-            satir_verisi = tuple(satir_verisi)
+            matris.append(tuple(satir_verisi))
+            continue
         matris.append(satir_verisi)
+    return matris, kolon_sayisi
 
-    hedef = sheet.Range(
-        sheet.Cells(baslik_satiri + 1, 1),
-        sheet.Cells(baslik_satiri + len(matris), kolon_sayisi),
-    )
+
+def _com_araliga_yaz(hedef, matris: list[tuple[Any, ...]]):
+    if not matris:
+        return
     if len(matris) == 1:
         hedef.Value = matris[0]
     else:
         hedef.Value = tuple(matris)
+
+
+def _com_sayfaya_yaz(
+    sheet,
+    baslik_satiri: int,
+    satirlar: list[dict[str, Any]],
+    sabit_kolonlar: list[str] | None = None,
+) -> int:
+    """Pivot kaynağına yazar — ClearContents kullanılmaz (pivot hatası verir)."""
+    basliklar = _com_basliklari_oku(sheet, baslik_satiri)
+    kolon_sayisi = len(basliklar) if basliklar else max(int(sheet.UsedRange.Columns.Count), 1)
+    matris, kolon_sayisi = _com_veri_matrisi_hazirla(basliklar, satirlar, sabit_kolonlar)
+
+    lo = _com_listobject_bul(sheet, baslik_satiri)
+    if lo is not None:
+        son_satir = baslik_satiri if not matris else baslik_satiri + len(matris)
+        tablo_araligi = sheet.Range(
+            sheet.Cells(baslik_satiri, 1),
+            sheet.Cells(son_satir, kolon_sayisi),
+        )
+        lo.Resize(tablo_araligi)
+        if matris:
+            govde = lo.DataBodyRange
+            if govde is not None:
+                _com_araliga_yaz(govde, matris)
+        return len(satirlar)
+
+    if not matris:
+        return 0
+
+    # Tablo yok — doğrudan aralığa yaz (temizleme yok; pivot kaynağı satır aralığı sonra güncellenir)
+    hedef = sheet.Range(
+        sheet.Cells(baslik_satiri + 1, 1),
+        sheet.Cells(baslik_satiri + len(matris), kolon_sayisi),
+    )
+    _com_araliga_yaz(hedef, matris)
     return len(satirlar)
 
 
@@ -285,8 +329,12 @@ def _com_pivot_kaynak_guncelle(
         for i in range(1, int(wb.PivotCaches().Count) + 1):
             pc = wb.PivotCaches(i)
             src = str(pc.SourceData or "")
-            if sayfa_adi.upper() in src.upper():
-                pc.SourceData = yeni_kaynak
+            if sayfa_adi.upper() not in src.upper():
+                continue
+            # Tablo adına bağlı pivot (örn. 'VERİ'!Tablo1) — ListObject.Resize yeterli
+            if "$" not in src:
+                continue
+            pc.SourceData = yeni_kaynak
     except Exception:
         pass
 
