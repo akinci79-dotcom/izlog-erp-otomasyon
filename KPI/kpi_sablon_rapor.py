@@ -23,7 +23,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 import ayarlar
 from kpi_kiralk_arac import FILO_DETAY_SUTUNLARI, kiralk_arac_detay_getir, kiralk_arac_semasi_hazir
-from kpi_veri import hucre_degeri, veri_satirlari_getir, veri_semasi_hazir
+from kpi_veri import hucre_degeri, veri_satirlari_getir, veri_semasi_hazir, veri_sql_kaynak_bilgisi
 from oracle_baglanti import baglanti_yonet
 
 _KPI_KOKU = Path(__file__).resolve().parent
@@ -73,6 +73,39 @@ _SABLON_KOLON_VARSAYILAN: dict[str, str] = {
     "SATIS_IADE_TUTARI": "SATIS_IADE_TUTAR",
     "TOPLAM_KAR_ZARAR": "KAR_ZARAR",
     "TOPLAM_KAR_ZARAR_TUTAR": "KAR_ZARAR",
+    "KULLANICI": "KULLANICI",
+    "ARSIV_DURUMU": "ARSIV_DURUMU",
+    "MUSTERI_HESAPLASMA_ACIKLAMA": "MUSTERI_HESAPLASMA_ACIKLAMA",
+    "SEVK_DURUMU": "SEVK_DURUMU",
+    "SEFER_TURU": "SEFER_TURU",
+    "SEFER_TIPI": "SEFER_TIPI",
+    "SIPARIS_TARIHI": "SIPARIS_TARIHI",
+    "SIPARIS_NO": "SIPARIS_NO",
+    "SIPARIS_NOTLARI": "SIPARIS_NOTLARI",
+    "GONDERICI_CARI_ADI": "GONDERICI_CARI_ADI",
+    "ALICI_CARI_ADI": "ALICI_CARI_ADI",
+    "SOZLESME_TARIHI": "SOZLESME_TARIHI",
+    "SOZLESME_NO": "SOZLESME_NO",
+    "MUSTERI_EVRAK_NO": "MUSTERI_EVRAK_NO",
+    "PLAKA_CARI_ADI": "PLAKA_CARI_ADI",
+    "MULKIYET": "MULKIYET",
+    "SURUCU_ADI": "SURUCU_ADI",
+    "SURUCU_TEL": "SURUCU_TEL",
+    "NOKTA_SAYISI": "NOKTA_SAYISI",
+    "YUKLEME_YER_KODU": "YUKLEME_YER_KODU",
+    "YUKLEME_YER_ADI": "YUKLEME_YER_ADI",
+    "YUKLEME_SEHIR_ADI": "YUKLEME_SEHIR_ADI",
+    "YUKLEME_ILCE_ADI": "YUKLEME_ILCE_ADI",
+    "YUKLEME_ADRESI": "YUKLEME_ADRESI",
+    "BOSALTMA_YER_KODU": "BOSALTMA_YER_KODU",
+    "BOSALTMA_YER_ADI": "BOSALTMA_YER_ADI",
+    "BOSALTMA_SEHIR_ADI": "BOSALTMA_SEHIR_ADI",
+    "BOSALTMA_ILCE_ADI": "BOSALTMA_ILCE_ADI",
+    "BOSALTMA_ADRESI": "BOSALTMA_ADRESI",
+    "BRUT_AGIRLIK": "BRUT_AGIRLIK",
+    "CIKIS_KM": "CIKIS_KM",
+    "VARIS_KM": "VARIS_KM",
+    "BOS_KM": "BOS_KM",
 }
 
 
@@ -872,7 +905,7 @@ def sablon_rapor_olustur(
         cursor = baglanti.cursor()
         veri_ok, veri_mesaj = veri_semasi_hazir()
         if veri_ok:
-            _progress("  Oracle VERİ sorgusu çalışıyor (birkaç dakika sürebilir)...")
+            _progress(f"  Oracle VERİ sorgusu ({veri_sql_kaynak_bilgisi()})...")
             veri_satirlari = veri_satirlari_getir(cursor, bas, bit, bind)
             _progress(f"  Oracle VERİ tamam: {len(veri_satirlari)} satır")
         else:

@@ -20,6 +20,10 @@ KPI_BITIS_TARIHI = "31.01.2026"
 # Referans KPI şablonu (Temmuz raporunuzun kopyası)
 KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"
 
+# VERİ sayfası SQL — boş bırakılırsa referans/kpi_veri_rapor.sql aranır, yoksa varsayılan sorgu
+# Uyumsoft LojistikYükSevkKalemRaporu SQL'ini referans/kpi_veri_rapor.sql olarak kaydedin
+# KPI_VERI_SQL_DOSYASI = "kpi_veri_rapor.sql"
+
 # Şablondaki sayfa adları (gizli VERİ sayfası dahil)
 KPI_VERI_SAYFA_ADLARI = ["VERİ", "VERI", "Veri"]
 KPI_FILO_SAYFA_ADLARI = ["Filo Detay", "Filo detay"]

@@ -1,0 +1,21 @@
+-- Uyumsoft LojistikYükSevkKalemRaporu (veya Temmuz KPI VERİ kaynağı) SQL'i
+--
+-- Kullanım:
+--   1. Uyumsoft rapor tasarımcısından ORİJİNAL SQL'i kopyalayın
+--   2. Bu dosyayı kpi_veri_rapor.sql olarak kaydedin (referans/ klasörüne)
+--   3. Tarih filtresi mutlaka :bas ve :bit parametrelerini kullansın (DD.MM.YYYY)
+--   4. SELECT kolon takma adları (alias) şablondaki başlıklarla aynı olsun
+--      örn: AS PROJE_KODU, AS KULLANICI, AS YUKLEME_YER_ADI
+--
+-- ayarlar.py (isteğe bağlı):
+--   KPI_VERI_SQL_DOSYASI = "kpi_veri_rapor.sql"
+--
+-- Örnek tarih filtresi:
+--   WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+--
+-- Bu dosya yalnızca şablondur; gerçek SQL'inizi aşağıya yapıştırın:
+
+SELECT
+    PJ.PROJECT_CODE AS PROJE_KODU
+FROM LMST_L_GOODS YK
+WHERE 1 = 0
