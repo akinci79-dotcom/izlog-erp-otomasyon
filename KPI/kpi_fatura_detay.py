@@ -229,22 +229,6 @@ def fatura_detay_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
             "aksiyon": "Geciken projeleri fatura ekibiyle birlikte önceliklendirin.",
         })
 
-    erken = [
-        s for s in detay
-        if s.get("FATURA_NO")
-        and fatura_probleme_dahil(s.get("OPERASYON_KODU"))
-        and (_t := _tarih_gun_farki(s.get("BELGE_TARIHI"), s.get("FATURA_TARIHI"))) is not None
-        and _t < 0
-    ]
-    if len(erken) > 10:
-        problemler.append({
-            "oncelik": "ORTA",
-            "kategori": "Fatura Detay",
-            "baslik": "Fatura tarihi belge tarihinden önce görünen kalemler",
-            "detay": f"{len(erken)} satırda fatura tarihi sevk/yük tarihinden önce.",
-            "aksiyon": "Problem Detay sayfasından satırları inceleyin; veri giriş hatası veya ön fatura senaryosu olabilir.",
-        })
-
     if ozet.get("limit_asildi"):
         limit = getattr(ayarlar, "KPI_FATURA_DETAY_LIMIT", 10000)
         problemler.append({
