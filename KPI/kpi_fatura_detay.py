@@ -12,6 +12,30 @@ from typing import Any
 import ayarlar
 from oracle_baglanti import satir_limit_sql, tablo_var_mi
 
+# Bu operasyon kodlarında fatura beklenmez — faturasız problem sayımına dahil edilmez
+FATURA_BEKLENMEYEN_OPERASYONLAR = frozenset({"ALDIĞI MAZOT TL", "ELDEN"})
+
+
+def fatura_beklenmiyor(operasyon_kodu: str | None) -> bool:
+    if not operasyon_kodu:
+        return False
+    normalized = operasyon_kodu.strip().upper()
+    return normalized in {k.upper() for k in FATURA_BEKLENMEYEN_OPERASYONLAR}
+
+
+def _ayarlanan_fatura_muaf_operasyonlar() -> frozenset[str]:
+    ek = getattr(ayarlar, "KPI_FATURA_MUAF_OPERASYONLAR", None)
+    if ek:
+        return FATURA_BEKLENMEYEN_OPERASYONLAR | frozenset(ek)
+    return FATURA_BEKLENMEYEN_OPERASYONLAR
+
+
+def fatura_probleme_dahil(operasyon_kodu: str | None) -> bool:
+    if not operasyon_kodu:
+        return True
+    normalized = operasyon_kodu.strip().upper()
+    return normalized not in {k.upper() for k in _ayarlanan_fatura_muaf_operasyonlar()}
+
 
 def _sk_filtre_parcasi() -> tuple[str, str]:
     joins: list[str] = []
@@ -141,6 +165,8 @@ def fatura_detay_ozet_hesapla(
             sevk += 1
         else:
             yuk += 1
+        if not fatura_probleme_dahil(satir.get("OPERASYON_KODU")):
+            continue
         if satir.get("FATURA_NO"):
             faturali += 1
             gecikme = _tarih_gun_farki(satir.get("BELGE_TARIHI"), satir.get("FATURA_TARIHI"))
@@ -149,7 +175,7 @@ def fatura_detay_ozet_hesapla(
         else:
             faturasiz += 1
 
-    toplam = len(detay)
+    toplam = faturali + faturasiz
     return {
         "mevcut": True,
         "toplam_satir": toplam,
@@ -164,7 +190,10 @@ def fatura_detay_ozet_hesapla(
 
 
 def faturasiz_kalemler(detay: list[dict]) -> list[dict]:
-    return [s for s in detay if not s.get("FATURA_NO")]
+    return [
+        s for s in detay
+        if not s.get("FATURA_NO") and fatura_probleme_dahil(s.get("OPERASYON_KODU"))
+    ]
 
 
 def fatura_detay_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
@@ -203,6 +232,7 @@ def fatura_detay_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
     erken = [
         s for s in detay
         if s.get("FATURA_NO")
+        and fatura_probleme_dahil(s.get("OPERASYON_KODU"))
         and (_t := _tarih_gun_farki(s.get("BELGE_TARIHI"), s.get("FATURA_TARIHI"))) is not None
         and _t < 0
     ]

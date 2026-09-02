@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from kpi_fatura_detay import _tarih_gun_farki
+from kpi_fatura_detay import _tarih_gun_farki, fatura_probleme_dahil
 from kpi_kalem_detay import _decimal
 
 PROBLEM_DETAY_SUTUNLARI = [
@@ -39,6 +39,8 @@ def erken_fatura_kalemleri(fatura_detay: list[dict]) -> list[dict]:
     for satir in fatura_detay:
         if not satir.get("FATURA_NO"):
             continue
+        if not fatura_probleme_dahil(satir.get("OPERASYON_KODU")):
+            continue
         gun = _tarih_gun_farki(satir.get("BELGE_TARIHI"), satir.get("FATURA_TARIHI"))
         if gun is not None and gun < 0:
             sonuc.append(
@@ -65,6 +67,8 @@ def faturasiz_kalem_satirlari(kalem_detay: list[dict]) -> list[dict]:
     for satir in kalem_detay:
         alis_satis = satir.get("ALIS_SATIS") or ""
         if satir.get("FATURA_NO") or alis_satis not in ("Satış", "Alış"):
+            continue
+        if not fatura_probleme_dahil(satir.get("OPERASYON_KODU")):
             continue
         belge = satir.get("SEVK_TARIHI") if satir.get("TIP") == "Sevk Kalemi" else satir.get("YUK_TARIHI")
         sonuc.append(

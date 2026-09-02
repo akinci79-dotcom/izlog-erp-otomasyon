@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
+from kpi_fatura_detay import fatura_probleme_dahil
 from oracle_baglanti import satir_limit_sql, tablo_var_mi
 
 
@@ -231,7 +232,8 @@ def kalem_detay_ozet_hesapla(detay: list[dict], mevcut: bool = True, limit_asild
         alis_satis = satir.get("ALIS_SATIS") or ""
 
         if not satir.get("FATURA_NO") and alis_satis in ("Satış", "Alış"):
-            faturasiz += 1
+            if fatura_probleme_dahil(satir.get("OPERASYON_KODU")):
+                faturasiz += 1
 
         if tip == "Sevk Kalemi":
             sevk_kalem += 1
