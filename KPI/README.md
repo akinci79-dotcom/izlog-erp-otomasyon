@@ -77,12 +77,16 @@ DB_SIFRE = "..."
 
 ## Çalıştırma
 
+**Çift tık (en kolay):** KPI klasöründe `kpi_rapor_olustur.bat` dosyasına çift tıklayın.
+
+Önce `ayarlar.py` içinde tarih aralığını (`KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI`) ve `DB_SIFRE` alanını doldurun. Rapor bitince Excel dosyası otomatik açılır.
+
+**Komut satırı:**
+
 ```powershell
 cd KPI
 python kpi_rapor_olustur.py
 ```
-
-**Ne yapar:**
 1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx` (veya şablon `.xlsm` ise `.xlsm`)
 2. **VERİ** ve **Filo Detay** sayfalarına Oracle verisi **Excel COM** ile yazılır (pivot şablonu bozulmaz)
 3. Pivotlar yenilenir, sütunlar genişletilir
