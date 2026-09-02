@@ -28,6 +28,11 @@ from oracle_baglanti import baglanti_yonet
 
 _KPI_KOKU = Path(__file__).resolve().parent
 
+
+def _progress(mesaj: str) -> None:
+    """Konsola anında yazar (Windows cmd tamponlaması / sessiz bekleme önlenir)."""
+    print(mesaj, flush=True)
+
 # Şablon başlığı (normalize) → Oracle kolon adı — Temmuz KPI şablonu için varsayılanlar
 _SABLON_KOLON_VARSAYILAN: dict[str, str] = {
     "YUK_NO": "YUK_NO",
@@ -586,6 +591,22 @@ def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
         _com_sutun_genisligi_ayarla(sheet, harf, gen, max_w)
 
 
+def _excel_hesapla(excel) -> None:
+    """Pivot sonrası hesaplama — hızlı modda tam yeniden derleme yapılmaz."""
+    hizli = getattr(ayarlar, "KPI_HIZLI_MOD", True)
+    try:
+        excel.CalculateUntilAsyncQueriesDone()
+    except Exception:
+        pass
+    try:
+        if hizli:
+            excel.Calculate()
+        else:
+            excel.CalculateFullRebuild()
+    except Exception:
+        pass
+
+
 def _excel_sayfa_bul(wb, adlar: list[str]):
     ad_norm = {a.strip().upper() for a in adlar}
     for sheet in wb.Worksheets:
@@ -613,7 +634,9 @@ def _excel_sablon_doldur(
     dosya = str(dosya_yolu.resolve())
 
     try:
+        _progress("  [Excel] Uygulama açılıyor...")
         excel = _excel_uygulama_ac()
+        _progress(f"  [Excel] Şablon açılıyor: {dosya_yolu.name}")
         wb = excel.Workbooks.Open(
             Filename=dosya,
             UpdateLinks=0,
@@ -629,6 +652,7 @@ def _excel_sablon_doldur(
         if ws_filo is None:
             return False, f"Filo Detay sayfası bulunamadı: {filo_sayfa_adlari}", 0, 0, []
 
+        _progress(f"  [Excel] VERİ yazılıyor ({len(veri_satirlari)} satır)...")
         veri_adet, _, eslesmeyen_veri, veri_kolon, veri_tablo_sol = _com_sayfaya_yaz(
             ws_veri, veri_baslik_satiri, veri_satirlari
         )
@@ -636,6 +660,7 @@ def _excel_sablon_doldur(
             wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon, veri_tablo_sol
         )
 
+        _progress(f"  [Excel] Filo Detay yazılıyor ({len(filo_satirlari)} satır)...")
         filo_yaz = [{k: r.get(k) for k in FILO_DETAY_SUTUNLARI} for r in filo_satirlari]
         filo_adet, _, _, filo_kolon, filo_tablo_sol = _com_sayfaya_yaz(
             ws_filo, filo_baslik_satiri, filo_yaz, sabit_kolonlar=FILO_DETAY_SUTUNLARI
@@ -644,36 +669,30 @@ def _excel_sablon_doldur(
             wb, ws_filo.Name, filo_baslik_satiri, filo_adet, filo_kolon, filo_tablo_sol
         )
 
-        if sutun_autofit:
-            for sheet in (ws_veri, ws_filo):
-                try:
-                    _com_sutunlari_genislet(sheet, satir_limit=5000)
-                except Exception as exc:
-                    uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
-
         if pivot_yenile:
+            _progress("  [Excel] Pivotlar yenileniyor...")
             try:
                 wb.RefreshAll()
             except Exception as exc:
                 uyarilar.append(f"pivot yenileme: {exc}")
             try:
-                excel.CalculateUntilAsyncQueriesDone()
-            except Exception:
-                pass
-            try:
-                excel.CalculateFullRebuild()
+                _excel_hesapla(excel)
             except Exception as exc:
                 uyarilar.append(f"hesaplama: {exc}")
 
         if sutun_autofit:
+            _progress("  [Excel] Özet sayfaları genişletiliyor...")
             for sheet in wb.Worksheets:
                 if int(sheet.Visible) != -1:
+                    continue
+                if sheet.Name in (ws_veri.Name, ws_filo.Name):
                     continue
                 try:
                     _com_sutunlari_genislet(sheet)
                 except Exception as exc:
                     uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
 
+        _progress("  [Excel] Kaydediliyor...")
         wb.Save()
         wb.Close(SaveChanges=True)
         wb = None
@@ -724,11 +743,7 @@ def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool,
             except Exception as exc:
                 uyarilar.append(f"pivot yenileme: {exc}")
             try:
-                excel.CalculateUntilAsyncQueriesDone()
-            except Exception:
-                pass
-            try:
-                excel.CalculateFullRebuild()
+                _excel_hesapla(excel)
             except Exception as exc:
                 uyarilar.append(f"hesaplama: {exc}")
 
@@ -842,18 +857,33 @@ def sablon_rapor_olustur(
     bas, bit = _tarih_araligi()
     bind = _bind_olustur(bas, bit)
 
+    _progress(f"KPI raporu — dönem: {bas} — {bit}")
+    _progress(f"  Şablon: {kaynak.name}")
+
     hedef.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(kaynak, hedef)
+    _progress(f"  Çıktı kopyalandı: {hedef.name}")
 
     veri_satirlari: list[dict] = []
     filo_satirlari: list[dict] = []
 
+    _progress("  Oracle bağlantısı açılıyor...")
     with baglanti_yonet() as baglanti:
         cursor = baglanti.cursor()
-        if veri_semasi_hazir()[0]:
+        veri_ok, veri_mesaj = veri_semasi_hazir()
+        if veri_ok:
+            _progress("  Oracle VERİ sorgusu çalışıyor (birkaç dakika sürebilir)...")
             veri_satirlari = veri_satirlari_getir(cursor, bas, bit, bind)
-        if kiralk_arac_semasi_hazir()[0]:
+            _progress(f"  Oracle VERİ tamam: {len(veri_satirlari)} satır")
+        else:
+            _progress(f"  Uyarı: VERİ atlandı — {veri_mesaj}")
+        filo_ok, filo_mesaj = kiralk_arac_semasi_hazir()
+        if filo_ok:
+            _progress("  Oracle Filo Detay sorgusu çalışıyor...")
             filo_satirlari = kiralk_arac_detay_getir(cursor, bas, bit, bind)
+            _progress(f"  Oracle Filo tamam: {len(filo_satirlari)} satır")
+        else:
+            _progress(f"  Uyarı: Filo Detay atlandı — {filo_mesaj}")
 
     veri_sayfa_adlari = getattr(ayarlar, "KPI_VERI_SAYFA_ADLARI", ["VERİ", "VERI", "Veri"])
     filo_sayfa_adlari = getattr(ayarlar, "KPI_FILO_SAYFA_ADLARI", ["Filo Detay", "Filo detay"])
@@ -870,6 +900,7 @@ def sablon_rapor_olustur(
     eslesmeyen_veri: list[str] = []
 
     if _excel_kullanilabilir():
+        _progress("  Excel ile şablon dolduruluyor...")
         excel_ok, excel_mesaj, veri_adet, filo_adet, eslesmeyen_veri = _excel_sablon_doldur(
             hedef,
             veri_satirlari,

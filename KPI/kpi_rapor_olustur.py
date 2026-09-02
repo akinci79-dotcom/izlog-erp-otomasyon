@@ -15,6 +15,7 @@ from kpi_sablon_rapor import sablon_rapor_olustur
 
 
 def main():
+    print("KPI modulu yukleniyor...", flush=True)
     if "--analiz" in sys.argv or "--ornek" in sys.argv:
         from kpi_rapor_analiz import main as analiz_main
 
@@ -25,4 +26,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        print(f"\nHATA: {exc}", flush=True)
+        sys.exit(1)

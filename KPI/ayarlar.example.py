@@ -32,6 +32,8 @@ KPI_FILO_BASLIK_SATIRI = 1
 KPI_EXCEL_KULLAN = True
 KPI_PIVOT_YENILE = True
 KPI_SUTUN_AUTOFIT = True
+# Hızlı mod: CalculateFullRebuild yerine Calculate, VERİ/Filo AutoFit atlanır (varsayılan: True)
+KPI_HIZLI_MOD = True
 # Pivot özet sayfalarında tutar sütunları (Alış/Satış) — #### önleme
 KPI_PARA_SUTUN_MIN_GENISLIK = 24
 # Özet sayfasında Alış sütunu (genelde C)

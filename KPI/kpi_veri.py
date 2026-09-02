@@ -152,9 +152,6 @@ def _veri_satir_zenginlestir(satir: dict[str, Any]) -> dict[str, Any]:
 
 
 def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[str, Any]]:
-    ok, _ = veri_semasi_hazir()
-    if not ok:
-        return []
     cursor.execute(_veri_sql(), bind)
     sutunlar = [c[0] for c in cursor.description]
     return [_veri_satir_zenginlestir(dict(zip(sutunlar, satir))) for satir in cursor.fetchall()]
