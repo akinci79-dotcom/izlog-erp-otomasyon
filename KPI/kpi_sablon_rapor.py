@@ -444,18 +444,32 @@ def _excel_uygulama_ac():
     return excel
 
 
-def _autofit_ayarlari() -> tuple[float, float, float, int]:
+def _autofit_ayarlari() -> tuple[float, float, float, int, dict[str, float]]:
+    ozel = getattr(ayarlar, "KPI_SUTUN_GENISLIK", None) or {}
+    if not isinstance(ozel, dict):
+        ozel = {}
     return (
         float(getattr(ayarlar, "KPI_SUTUN_MIN_GENISLIK", 10)),
-        float(getattr(ayarlar, "KPI_PARA_SUTUN_MIN_GENISLIK", 18)),
+        float(getattr(ayarlar, "KPI_PARA_SUTUN_MIN_GENISLIK", 24)),
         float(getattr(ayarlar, "KPI_SUTUN_MAX_GENISLIK", 55)),
         int(getattr(ayarlar, "KPI_AUTOFIT_MAX_SATIR", 400)),
+        {str(k).upper(): float(v) for k, v in ozel.items()},
     )
+
+
+def _com_sutun_genisligi_ayarla(sheet, col: int | str, genislik: float, max_w: float) -> None:
+    try:
+        mevcut = float(sheet.Columns(col).ColumnWidth)
+        hedef = min(max(genislik, mevcut), max_w)
+        if hedef > mevcut:
+            sheet.Columns(col).ColumnWidth = hedef
+    except Exception:
+        pass
 
 
 def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
     """UsedRange AutoFit + #### tespiti — pivot tutar sütunları (Alış/Satış) için."""
-    min_w, para_w, max_w, varsayilan_satir_limit = _autofit_ayarlari()
+    min_w, para_w, max_w, varsayilan_satir_limit, ozel_genislik = _autofit_ayarlari()
     if satir_limit is None:
         satir_limit = varsayilan_satir_limit
 
@@ -490,13 +504,15 @@ def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
                 continue
             if not text:
                 continue
+            genislik_ihtiyaci = min(len(text) * 1.12 + 2.0, max_w)
             if "#" in text:
-                hedef = max(hedef, para_w)
+                hedef = max(hedef, genislik_ihtiyaci, para_w)
                 kesin_para = True
                 break
-            genislik_ihtiyaci = min(len(text) * 1.08 + 1.5, max_w)
-            if any(ch in text for ch in "₺%") or ("," in text and any(c.isdigit() for c in text)):
-                hedef = max(hedef, min(genislik_ihtiyaci, para_w))
+            if any(ch in text for ch in "₺%") or ("." in text and "," in text) or (
+                "," in text and any(c.isdigit() for c in text)
+            ):
+                hedef = max(hedef, genislik_ihtiyaci, para_w)
                 kesin_para = True
             else:
                 hedef = max(hedef, genislik_ihtiyaci)
@@ -504,12 +520,15 @@ def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
         if kesin_para:
             hedef = max(hedef, para_w)
 
-        try:
-            mevcut = float(sheet.Columns(col).ColumnWidth)
-            if mevcut < hedef:
-                sheet.Columns(col).ColumnWidth = min(hedef, max_w)
-        except Exception:
-            pass
+        _com_sutun_genisligi_ayarla(sheet, col, hedef, max_w)
+
+    # Özet vb.: Alış sütunu (C) — şablonda tutar genelde burada
+    alis_harf = str(getattr(ayarlar, "KPI_ALIS_SUTUN_HARFI", "C")).upper()
+    alis_genislik = float(getattr(ayarlar, "KPI_ALIS_SUTUN_GENISLIK", para_w + 4))
+    _com_sutun_genisligi_ayarla(sheet, alis_harf, alis_genislik, max_w)
+
+    for harf, gen in ozel_genislik.items():
+        _com_sutun_genisligi_ayarla(sheet, harf, gen, max_w)
 
 
 def _excel_sayfa_bul(wb, adlar: list[str]):
