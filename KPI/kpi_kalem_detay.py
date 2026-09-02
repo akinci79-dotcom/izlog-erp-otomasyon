@@ -326,7 +326,7 @@ def kalem_detay_problemleri(ozet: dict, kirilim: list[dict]) -> list[dict]:
             "kategori": "Kalem Detay",
             "baslik": "Faturasız sevk/yük kalemleri yüksek",
             "detay": f"{ozet['faturasiz_kalem_sayisi']} kalemde fatura no yok.",
-            "aksiyon": "Kalem detay sayfasından faturasız satırları proje bazında kapatın.",
+            "aksiyon": "Problem Detay sayfasından faturasız satırları proje bazında kapatın.",
         })
 
     zararli = [k for k in kirilim if _decimal(k.get("NET_KAR_ZARAR")) < 0]

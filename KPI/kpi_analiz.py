@@ -34,6 +34,7 @@ from kpi_kalem_detay import (
     kalem_sevk_kirilim_hesapla,
     ornek_kalem_detay_verisi,
 )
+from kpi_problem_detay import PROBLEM_DETAY_SUTUNLARI, ornek_problem_detay, problem_detay_olustur
 from kpi_kiralk_arac import (
     kiralk_arac_cari_ozet_hesapla,
     kiralk_arac_detay_getir,
@@ -123,6 +124,8 @@ class KpiAnalizSonucu:
     fatura_detay_ozet: dict[str, Any] = field(default_factory=dict)
     fatura_detay: list[dict] = field(default_factory=list)
     faturasiz_kalemler: list[dict] = field(default_factory=list)
+    sevksiz_yukler: list[dict] = field(default_factory=list)
+    problem_detay: list[dict] = field(default_factory=list)
     problemler: list[dict] = field(default_factory=list)
     uyarilar: list[str] = field(default_factory=list)
 
@@ -438,7 +441,37 @@ def _marj_analizi(cursor, bas, bit):
     }
 
 
-def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
+def _sevksiz_yukleri_getir(cursor, bas, bit, limit: int = 500) -> list[dict]:
+    sevk_ok, _ = _sevk_semasi_hazir()
+    if not sevk_ok:
+        return []
+
+    bind = _bind_ortak(bas, bit)
+    yuk_join, yuk_where = _yuk_filtre_sql(bind)
+    cursor.execute(
+        satir_limit_sql(
+            f"""
+            SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
+            FROM LMST_L_GOODS YK
+            LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
+            LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD
+              ON TGD.GOODS_ID = YK.GOODS_ID
+             AND TGD.GOODS_ID > 0
+            {yuk_join}
+            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+              AND TGD.TRANSPORT_ID IS NULL
+            {yuk_where}
+            ORDER BY YK.DOC_DATE DESC
+            """,
+            limit,
+        ),
+        bind,
+    )
+    sutunlar = [c[0] for c in cursor.description]
+    return _satirlari_dict_yap(sutunlar, cursor.fetchall())
+
+
+def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj, sevksiz_yukler: list[dict]):
     problemler = []
 
     if ozet.get("fatura_baglama_orani_yuzde", 100) < 95:
@@ -495,39 +528,16 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
         )
 
     sevk_ok, _ = _sevk_semasi_hazir()
-    if sevk_ok:
-        bind = _bind_ortak(bas, bit)
-        yuk_join, yuk_where = _yuk_filtre_sql(bind)
-        cursor.execute(
-            satir_limit_sql(
-                f"""
-                SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
-                FROM LMST_L_GOODS YK
-                LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
-                LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD
-                  ON TGD.GOODS_ID = YK.GOODS_ID
-                 AND TGD.GOODS_ID > 0
-                {yuk_join}
-                WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-                  AND TGD.TRANSPORT_ID IS NULL
-                {yuk_where}
-                ORDER BY YK.DOC_DATE DESC
-                """,
-                50,
-            ),
-            bind,
+    if sevk_ok and sevksiz_yukler:
+        problemler.append(
+            {
+                "oncelik": "YUKSEK",
+                "kategori": "Operasyon",
+                "baslik": f"Sevki olmayan yükler ({len(sevksiz_yukler)}+ kayıt)",
+                "detay": "Örnek: " + ", ".join(r["REFERENCE_NO"] for r in sevksiz_yukler[:5]),
+                "aksiyon": "Sevki oluşturulmamış yük listesini günlük operasyon toplantısına taşıyın.",
+            }
         )
-        sevksiz = cursor.fetchall()
-        if sevksiz:
-            problemler.append(
-                {
-                    "oncelik": "YUKSEK",
-                    "kategori": "Operasyon",
-                    "baslik": f"Sevki olmayan yükler ({len(sevksiz)}+ kayıt)",
-                    "detay": "Örnek: " + ", ".join(r[0] for r in sevksiz[:5]),
-                    "aksiyon": "Sevki oluşturulmamış yük listesini günlük operasyon toplantısına taşıyın.",
-                }
-            )
 
     bind = _bind_ortak(bas, bit)
     yuk_join, yuk_where = _yuk_filtre_sql(bind)
@@ -623,8 +633,6 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
             sonuc.uyarilar.append(f"Firma filtresi: CO_CODE = {ayarlar.CO_CODE}")
         if getattr(ayarlar, "BRANCH_CODE", None):
             sonuc.uyarilar.append(f"Şube filtresi: BRANCH_CODE = {ayarlar.BRANCH_CODE}")
-        if getattr(ayarlar, "KPI_KAPI_KAPI_HARIC", True):
-            sonuc.uyarilar.append("Kapıdan kapıya yükler hariç (IS_DOOR_TO_DOOR = 0).")
         if not sonuc.marj_analizi.get("mevcut"):
             sonuc.uyarilar.append(sonuc.marj_analizi.get("mesaj", "Marj analizi atlandı."))
         if not sonuc.kiralk_arac_ozet.get("mevcut"):
@@ -654,8 +662,9 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
                 f"Fatura detay {limit} satır limitine ulaştı — tam liste için dönemi daraltın."
             )
 
+        sonuc.sevksiz_yukler = _sevksiz_yukleri_getir(cursor, bas, bit)
         sonuc.problemler = _problemleri_tespit_et(
-            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi
+            cursor, bas, bit, sonuc.ozet, sonuc.proje_performans, sonuc.marj_analizi, sonuc.sevksiz_yukler
         )
         sonuc.problemler.extend(
             kiralk_arac_problemleri(sonuc.kiralk_arac_ozet, sonuc.kiralk_arac_detay)
@@ -665,6 +674,12 @@ def kpi_analizi_yap(baslangic=None, bitis=None) -> KpiAnalizSonucu:
         )
         sonuc.problemler.extend(
             fatura_detay_problemleri(sonuc.fatura_detay_ozet, sonuc.fatura_detay)
+        )
+        sonuc.problem_detay = problem_detay_olustur(
+            sonuc.fatura_detay,
+            sonuc.kalem_detay,
+            sonuc.kalem_sevk_kirilim,
+            sonuc.sevksiz_yukler,
         )
         oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
         sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
@@ -742,6 +757,7 @@ def ornek_analiz_sonucu() -> KpiAnalizSonucu:
     sonuc.problemler.extend(kiralk_arac_problemleri(ka_ozet, ka_detay))
     sonuc.problemler.extend(kalem_detay_problemleri(kd_ozet, kd_kirilim))
     sonuc.problemler.extend(fatura_detay_problemleri(fd_ozet, fd_detay))
+    sonuc.problem_detay = ornek_problem_detay()
     oncelik_sira = {"YUKSEK": 0, "ORTA": 1, "DUSUK": 2}
     sonuc.problemler.sort(key=lambda p: oncelik_sira.get(p["oncelik"], 9))
     sonuc.uyarilar = ["Bu rapor ORNEK veri ile üretilmiştir — gerçek analiz için Windows sunucusunda çalıştırın."]

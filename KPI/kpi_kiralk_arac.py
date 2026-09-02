@@ -271,6 +271,7 @@ def kiralk_arac_ozet_hesapla(detay: list[dict], mevcut: bool = True) -> dict[str
             "toplam_satis": Decimal("0"),
             "toplam_kar_zarar": Decimal("0"),
             "zararli_dosya_sayisi": 0,
+            "kiralk_arac_sayisi": 0,
             "kar_orani_yuzde": 0,
             "mesaj": "Dönemde kiralık araç hakediş dosyası bulunamadı.",
         }
@@ -280,10 +281,12 @@ def kiralk_arac_ozet_hesapla(detay: list[dict], mevcut: bool = True) -> dict[str
     toplam_kz = sum(_decimal(r.get("KAR_ZARAR")) for r in detay)
     zararli = sum(1 for r in detay if _decimal(r.get("KAR_ZARAR")) < 0)
     acik = sum(1 for r in detay if r.get("DOSYA_DURUM") == "Açık")
+    arac_kodlari = {r.get("ARAC_KODU") for r in detay if r.get("ARAC_KODU")}
 
     return {
         "mevcut": True,
         "dosya_sayisi": len(detay),
+        "kiralk_arac_sayisi": len(arac_kodlari),
         "acik_dosya_sayisi": acik,
         "toplam_maliyet": toplam_maliyet,
         "toplam_satis": toplam_satis,

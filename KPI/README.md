@@ -87,7 +87,8 @@ KPI_BITIS_TARIHI = "31.01.2026"
 
 | Sayfa | İçerik |
 |---|---|
-| Yönetici Özeti | Yük/sevk, gelir, fatura oranı, marj, problem listesi |
+| Yönetici Özeti | Yük, gelir, marj, filo KPI'ları, problem listesi |
+| Problem Detay | Özet problemlerin satır bazında doğrulanabilir listesi |
 | Aylık Trend | Aylık hacim ve gelir |
 | Proje Performansı | Top 20 proje |
 | Operasyon Dağılımı | NAVLUN, UĞRAMA vb. |

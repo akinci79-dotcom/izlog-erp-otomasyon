@@ -20,6 +20,7 @@ from openpyxl.utils import get_column_letter
 import ayarlar
 from kpi_analiz import KpiAnalizSonucu, kpi_analizi_yap, ornek_analiz_sonucu
 from kpi_kiralk_arac import FILO_DETAY_SUTUNLARI
+from kpi_problem_detay import PROBLEM_DETAY_SUTUNLARI
 
 _KPI_KOKU = Path(__file__).resolve().parent
 
@@ -98,7 +99,7 @@ def _decimal_safe(deger):
 # Sütun adı → formatlayıcı (tüm veri sayfalarında tutarlı Türkçe gösterim)
 SAYI_SUTUNLARI = frozenset({
     "YUK_SAYISI", "SATIR_SAYISI", "DOSYA_SAYISI", "YUK_SAYISI",
-    "TOPLAM_KM", "AYLIK_YAKIT_ORANI", "FATURA_ID", "KAYIT_ID",
+    "TOPLAM_KM", "AYLIK_YAKIT_ORANI", "FATURA_ID", "KAYIT_ID", "GUN_FARKI",
 })
 YUZDE_SUTUNLARI = frozenset({"GELIR_PAYI_YUZDE", "kar_orani_yuzde"})
 TUTAR_SUTUNLARI = frozenset({
@@ -174,22 +175,8 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
 
     # KPI kutuları — satır 4
     _kpi_kutusu(ws, 4, 1, "Toplam Yük", _format_sayi(ozet.get("yuk_sayisi")))
-    _kpi_kutusu(ws, 4, 2, "Toplam Sevk", _format_sayi(ozet.get("sevk_sayisi")))
-    sevk_orani = ozet.get("sevk_orani_yuzde", 0)
-    _kpi_kutusu(
-        ws, 4, 3, "Sevk Oranı",
-        f"%{sevk_orani}",
-        uyari=sevk_orani < 90,
-    )
-    _kpi_kutusu(ws, 4, 4, "Satış Geliri", _format_para(ozet.get("toplam_satis_geliri")))
-    _kpi_kutusu(ws, 4, 5, "Yük Başına Ort. Gelir", _format_para(ozet.get("yuk_basina_ortalama_gelir")))
-
-    fatura_orani = ozet.get("fatura_baglama_orani_yuzde", 0)
-    _kpi_kutusu(
-        ws, 4, 6, "Fatura Bağlama Oranı",
-        f"%{fatura_orani}",
-        uyari=fatura_orani < 95,
-    )
+    _kpi_kutusu(ws, 4, 2, "Satış Geliri", _format_para(ozet.get("toplam_satis_geliri")))
+    _kpi_kutusu(ws, 4, 3, "Yük Başına Ort. Gelir", _format_para(ozet.get("yuk_basina_ortalama_gelir")))
 
     # Marj satırı
     marj = analiz.marj_analizi
@@ -206,7 +193,8 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
     # Filo Detay özeti (tedarikçi hesaplaşma)
     ka = analiz.kiralk_arac_ozet
     if ka.get("mevcut"):
-        _kpi_kutusu(ws, 7, 4, "Filo Dosya Sayısı", _format_sayi(ka.get("dosya_sayisi")))
+        arac_sayisi = ka.get("kiralk_arac_sayisi", ka.get("dosya_sayisi", 0))
+        _kpi_kutusu(ws, 7, 4, "Kiralık Araç Sayısı", _format_sayi(arac_sayisi))
         kz = ka.get("toplam_kar_zarar", 0)
         _kpi_kutusu(
             ws, 7, 5, "Filo Kar/Zarar",
@@ -219,21 +207,14 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
             f"%{kar_orani}",
             uyari=False,
         )
-        ws.cell(
-            row=9, column=1,
-            value=(
-                "Not: Kiralık araç hakediş K/Z'si kapasite maliyetidir; spot araç veya "
-                "müşteri cezası riskine karşı stratejik yatırım olarak değerlendirilir."
-            ),
-        )
-        ws.merge_cells("A9:F9")
-        ws.cell(row=9, column=1).font = Font(name="Calibri", size=9, italic=True, color="666666")
 
     # Fatura gecikmesi
     fg = analiz.fatura_sagligi
     if fg.get("ort_gecikme_gun") is not None:
-        fg_col = 4 if not ka.get("mevcut") else 1
-        fg_row = 10 if ka.get("mevcut") else 7
+        fg_col = 1
+        fg_row = 7 if not marj.get("mevcut") and not ka.get("mevcut") else 10
+        if not marj.get("mevcut") and ka.get("mevcut"):
+            fg_row = 7
         _kpi_kutusu(
             ws, fg_row, fg_col, "Ort. Fatura Gecikmesi",
             f"{fg['ort_gecikme_gun']} gün",
@@ -312,6 +293,14 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
     wb = Workbook()
 
     yonetici_ozeti_sayfasi(wb, analiz)
+
+    if analiz.problem_detay:
+        _veri_sayfasi(
+            wb,
+            "Problem Detay",
+            PROBLEM_DETAY_SUTUNLARI,
+            analiz.problem_detay,
+        )
 
     if analiz.aylik_trend:
         _veri_sayfasi(

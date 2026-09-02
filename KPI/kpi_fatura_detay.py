@@ -212,7 +212,7 @@ def fatura_detay_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
             "kategori": "Fatura Detay",
             "baslik": "Fatura tarihi belge tarihinden önce görünen kalemler",
             "detay": f"{len(erken)} satırda fatura tarihi sevk/yük tarihinden önce.",
-            "aksiyon": "Veri giriş hatası veya ön fatura senaryosu olabilir — ERP kayıtlarını doğrulayın.",
+            "aksiyon": "Problem Detay sayfasından satırları inceleyin; veri giriş hatası veya ön fatura senaryosu olabilir.",
         })
 
     if ozet.get("limit_asildi"):
