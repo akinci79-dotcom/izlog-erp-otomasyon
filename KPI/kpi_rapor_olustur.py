@@ -19,6 +19,7 @@ from openpyxl.utils import get_column_letter
 
 import ayarlar
 from kpi_analiz import KpiAnalizSonucu, kpi_analizi_yap, ornek_analiz_sonucu
+from kpi_kiralk_arac import FILO_DETAY_SUTUNLARI
 
 _KPI_KOKU = Path(__file__).resolve().parent
 
@@ -155,19 +156,19 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
             uyari=marj_orani < 10,
         )
 
-    # Kiralık araç özeti
+    # Filo Detay özeti (tedarikçi hesaplaşma)
     ka = analiz.kiralk_arac_ozet
     if ka.get("mevcut"):
-        _kpi_kutusu(ws, 7, 4, "Kiralık Dosya Sayısı", _format_sayi(ka.get("dosya_sayisi")))
+        _kpi_kutusu(ws, 7, 4, "Filo Dosya Sayısı", _format_sayi(ka.get("dosya_sayisi")))
         kz = ka.get("toplam_kar_zarar", 0)
         _kpi_kutusu(
-            ws, 7, 5, "Kiralık Filo Kar/Zarar",
+            ws, 7, 5, "Filo Kar/Zarar",
             _format_para(kz),
             uyari=_decimal_safe(kz) < 0,
         )
         kar_orani = ka.get("kar_orani_yuzde", 0)
         _kpi_kutusu(
-            ws, 7, 6, "Kiralık Kar Oranı",
+            ws, 7, 6, "Filo Kar Oranı",
             f"%{kar_orani}",
             uyari=kar_orani < 5,
         )
@@ -283,19 +284,25 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
     if analiz.kiralk_arac_detay:
         _veri_sayfasi(
             wb,
-            "Kiralık Araç Detay",
-            [
-                "DOSYA_NO", "DOSYA_TARIHI", "DOSYA_DURUM", "ARAC_KODU", "CARI_ADI",
-                "TOPLAM_KM", "HAKEDIS_KIRA_TUTARI", "ALDIGI_YAKIT_TUTARI",
-                "OTOBAN_KOPRU_VS", "MALIYETLER_TOPLAMI", "TOPLAM_SATIS", "KAR_ZARAR",
-            ],
+            "Filo Detay",
+            FILO_DETAY_SUTUNLARI,
             analiz.kiralk_arac_detay,
             {
+                "AYLIK_KIRA_TUTARI": lambda v: float(v) if v else 0,
                 "HAKEDIS_KIRA_TUTARI": lambda v: float(v) if v else 0,
-                "ALDIGI_YAKIT_TUTARI": lambda v: float(v) if v else 0,
+                "ALDIĞI_YAKIT_TUTARI": lambda v: float(v) if v else 0,
                 "OTOBAN_KOPRU_VS": lambda v: float(v) if v else 0,
+                "IZLOG_OGS": lambda v: float(v) if v else 0,
+                "YAKIT_FARK (+)": lambda v: float(v) if v else 0,
+                "YAKIT_FARK (-)": lambda v: float(v) if v else 0,
+                "ALIS_DIGER": lambda v: float(v) if v else 0,
+                "ALIS_IADE_DIGER": lambda v: float(v) if v else 0,
+                "TEDARIKCI_FATURA_TOPLAM": lambda v: float(v) if v else 0,
+                "IZLOG_IADE_TOPLAM": lambda v: float(v) if v else 0,
+                "ODENECEK_TUTAR": lambda v: float(v) if v else 0,
                 "MALIYETLER_TOPLAMI": lambda v: float(v) if v else 0,
                 "TOPLAM_SATIS": lambda v: float(v) if v else 0,
+                "ELDEN": lambda v: float(v) if v else 0,
                 "KAR_ZARAR": lambda v: float(v) if v else 0,
             },
         )
@@ -303,7 +310,7 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
     if analiz.kiralk_arac_cari:
         _veri_sayfasi(
             wb,
-            "Kiralık Araç Cari",
+            "Filo Cari Özet",
             ["CARI_KODU", "CARI_ADI", "DOSYA_SAYISI", "TOPLAM_MALIYET", "TOPLAM_SATIS", "KAR_ZARAR"],
             analiz.kiralk_arac_cari,
             {

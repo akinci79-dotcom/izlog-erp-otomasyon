@@ -588,7 +588,7 @@ KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördek
 | `KPI/ayarlar.py` | KPI'ya özel Oracle ayarları (otomasyon `ayarlar.py`'den BAĞIMSIZ) |
 | `KPI/oracle_baglanti.py` | KPI Oracle bağlantısı |
 | `KPI/kpi_analiz.py` | KPI sorguları + problem tespiti |
-| `KPI/kpi_kiralk_arac.py` | Kiralık araç hakediş sorguları |
+| `KPI/kpi_kiralk_arac.py` | Lojistik tedarikçi hesaplaşma → **Filo Detay** sayfası |
 | `KPI/kpi_kalem_detay.py` | Sevk/yük kalem detay sorguları |
 | `KPI/kpi_fatura_detay.py` | Sevk/yük fatura bağlantı sorguları |
 | `KPI/kpi_rapor_olustur.py` | Excel rapor üretici |
@@ -614,8 +614,8 @@ python kpi_rapor_olustur.py
 - Opsiyonel filtreler: `GNLD_COMPANY.CO_CODE`, `GNLD_BRANCH.BRANCH_CODE`,
   `YK.IS_DOOR_TO_DOOR = 0` (kapıdan kapıya hariç)
 
-**Kiralık araç maliyet KPI'ları** (tedarikçi hakediş raporu SQL'i ile uyumlu
-[DOĞRULANMIŞ]):
+**Filo Detay** (Lojistik tedarikçi hesaplaşma raporu SQL'i [DOĞRULANMIŞ]):
+- Yönetim raporundaki **Filo Detay** sayfasına ERP'den yapıştırılan veri ile aynı
 - `LMST_SUP_PAYOFF_M` — hakediş dosyası (CASE_CODE, DOC_DATE, CASE_STATUS)
 - `LMST_SUP_PAYOFF_OPDET` — dosya kalemleri (AMT_TRA, PURCHASE_SALES_TYPE)
 - `LMST_SUP_PAYOFF_T_D` — dosya ↔ sevk bağlantısı

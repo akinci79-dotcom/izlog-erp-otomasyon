@@ -87,8 +87,8 @@ KPI_BITIS_TARIHI = "31.01.2026"
 | Aylık Trend | Aylık hacim ve gelir |
 | Proje Performansı | Top 20 proje |
 | Operasyon Dağılımı | NAVLUN, UĞRAMA vb. |
-| Kiralık Araç Detay | Tedarikçi hakediş dosyaları (maliyet/kar) |
-| Kiralık Araç Cari | Tedarikçi bazında filo özeti |
+| Filo Detay | Lojistik tedarikçi hesaplaşma raporu (yapıştırma ile aynı kolonlar) |
+| Filo Cari Özet | Tedarikçi bazında filo özeti |
 | Kalem Detay | Sevk/yük kalem satırları (çoklu yük kırılımı) |
 | Sevk Yük Kırılım | Birden fazla yük taşıyan sevklerin kar/zarar özeti |
 | Fatura Detay | Sevk/yük kalemi ↔ fatura eşleşmesi |

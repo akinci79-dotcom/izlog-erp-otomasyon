@@ -1,9 +1,8 @@
 """
-Kiralık araç maliyet KPI — Uyumsoft tedarikçi hakediş raporu SQL'i ile uyumlu.
+Lojistik tedarikçi hesaplaşma raporu — Temmuz KPI'daki **Filo Detay** sayfası.
 
-Tablolar [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
+Uyumsoft SQL'i [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
   LMST_SUP_PAYOFF_M / LMST_SUP_PAYOFF_OPDET / LMST_SUP_PAYOFF_T_D
-  FLMD_VEHICLE, FIND_ENTITY, LMST_L_TRANSPORT, LMST_L_TRANS_GOODS_DETAIL
 """
 from __future__ import annotations
 
@@ -13,6 +12,32 @@ from typing import Any
 
 import ayarlar
 from oracle_baglanti import tablo_var_mi
+
+# Temmuz yönetim raporundaki Filo Detay yapıştırma kolonları (sıra önemli)
+FILO_DETAY_SUTUNLARI = [
+    "ARAC_KODU",
+    "ARAC_TIPI",
+    "GOREV_YERI",
+    "CARI_ADI",
+    "TOPLAM_KM",
+    "AYLIK_KIRA_TUTARI",
+    "AYLIK_YAKIT_ORANI",
+    "HAKEDIS_KIRA_TUTARI",
+    "ALDIĞI_YAKIT_TUTARI",
+    "OTOBAN_KOPRU_VS",
+    "IZLOG_OGS",
+    "YAKIT_FARK (+)",
+    "YAKIT_FARK (-)",
+    "ALIS_DIGER",
+    "ALIS_IADE_DIGER",
+    "TEDARIKCI_FATURA_TOPLAM",
+    "IZLOG_IADE_TOPLAM",
+    "ODENECEK_TUTAR",
+    "MALIYETLER_TOPLAMI",
+    "TOPLAM_SATIS",
+    "ELDEN",
+    "KAR_ZARAR",
+]
 
 
 def _decimal(deger) -> Decimal:
@@ -77,6 +102,7 @@ WITH DOSYA_KALEM AS (
     FROM LMST_SUP_PAYOFF_OPDET POT
     LEFT JOIN LMST_SUP_PAYOFF_M PM ON PM.SUP_PAYOFF_ID = POT.SUP_PAYOFF_ID
     LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = POT.OPERATION_ID
+    LEFT JOIN INVD_BRANCH_EXPENSE IHK ON IHK.EXPENSE_ID = HK.EXPENSE_ID AND IHK.BRANCH_ID = PM.BRANCH_ID
     {pm_join}
     WHERE PM.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
     {pm_filtre}
@@ -93,6 +119,7 @@ DOSYA_KALEM_TOPLAM AS (
     FROM LMST_SUP_PAYOFF_OPDET POT
     LEFT JOIN LMST_SUP_PAYOFF_M PM ON PM.SUP_PAYOFF_ID = POT.SUP_PAYOFF_ID
     LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = POT.OPERATION_ID
+    LEFT JOIN INVD_BRANCH_EXPENSE IHK ON IHK.EXPENSE_ID = HK.EXPENSE_ID AND IHK.BRANCH_ID = PM.BRANCH_ID
     {pm_join}
     WHERE HK.EXPENSE_CODE NOT IN (
             'ALDIĞI MAZOT TL', 'OTOBAN-KÖPRÜ-FERİBOT', 'NAVLUN', 'YAKIT', 'IZLOG OGS'
@@ -113,6 +140,7 @@ DOSYA_KALEM_YAKIT AS (
     FROM LMST_SUP_PAYOFF_OPDET POT
     LEFT JOIN LMST_SUP_PAYOFF_M PM ON PM.SUP_PAYOFF_ID = POT.SUP_PAYOFF_ID
     LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = POT.OPERATION_ID
+    LEFT JOIN INVD_BRANCH_EXPENSE IHK ON IHK.EXPENSE_ID = HK.EXPENSE_ID AND IHK.BRANCH_ID = PM.BRANCH_ID
     {pm_join}
     WHERE HK.EXPENSE_CODE IN ('YAKIT')
       AND PM.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
@@ -153,23 +181,16 @@ DOSYA_YUK_KALEMLERI_ELDEN AS (
 SELECT VH.VEHICLE_CODE ARAC_KODU,
        TTYPE.DESCRIPTION ARAC_TIPI,
        LGT.GOODS_TYPE_CODE GOREV_YERI,
-       CK.ENTITY_CODE CARI_KODU,
        CK.ENTITY_NAME CARI_ADI,
-       PM.CASE_CODE DOSYA_NO,
-       PM.DOC_DATE DOSYA_TARIHI,
-       CASE PM.CASE_STATUS WHEN 1 THEN 'Açık' WHEN 2 THEN 'Kapalı' END DOSYA_DURUM,
-       PM.PERIOD_START_DATE BASLANGIC_TARIHI,
-       PM.PERIOD_END_DATE BITIS_TARIHI,
        NVL(TK.TOPLAM_KM, 0) TOPLAM_KM,
        NVL(VRD.RENT_AMT_TRA, 0) AYLIK_KIRA_TUTARI,
        NVL(VRD.FUEL_RATE, 0) AYLIK_YAKIT_ORANI,
        NVL(D3.TUTAR, 0) HAKEDIS_KIRA_TUTARI,
-       NVL(D1.TUTAR, 0) ALDIGI_YAKIT_TUTARI,
+       NVL(D1.TUTAR, 0) "ALDIĞI_YAKIT_TUTARI",
        NVL(D2.TUTAR, 0) OTOBAN_KOPRU_VS,
        NVL(D4.TUTAR, 0) IZLOG_OGS,
-       NVL(D5.YUK_SATIS_TOPLAMI, 0) ELDEN,
-       NVL(DY1.TUTAR, 0) YAKIT_FARK_ARTI,
-       NVL(DY2.TUTAR, 0) YAKIT_FARK_EKSI,
+       NVL(DY1.TUTAR, 0) "YAKIT_FARK (+)",
+       NVL(DY2.TUTAR, 0) "YAKIT_FARK (-)",
        NVL(DT1.TUTAR, 0) ALIS_DIGER,
        NVL(DT2.TUTAR, 0) ALIS_IADE_DIGER,
        (NVL(D3.TUTAR, 0) + NVL(D2.TUTAR, 0) + NVL(DY1.TUTAR, 0) + NVL(DT1.TUTAR, 0))
@@ -181,10 +202,14 @@ SELECT VH.VEHICLE_CODE ARAC_KODU,
            - (NVL(DY2.TUTAR, 0) + NVL(DT2.TUTAR, 0)))
            + NVL(D1.TUTAR, 0) + NVL(D4.TUTAR, 0) MALIYETLER_TOPLAMI,
        NVL(DYK.YUK_SATIS_TOPLAMI, 0) TOPLAM_SATIS,
+       NVL(D5.YUK_SATIS_TOPLAMI, 0) ELDEN,
        NVL(DYK.YUK_SATIS_TOPLAMI, 0)
            - (((NVL(D3.TUTAR, 0) + NVL(D2.TUTAR, 0) + NVL(DY1.TUTAR, 0) + NVL(DT1.TUTAR, 0))
                - (NVL(DY2.TUTAR, 0) + NVL(DT2.TUTAR, 0)))
                + NVL(D1.TUTAR, 0) + NVL(D4.TUTAR, 0)) KAR_ZARAR,
+       CK.ENTITY_CODE CARI_KODU,
+       PM.CASE_CODE DOSYA_NO,
+       CASE PM.CASE_STATUS WHEN 1 THEN 'Açık' WHEN 2 THEN 'Kapalı' END DOSYA_DURUM,
        PM.SUP_PAYOFF_ID DOSYA_ID
 FROM LMST_SUP_PAYOFF_M PM
 LEFT JOIN FIND_ENTITY CK ON CK.ENTITY_ID = PM.L_ENTITY_ID
@@ -218,7 +243,7 @@ LEFT JOIN (
 {pm_join}
 WHERE PM.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
 {pm_filtre}
-ORDER BY PM.DOC_DATE DESC, PM.CASE_CODE
+ORDER BY VH.VEHICLE_CODE, PM.CASE_CODE
 """
 
 
@@ -301,13 +326,13 @@ def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
     if ozet.get("zararli_dosya_sayisi", 0) > 0:
         ornek = sorted(detay, key=lambda r: _decimal(r.get("KAR_ZARAR")))[:3]
         ornek_metin = ", ".join(
-            f"{r.get('DOSYA_NO', '?')} ({_decimal(r.get('KAR_ZARAR')):,.0f} TL)"
+            f"{r.get('ARAC_KODU', r.get('DOSYA_NO', '?'))} ({_decimal(r.get('KAR_ZARAR')):,.0f} TL)"
             for r in ornek
         )
         problemler.append(
             {
                 "oncelik": "YUKSEK",
-                "kategori": "Kiralık Araç",
+                "kategori": "Filo Detay",
                 "baslik": f"Zararlı hakediş dosyaları ({ozet['zararli_dosya_sayisi']} adet)",
                 "detay": (
                     f"Toplam kar/zarar: {ozet['toplam_kar_zarar']:,.2f} TL. "
@@ -321,7 +346,7 @@ def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
         problemler.append(
             {
                 "oncelik": "ORTA",
-                "kategori": "Kiralık Araç",
+                "kategori": "Filo Detay",
                 "baslik": f"Açık hakediş dosyası yüksek ({ozet['acik_dosya_sayisi']} adet)",
                 "detay": "Kapalı olmayan dosyalar nakit akışı ve mutabakat riski oluşturur.",
                 "aksiyon": "Açık dosyaları kapatma takvimini operasyon ekibiyle netleştirin.",
@@ -332,7 +357,7 @@ def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
         problemler.append(
             {
                 "oncelik": "YUKSEK",
-                "kategori": "Kiralık Araç",
+                "kategori": "Filo Detay",
                 "baslik": "Kiralık filo karlılığı düşük",
                 "detay": (
                     f"Filo kar oranı: %{ozet['kar_orani_yuzde']} "
@@ -348,38 +373,58 @@ def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
 def ornek_kiralk_arac_verisi() -> tuple[dict, list[dict], list[dict]]:
     detay = [
         {
-            "ARAC_KODU": "34ABC123",
-            "ARAC_TIPI": "TIR",
-            "GOREV_YERI": "SAKARYA",
+            "ARAC_KODU": "31EG501",
+            "ARAC_TIPI": "Tır Frigorifik",
+            "GOREV_YERI": "GENEL",
+            "CARI_ADI": "KAPITRANS ULUS.TAŞ.TİC.LTD.ŞTİ.",
+            "TOPLAM_KM": 10308,
+            "AYLIK_KIRA_TUTARI": Decimal("185000"),
+            "AYLIK_YAKIT_ORANI": 38,
+            "HAKEDIS_KIRA_TUTARI": Decimal("178833"),
+            "ALDIĞI_YAKIT_TUTARI": Decimal("204904.38"),
+            "OTOBAN_KOPRU_VS": Decimal("8161.5"),
+            "IZLOG_OGS": Decimal("0"),
+            "YAKIT_FARK (+)": Decimal("3676.24"),
+            "YAKIT_FARK (-)": Decimal("0"),
+            "ALIS_DIGER": Decimal("0"),
+            "ALIS_IADE_DIGER": Decimal("0"),
+            "TEDARIKCI_FATURA_TOPLAM": Decimal("182509.24"),
+            "IZLOG_IADE_TOPLAM": Decimal("0"),
+            "ODENECEK_TUTAR": Decimal("182509.24"),
+            "MALIYETLER_TOPLAMI": Decimal("387413.62"),
+            "TOPLAM_SATIS": Decimal("395000"),
+            "ELDEN": Decimal("0"),
+            "KAR_ZARAR": Decimal("7586.38"),
             "CARI_KODU": "TED001",
-            "CARI_ADI": "Örnek Taşımacılık A.Ş.",
             "DOSYA_NO": "HK-2026-001",
-            "DOSYA_TARIHI": "15.01.2026",
             "DOSYA_DURUM": "Kapalı",
-            "TOPLAM_KM": 4200,
-            "HAKEDIS_KIRA_TUTARI": Decimal("85000"),
-            "ALDIGI_YAKIT_TUTARI": Decimal("32000"),
-            "OTOBAN_KOPRU_VS": Decimal("4500"),
-            "MALIYETLER_TOPLAMI": Decimal("121500"),
-            "TOPLAM_SATIS": Decimal("138000"),
-            "KAR_ZARAR": Decimal("16500"),
         },
         {
-            "ARAC_KODU": "06XYZ789",
-            "ARAC_TIPI": "KAMYON",
-            "GOREV_YERI": "KURUYÜK",
+            "ARAC_KODU": "33AOY749",
+            "ARAC_TIPI": "Tır Frigorifik",
+            "GOREV_YERI": "GENEL",
+            "CARI_ADI": "SÜMER TRANS ULUS.TAŞ.İTH.İHR.SAN. VE TİC.LTD.ŞTİ.",
+            "TOPLAM_KM": 7952,
+            "AYLIK_KIRA_TUTARI": Decimal("185000"),
+            "AYLIK_YAKIT_ORANI": 38,
+            "HAKEDIS_KIRA_TUTARI": Decimal("172667"),
+            "ALDIĞI_YAKIT_TUTARI": Decimal("171689.54"),
+            "OTOBAN_KOPRU_VS": Decimal("30979"),
+            "IZLOG_OGS": Decimal("0"),
+            "YAKIT_FARK (+)": Decimal("0"),
+            "YAKIT_FARK (-)": Decimal("11966.15"),
+            "ALIS_DIGER": Decimal("0"),
+            "ALIS_IADE_DIGER": Decimal("0"),
+            "TEDARIKCI_FATURA_TOPLAM": Decimal("172667"),
+            "IZLOG_IADE_TOPLAM": Decimal("11966.15"),
+            "ODENECEK_TUTAR": Decimal("160700.85"),
+            "MALIYETLER_TOPLAMI": Decimal("332390.39"),
+            "TOPLAM_SATIS": Decimal("310000"),
+            "ELDEN": Decimal("0"),
+            "KAR_ZARAR": Decimal("-22390.39"),
             "CARI_KODU": "TED002",
-            "CARI_ADI": "Demo Lojistik Ltd.",
             "DOSYA_NO": "HK-2026-002",
-            "DOSYA_TARIHI": "20.01.2026",
-            "DOSYA_DURUM": "Açık",
-            "TOPLAM_KM": 2800,
-            "HAKEDIS_KIRA_TUTARI": Decimal("62000"),
-            "ALDIGI_YAKIT_TUTARI": Decimal("41000"),
-            "OTOBAN_KOPRU_VS": Decimal("2100"),
-            "MALIYETLER_TOPLAMI": Decimal("105100"),
-            "TOPLAM_SATIS": Decimal("98000"),
-            "KAR_ZARAR": Decimal("-7100"),
+            "DOSYA_DURUM": "Kapalı",
         },
     ]
     ozet = kiralk_arac_ozet_hesapla(detay)
