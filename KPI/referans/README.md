@@ -19,7 +19,12 @@ Pivotlu sayfalar (Özet, Filo Analizi, Şube KZ, …) şablonda kalır; script V
 
 ## Kolon eşleşmesi
 
-VERİ sayfasının 1. satırındaki başlıklar Oracle kolonlarıyla **isim benzerliği** ile eşleştirilir.
+VERİ sayfasının 1. satırındaki başlıklar, **kpi_veri_rapor.sql** içindeki SELECT alias'larıyla eşleştirilir.
+
+**Zorunlu:** Uyumsoft VERİ raporu SQL'inizi `referans/kpi_veri_rapor.sql` olarak kaydedin. Kod SQL'e dokunmaz; ne varsa aynen çalıştırır.
+
+Tarih parametreleri: `:bas` ve `:bit` (ayarlar.py dönem tarihleri).
+
 Eşleşmeyen başlık varsa `ayarlar.py` içinde:
 
 ```python

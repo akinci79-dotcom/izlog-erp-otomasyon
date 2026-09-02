@@ -1,21 +1,15 @@
--- Uyumsoft LojistikYükSevkKalemRaporu (veya Temmuz KPI VERİ kaynağı) SQL'i
+-- =============================================================================
+-- Uyumsoft VERİ sayfası SQL — OLDUĞU GİBİ kaydedin, kod değiştirmez
+-- =============================================================================
 --
--- Kullanım:
---   1. Uyumsoft rapor tasarımcısından ORİJİNAL SQL'i kopyalayın
---   2. Bu dosyayı kpi_veri_rapor.sql olarak kaydedin (referans/ klasörüne)
---   3. Tarih filtresi mutlaka :bas ve :bit parametrelerini kullansın (DD.MM.YYYY)
---   4. SELECT kolon takma adları (alias) şablondaki başlıklarla aynı olsun
---      örn: AS PROJE_KODU, AS KULLANICI, AS YUKLEME_YER_ADI
+-- 1. Uyumsoft rapor tasarımcısından (LojistikYükSevkKalemRaporu vb.) SQL'i kopyalayın
+-- 2. Bu dosyayı referans/kpi_veri_rapor.sql olarak kaydedin
+-- 3. Tarih filtresinde şu parametreleri kullanın (ayarlar.py dönemine bağlanır):
+--      :bas   — KPI_BASLANGIC_TARIHI  (örn. 01.07.2026)
+--      :bit   — KPI_BITIS_TARIHI      (örn. 31.07.2026)
+--    Örnek:  WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas,'DD.MM.YYYY') AND TO_DATE(:bit,'DD.MM.YYYY')
 --
--- ayarlar.py (isteğe bağlı):
---   KPI_VERI_SQL_DOSYASI = "kpi_veri_rapor.sql"
+-- 4. SELECT alias'ları Excel şablonu 1. satır başlıklarıyla aynı olsun
+--    (PROJE_KODU, KULLANICI, YUKLEME_YER_ADI, ALIS_TUTARI, ...)
 --
--- Örnek tarih filtresi:
---   WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
---
--- Bu dosya yalnızca şablondur; gerçek SQL'inizi aşağıya yapıştırın:
-
-SELECT
-    PJ.PROJECT_CODE AS PROJE_KODU
-FROM LMST_L_GOODS YK
-WHERE 1 = 0
+-- Aşağıdaki satırları silip kendi SQL'inizi yapıştırın:

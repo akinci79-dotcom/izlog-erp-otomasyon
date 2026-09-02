@@ -20,11 +20,9 @@ KPI_BITIS_TARIHI = "31.01.2026"
 # Referans KPI şablonu (Temmuz raporunuzun kopyası)
 KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"
 
-# VERİ sayfası SQL — boş bırakılırsa referans/kpi_veri_rapor.sql aranır, yoksa basit sorgu
-# Uyumsoft LojistikYükSevkKalemRaporu SQL'ini referans/kpi_veri_rapor.sql olarak kaydedin
+# VERİ sayfası SQL — Uyumsoft rapor SQL'iniz (değiştirilmeden çalıştırılır)
+# KPI/referans/kpi_veri_rapor.sql dosyasına kaydedin
 # KPI_VERI_SQL_DOSYASI = "kpi_veri_rapor.sql"
-# Deneysel genişletilmiş sorgu (KULLANICI, nokta vb.) — şema uyumsuzluğunda kapatın
-# KPI_VERI_GENISLETILMIS_SQL = False
 
 # Şablondaki sayfa adları (gizli VERİ sayfası dahil)
 KPI_VERI_SAYFA_ADLARI = ["VERİ", "VERI", "Veri"]

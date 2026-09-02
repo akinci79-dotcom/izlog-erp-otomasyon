@@ -56,13 +56,21 @@ if (-not (Test-Path ayarlar.py)) { Copy-Item ayarlar.example.py ayarlar.py }
 pip install -r requirements.txt
 ```
 
-## Şablonu yerleştirin
+## Şablonu ve VERİ SQL'ini yerleştirin
 
 Temmuz KPI dosyanızı şuraya kopyalayın:
 
 ```
 KPI\referans\kpi_sablon.xlsx
 ```
+
+Uyumsoft VERİ raporu SQL'inizi **olduğu gibi** şuraya kaydedin (kod SQL'e dokunmaz):
+
+```
+KPI\referans\kpi_veri_rapor.sql
+```
+
+Tarih filtresi `:bas` ve `:bit` parametrelerini kullanmalı (ayarlar.py dönem tarihleri).
 
 ## ayarlar.py
 

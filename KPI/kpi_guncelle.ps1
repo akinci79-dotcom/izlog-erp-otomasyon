@@ -39,11 +39,15 @@ New-Item -ItemType Directory -Force -Path $KpiDir | Out-Null
 # Korunacak dosyalar
 $AyarlarYedek = Join-Path $env:TEMP "izlog_kpi_ayarlar_yedek.py"
 $SablonYedek = Join-Path $env:TEMP "izlog_kpi_sablon_yedek.xlsx"
+$VeriSqlYedek = Join-Path $env:TEMP "izlog_kpi_veri_rapor_yedek.sql"
 if (Test-Path (Join-Path $KpiDir "ayarlar.py")) {
     Copy-Item (Join-Path $KpiDir "ayarlar.py") $AyarlarYedek -Force
 }
 if (Test-Path (Join-Path $KpiDir "referans\kpi_sablon.xlsx")) {
     Copy-Item (Join-Path $KpiDir "referans\kpi_sablon.xlsx") $SablonYedek -Force
+}
+if (Test-Path (Join-Path $KpiDir "referans\kpi_veri_rapor.sql")) {
+    Copy-Item (Join-Path $KpiDir "referans\kpi_veri_rapor.sql") $VeriSqlYedek -Force
 }
 
 Copy-Item "$Kaynak\*" $KpiDir -Recurse -Force
@@ -56,6 +60,11 @@ if (Test-Path $SablonYedek) {
     New-Item -ItemType Directory -Force -Path (Join-Path $KpiDir "referans") | Out-Null
     Copy-Item $SablonYedek (Join-Path $KpiDir "referans\kpi_sablon.xlsx") -Force
     Remove-Item $SablonYedek -Force
+}
+if (Test-Path $VeriSqlYedek) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $KpiDir "referans") | Out-Null
+    Copy-Item $VeriSqlYedek (Join-Path $KpiDir "referans\kpi_veri_rapor.sql") -Force
+    Remove-Item $VeriSqlYedek -Force
 }
 
 Remove-Item $Temp -Recurse -Force
