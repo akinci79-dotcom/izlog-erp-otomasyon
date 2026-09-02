@@ -107,7 +107,13 @@ Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 **Eski rapor modu çalışıyor:** Konsolda `KPI raporu oluşturuldu` + `Tespit edilen problem` görüyorsanız kod güncellenmemiştir. Güncelleme sonrası `BAŞARILI: KPI şablon raporu` yazmalı.
 
-**Pivot/sütun otomatik ayarı yapılamadı / dosya biçimi geçersiz:** Eski sürümler openpyxl ile pivot şablonunu bozuyordu. Güncel kod veriyi doğrudan Excel ile yazar. `kpi_guncelle.ps1` veya README'deki güncelleme bloğunu çalıştırın, ardından `python kpi_rapor_olustur.py`. Teşhis: `python kpi_excel_test.py`
+**#BAŞV! / #REF! pivot hatası:** Genelde VERİ tablosunun sütunları daraltıldığında oluşur (güncel kod bunu engeller). Hâlâ görürseniz:
+
+```powershell
+python kpi_sablon_kolon_kesif.py
+```
+
+Eşleşmeyen kolonları `ayarlar.py` → `KPI_KOLON_ESLEME` ile tanımlayın.
 
 **Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 

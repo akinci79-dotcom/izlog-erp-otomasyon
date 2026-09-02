@@ -10,7 +10,6 @@ from openpyxl import load_workbook
 import ayarlar
 from kpi_sablon_rapor import (
     _kolon_esleme,
-    _normalize_kolon,
     _sayfa_bul,
     sablon_yolu,
 )
