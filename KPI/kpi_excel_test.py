@@ -43,6 +43,7 @@ def main() -> int:
 
     print(f"\n[2/3] Rapor dosyası: {rapor}")
     print("[3/3] Pivot yenile + AutoFit deneniyor...")
+    print("  Not: Eski openpyxl kaydı bozuk dosya üretmiş olabilir — önce python kpi_rapor_olustur.py çalıştırın.")
 
     from kpi_sablon_rapor import _excel_islemleri
 
