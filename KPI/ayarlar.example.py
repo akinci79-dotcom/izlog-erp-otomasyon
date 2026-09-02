@@ -31,8 +31,9 @@ KPI_FILO_SAYFA_ADLARI = ["Filo Detay", "Filo detay"]
 KPI_VERI_BASLIK_SATIRI = 1
 KPI_FILO_BASLIK_SATIRI = 1
 
-# Windows'ta Excel ile pivot yenileme (pywin32 gerekir)
+# Windows'ta Excel ile pivot yenileme + sütun AutoFit (pywin32 gerekir)
 KPI_PIVOT_YENILE = True
+KPI_SUTUN_AUTOFIT = True
 
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}

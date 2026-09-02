@@ -131,6 +131,49 @@ def _sayfayi_temizle_yaz(
     return len(satirlar)
 
 
+def _hucre_gorunen_uzunluk(deger: Any) -> int:
+    if deger is None:
+        return 0
+    if isinstance(deger, bool):
+        return 4
+    if isinstance(deger, (datetime, date)):
+        return len(deger.strftime("%d.%m.%Y"))
+    if isinstance(deger, float):
+        metin = f"{deger:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        return len(metin) + 2
+    if isinstance(deger, int):
+        metin = f"{deger:,}".replace(",", ".")
+        return len(metin)
+    return len(str(deger))
+
+
+def _sayfa_sutunlarini_genislet(
+    ws: Worksheet,
+    baslik_satiri: int = 1,
+    veri_satir_sayisi: int = 0,
+    min_genislik: float = 10,
+    max_genislik: float = 55,
+    padding: float = 2,
+):
+    """Doldurulan sayfada sütun genişliklerini içeriğe göre ayarlar (####### önler)."""
+    son_satir = baslik_satiri + max(veri_satir_sayisi, 0)
+    if son_satir < baslik_satiri:
+        return
+
+    max_col = ws.max_column or 1
+    for col in range(1, max_col + 1):
+        en_uzun = 0
+        for row in range(baslik_satiri, son_satir + 1):
+            deger = ws.cell(row=row, column=col).value
+            en_uzun = max(en_uzun, _hucre_gorunen_uzunluk(deger))
+        if en_uzun <= 0:
+            continue
+        harf = get_column_letter(col)
+        mevcut = ws.column_dimensions[harf].width or min_genislik
+        yeni = min(max(en_uzun + padding, min_genislik), max_genislik)
+        ws.column_dimensions[harf].width = max(mevcut, yeni)
+
+
 def _pivot_kaynak_guncelle(wb, ws: Worksheet, baslik_satiri: int, satir_sayisi: int):
     """Pivot kaynak aralığını yeni satır sayısına göre genişletmeye çalışır."""
     if satir_sayisi <= 0:
@@ -150,8 +193,8 @@ def _pivot_kaynak_guncelle(wb, ws: Worksheet, baslik_satiri: int, satir_sayisi: 
                 pass
 
 
-def pivot_yenile(dosya_yolu: Path) -> bool:
-    """Windows + Excel kurulu ise tüm pivotları yeniler."""
+def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> bool:
+    """Windows + Excel: pivot yenile + tüm sayfalarda sütun AutoFit."""
     try:
         import win32com.client  # type: ignore
     except ImportError:
@@ -163,8 +206,13 @@ def pivot_yenile(dosya_yolu: Path) -> bool:
         excel.Visible = False
         excel.DisplayAlerts = False
         wb = excel.Workbooks.Open(str(dosya_yolu.resolve()))
-        wb.RefreshAll()
-        excel.CalculateFullRebuild()
+        if pivot_yenile:
+            wb.RefreshAll()
+            excel.CalculateFullRebuild()
+        for sheet in wb.Worksheets:
+            used = sheet.UsedRange
+            if used is not None:
+                used.Columns.AutoFit()
         wb.Save()
         wb.Close(SaveChanges=True)
         return True
@@ -173,6 +221,11 @@ def pivot_yenile(dosya_yolu: Path) -> bool:
     finally:
         if excel is not None:
             excel.Quit()
+
+
+def pivot_yenile(dosya_yolu: Path) -> bool:
+    """Windows + Excel kurulu ise pivotları yeniler ve sütunları genişletir."""
+    return _excel_islemleri(dosya_yolu, pivot_yenile=True)
 
 
 def _bind_olustur(bas: str, bit: str) -> dict:
@@ -251,21 +304,29 @@ def sablon_rapor_olustur(
     )
     _pivot_kaynak_guncelle(wb, ws_filo, filo_baslik_satiri, filo_adet)
 
+    _sayfa_sutunlarini_genislet(ws_veri, veri_baslik_satiri, veri_adet)
+    _sayfa_sutunlarini_genislet(ws_filo, filo_baslik_satiri, filo_adet)
+
     wb.save(hedef)
     wb.close()
 
     if pivot_yenile_calistir is None:
         pivot_yenile_calistir = getattr(ayarlar, "KPI_PIVOT_YENILE", True)
 
-    pivot_ok = False
-    if pivot_yenile_calistir:
-        pivot_ok = pivot_yenile(hedef)
+    excel_ok = False
+    if getattr(ayarlar, "KPI_SUTUN_AUTOFIT", True):
+        excel_ok = _excel_islemleri(hedef, pivot_yenile=pivot_yenile_calistir)
+    elif pivot_yenile_calistir:
+        excel_ok = pivot_yenile(hedef)
 
     print(f"BAŞARILI: KPI şablon raporu → {hedef.resolve()}")
     print(f"  Dönem: {bas} — {bit}")
     print(f"  VERİ satırı: {veri_adet}")
     print(f"  Filo Detay satırı: {filo_adet}")
-    if pivot_yenile_calistir and not pivot_ok:
-        print("  Not: Pivot otomatik yenilenemedi — Excel'de dosyayı açıp 'Verileri Yenile' yapın.")
+    if pivot_yenile_calistir and not excel_ok:
+        print(
+            "  Not: Pivot/sütun otomatik ayarı yapılamadı — Excel'de dosyayı açıp "
+            "'Verileri Yenile' ve sütunları çift tıklayarak genişletin."
+        )
 
     return str(hedef.resolve())

@@ -50,7 +50,7 @@ python kpi_rapor_olustur.py
 1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx`
 2. **VERİ** sayfasına yük bazında detay Oracle sorgusu yazılır
 3. **Filo Detay** sayfasına tedarikçi hesaplaşma raporu yazılır
-4. Windows + Excel varsa pivotlar otomatik yenilenir; yoksa dosyayı açıp **Verileri Yenile**
+4. Windows + Excel varsa pivotlar yenilenir ve tüm sayfalarda sütunlar içeriğe göre genişletilir (`#######` görünmez); yoksa dosyayı açıp **Verileri Yenile** + sütun başlıklarını çift tıklayarak genişletin
 
 ## Eski analiz raporu (isteğe bağlı)
 
@@ -59,9 +59,11 @@ python kpi_rapor_olustur.py --analiz
 python kpi_rapor_olustur.py --ornek
 ```
 
-## Pivot yenileme
+## Pivot yenileme ve sütun genişliği
 
-Otomatik yenileme için `pip install pywin32` ve yüklü Microsoft Excel gerekir.
+Otomatik pivot yenileme ve sütun AutoFit için `pip install pywin32` ve yüklü Microsoft Excel gerekir.
+`ayarlar.py` içinde `KPI_SUTUN_AUTOFIT = True` (varsayılan) — pivot özet sayfalarındaki tutar sütunları da dahil tüm sayfalar genişletilir.
+VERİ ve Filo Detay sayfaları Excel olmasa bile openpyxl ile önceden genişletilir.
 Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 ## Sorun giderme

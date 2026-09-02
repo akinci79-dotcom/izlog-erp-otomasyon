@@ -591,8 +591,11 @@ KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördek
 | `KPI/kpi_kiralk_arac.py` | Lojistik tedarikçi hesaplaşma → **Filo Detay** sayfası |
 | `KPI/kpi_kalem_detay.py` | Sevk/yük kalem detay sorguları |
 | `KPI/kpi_fatura_detay.py` | Sevk/yük fatura bağlantı sorguları |
-| `KPI/kpi_rapor_olustur.py` | Excel rapor üretici |
-| `KPI/raporlar/kpi_rapor.xlsx` | Çıktı |
+| `KPI/kpi_sablon_rapor.py` | Referans şablondan rapor (VERİ + Filo Detay + pivot) |
+| `KPI/kpi_veri.py` | VERİ sayfası Oracle sorgusu |
+| `KPI/kpi_rapor_olustur.py` | Giriş noktası (varsayılan: şablon modu) |
+| `KPI/kpi_rapor_analiz.py` | Eski çok sayfalı analiz raporu (`--analiz`) |
+| `KPI/referans/kpi_sablon.xlsx` | Kullanıcının Temmuz KPI şablonu (repo'da yok) |
 
 Kurulum ve çalıştırma: bkz. `KPI/README.md`
 
@@ -601,6 +604,11 @@ cd KPI
 copy ayarlar.example.py ayarlar.py
 python kpi_rapor_olustur.py
 ```
+
+**Sütun AutoFit [DOĞRULANMIŞ — kod]**: Rapor doldurulduktan sonra VERİ/Filo Detay
+openpyxl ile, pivot özet sayfaları ise Windows + Excel COM (`UsedRange.Columns.AutoFit`)
+ile genişletilir — `#######` görünümü önlenir. `ayarlar.KPI_SUTUN_AUTOFIT = True`
+(varsayılan); pywin32/Excel yoksa yalnızca VERİ/Filo Detay otomatik genişler.
 
 **Rapor KPI'ları** (Uyumsoft yük bazında detay raporu SQL'i ile uyumlu
 [DOĞRULANMIŞ]):
