@@ -319,28 +319,15 @@ def kiralk_arac_cari_ozet_hesapla(detay: list[dict]) -> list[dict]:
 
 
 def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
+    """
+    Kiralık araç hakediş problemleri.
+
+    Negatif K/Z ve düşük kar oranı bilinçli olarak alarm üretmez: kiralık araçlar
+    spot piyasa maliyeti ve müşteri cezası riskine karşı stratejik kapasitedir.
+    """
     problemler = []
     if not ozet.get("mevcut"):
         return problemler
-
-    if ozet.get("zararli_dosya_sayisi", 0) > 0:
-        ornek = sorted(detay, key=lambda r: _decimal(r.get("KAR_ZARAR")))[:3]
-        ornek_metin = ", ".join(
-            f"{r.get('ARAC_KODU', r.get('DOSYA_NO', '?'))} ({_decimal(r.get('KAR_ZARAR')):,.0f} TL)"
-            for r in ornek
-        )
-        problemler.append(
-            {
-                "oncelik": "YUKSEK",
-                "kategori": "Filo Detay",
-                "baslik": f"Zararlı hakediş dosyaları ({ozet['zararli_dosya_sayisi']} adet)",
-                "detay": (
-                    f"Toplam kar/zarar: {ozet['toplam_kar_zarar']:,.2f} TL. "
-                    f"En düşük: {ornek_metin}"
-                ),
-                "aksiyon": "Zararlı dosyaları plaka/cari bazında inceleyin; kira ve yakıt oranlarını gözden geçirin.",
-            }
-        )
 
     if ozet.get("acik_dosya_sayisi", 0) > 5:
         problemler.append(
@@ -350,20 +337,6 @@ def kiralk_arac_problemleri(ozet: dict, detay: list[dict]) -> list[dict]:
                 "baslik": f"Açık hakediş dosyası yüksek ({ozet['acik_dosya_sayisi']} adet)",
                 "detay": "Kapalı olmayan dosyalar nakit akışı ve mutabakat riski oluşturur.",
                 "aksiyon": "Açık dosyaları kapatma takvimini operasyon ekibiyle netleştirin.",
-            }
-        )
-
-    if ozet.get("toplam_satis") and ozet.get("kar_orani_yuzde", 0) < 5:
-        problemler.append(
-            {
-                "oncelik": "YUKSEK",
-                "kategori": "Filo Detay",
-                "baslik": "Kiralık filo karlılığı düşük",
-                "detay": (
-                    f"Filo kar oranı: %{ozet['kar_orani_yuzde']} "
-                    f"(satış {ozet['toplam_satis']:,.0f} TL − maliyet {ozet['toplam_maliyet']:,.0f} TL)"
-                ),
-                "aksiyon": "Düşük marjlı araç/cari sözleşmelerini yeniden değerlendirin.",
             }
         )
 

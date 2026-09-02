@@ -66,6 +66,21 @@ def _format_para(deger) -> str:
     return f"{deger:,.2f} ₺".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _format_tutar(deger) -> str:
+    """Tablo hücreleri için para formatı (₺ soneki yönetici kutularında)."""
+    if deger is None:
+        return "-"
+    if isinstance(deger, Decimal):
+        deger = float(deger)
+    return f"{deger:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _format_yuzde(deger) -> str:
+    if deger is None:
+        return "-"
+    return f"%{float(deger):,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _format_sayi(deger) -> str:
     if deger is None:
         return "-"
@@ -78,6 +93,38 @@ def _decimal_safe(deger):
     if isinstance(deger, Decimal):
         return deger
     return Decimal(str(deger))
+
+
+# Sütun adı → formatlayıcı (tüm veri sayfalarında tutarlı Türkçe gösterim)
+SAYI_SUTUNLARI = frozenset({
+    "YUK_SAYISI", "SATIR_SAYISI", "DOSYA_SAYISI", "YUK_SAYISI",
+    "TOPLAM_KM", "AYLIK_YAKIT_ORANI", "FATURA_ID", "KAYIT_ID",
+})
+YUZDE_SUTUNLARI = frozenset({"GELIR_PAYI_YUZDE", "kar_orani_yuzde"})
+TUTAR_SUTUNLARI = frozenset({
+    "SATIS_GELIRI", "TOPLAM_TUTAR", "TOPLAM_MALIYET", "TOPLAM_SATIS",
+    "KAR_ZARAR", "NET_KAR_ZARAR", "SEVK_ALIS_TOPLAM", "YUK_SATIS_TOPLAM",
+    "TUTAR", "BIRIM_FIYAT",
+    "AYLIK_KIRA_TUTARI", "HAKEDIS_KIRA_TUTARI", "ALDIĞI_YAKIT_TUTARI",
+    "OTOBAN_KOPRU_VS", "IZLOG_OGS", "YAKIT_FARK (+)", "YAKIT_FARK (-)",
+    "ALIS_DIGER", "ALIS_IADE_DIGER", "TEDARIKCI_FATURA_TOPLAM",
+    "IZLOG_IADE_TOPLAM", "ODENECEK_TUTAR", "MALIYETLER_TOPLAMI",
+    "TOPLAM_SATIS", "ELDEN",
+})
+
+
+def _hucre_degeri_formatla(anahtar: str, deger):
+    if deger is None:
+        return "-"
+    if anahtar in YUZDE_SUTUNLARI:
+        return _format_yuzde(deger)
+    if anahtar in SAYI_SUTUNLARI:
+        return _format_sayi(deger)
+    if anahtar in TUTAR_SUTUNLARI or isinstance(deger, Decimal):
+        return _format_tutar(deger)
+    if isinstance(deger, (int, float)) and anahtar not in ("AY", "TIP", "OPERASYON_KODU", "PROJE_KODU"):
+        return _format_tutar(deger)
+    return deger
 
 
 def _hucre_stil(hucre, font=NORMAL_FONT, fill=None, align="left"):
@@ -164,14 +211,23 @@ def yonetici_ozeti_sayfasi(wb, analiz: KpiAnalizSonucu):
         _kpi_kutusu(
             ws, 7, 5, "Filo Kar/Zarar",
             _format_para(kz),
-            uyari=_decimal_safe(kz) < 0,
+            uyari=False,
         )
         kar_orani = ka.get("kar_orani_yuzde", 0)
         _kpi_kutusu(
             ws, 7, 6, "Filo Kar Oranı",
             f"%{kar_orani}",
-            uyari=kar_orani < 5,
+            uyari=False,
         )
+        ws.cell(
+            row=9, column=1,
+            value=(
+                "Not: Kiralık araç hakediş K/Z'si kapasite maliyetidir; spot araç veya "
+                "müşteri cezası riskine karşı stratejik yatırım olarak değerlendirilir."
+            ),
+        )
+        ws.merge_cells("A9:F9")
+        ws.cell(row=9, column=1).font = Font(name="Calibri", size=9, italic=True, color="666666")
 
     # Fatura gecikmesi
     fg = analiz.fatura_sagligi
@@ -237,11 +293,14 @@ def _veri_sayfasi(wb, baslik, sutunlar, satirlar, deger_formatlayici=None):
 
             if deger_formatlayici and anahtar in deger_formatlayici:
                 deger = deger_formatlayici[anahtar](deger)
-            elif isinstance(deger, Decimal):
-                deger = float(deger)
+            elif isinstance(deger, (Decimal, int, float)) or anahtar in (
+                SAYI_SUTUNLARI | YUZDE_SUTUNLARI | TUTAR_SUTUNLARI
+            ):
+                deger = _hucre_degeri_formatla(anahtar, deger)
 
+            align = "right" if anahtar in (SAYI_SUTUNLARI | YUZDE_SUTUNLARI | TUTAR_SUTUNLARI) else "left"
             hucre = ws.cell(row=i, column=j, value=deger)
-            _hucre_stil(hucre)
+            _hucre_stil(hucre, align=align)
     for col in range(1, len(sutunlar) + 1):
         ws.column_dimensions[get_column_letter(col)].width = 18
     return ws
@@ -260,7 +319,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             "Aylık Trend",
             ["AY", "YUK_SAYISI", "SATIS_GELIRI"],
             analiz.aylik_trend,
-            {"SATIS_GELIRI": lambda v: float(v) if v else 0},
         )
 
     if analiz.proje_performans:
@@ -269,7 +327,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             "Proje Performansı",
             ["PROJE_KODU", "YUK_SAYISI", "SATIS_GELIRI", "GELIR_PAYI_YUZDE"],
             analiz.proje_performans,
-            {"SATIS_GELIRI": lambda v: float(v) if v else 0},
         )
 
     if analiz.operasyon_dagilimi:
@@ -278,7 +335,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             "Operasyon Dağılımı",
             ["OPERASYON_KODU", "SATIR_SAYISI", "TOPLAM_TUTAR", "GELIR_PAYI_YUZDE"],
             analiz.operasyon_dagilimi,
-            {"TOPLAM_TUTAR": lambda v: float(v) if v else 0},
         )
 
     if analiz.kiralk_arac_detay:
@@ -287,24 +343,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             "Filo Detay",
             FILO_DETAY_SUTUNLARI,
             analiz.kiralk_arac_detay,
-            {
-                "AYLIK_KIRA_TUTARI": lambda v: float(v) if v else 0,
-                "HAKEDIS_KIRA_TUTARI": lambda v: float(v) if v else 0,
-                "ALDIĞI_YAKIT_TUTARI": lambda v: float(v) if v else 0,
-                "OTOBAN_KOPRU_VS": lambda v: float(v) if v else 0,
-                "IZLOG_OGS": lambda v: float(v) if v else 0,
-                "YAKIT_FARK (+)": lambda v: float(v) if v else 0,
-                "YAKIT_FARK (-)": lambda v: float(v) if v else 0,
-                "ALIS_DIGER": lambda v: float(v) if v else 0,
-                "ALIS_IADE_DIGER": lambda v: float(v) if v else 0,
-                "TEDARIKCI_FATURA_TOPLAM": lambda v: float(v) if v else 0,
-                "IZLOG_IADE_TOPLAM": lambda v: float(v) if v else 0,
-                "ODENECEK_TUTAR": lambda v: float(v) if v else 0,
-                "MALIYETLER_TOPLAMI": lambda v: float(v) if v else 0,
-                "TOPLAM_SATIS": lambda v: float(v) if v else 0,
-                "ELDEN": lambda v: float(v) if v else 0,
-                "KAR_ZARAR": lambda v: float(v) if v else 0,
-            },
         )
 
     if analiz.kiralk_arac_cari:
@@ -313,11 +351,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
             "Filo Cari Özet",
             ["CARI_KODU", "CARI_ADI", "DOSYA_SAYISI", "TOPLAM_MALIYET", "TOPLAM_SATIS", "KAR_ZARAR"],
             analiz.kiralk_arac_cari,
-            {
-                "TOPLAM_MALIYET": lambda v: float(v) if v else 0,
-                "TOPLAM_SATIS": lambda v: float(v) if v else 0,
-                "KAR_ZARAR": lambda v: float(v) if v else 0,
-            },
         )
 
     if analiz.kalem_detay:
@@ -330,7 +363,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
                 "FATURA_NO", "CARI_ADI", "DOSYA_NO",
             ],
             analiz.kalem_detay,
-            {"TUTAR": lambda v: float(v) if v else 0},
         )
 
     if analiz.kalem_sevk_kirilim:
@@ -342,11 +374,6 @@ def rapor_olustur(analiz: KpiAnalizSonucu, dosya_adi: str | Path | None = None) 
                 "SEVK_ALIS_TOPLAM", "YUK_SATIS_TOPLAM", "NET_KAR_ZARAR",
             ],
             analiz.kalem_sevk_kirilim,
-            {
-                "SEVK_ALIS_TOPLAM": lambda v: float(v) if v else 0,
-                "YUK_SATIS_TOPLAM": lambda v: float(v) if v else 0,
-                "NET_KAR_ZARAR": lambda v: float(v) if v else 0,
-            },
         )
 
     if analiz.fatura_detay:
