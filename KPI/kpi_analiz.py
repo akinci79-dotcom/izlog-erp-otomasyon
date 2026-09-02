@@ -42,7 +42,7 @@ from kpi_kiralk_arac import (
     kiralk_arac_semasi_hazir,
     ornek_kiralk_arac_verisi,
 )
-from oracle_baglanti import baglanti_yonet, tablo_var_mi
+from oracle_baglanti import baglanti_yonet, satir_limit_sql, tablo_var_mi
 
 
 def _decimal(deger) -> Decimal:
@@ -125,6 +125,18 @@ class KpiAnalizSonucu:
     faturasiz_kalemler: list[dict] = field(default_factory=list)
     problemler: list[dict] = field(default_factory=list)
     uyarilar: list[str] = field(default_factory=list)
+
+
+def _gelir_payi_yuzde_ekle(satirlar: list[dict], tutar_kolonu: str) -> list[dict]:
+    """Gelir payı yüzdesini Python tarafında hesaplar (Oracle 11g uyumluluğu)."""
+    toplam = sum(_decimal(s.get(tutar_kolonu, 0)) for s in satirlar)
+    for satir in satirlar:
+        tutar = _decimal(satir.get(tutar_kolonu, 0))
+        if toplam > 0:
+            satir["GELIR_PAYI_YUZDE"] = round(float(tutar * 100 / toplam), 1)
+        else:
+            satir["GELIR_PAYI_YUZDE"] = 0.0
+    return satirlar
 
 
 def _satirlari_dict_yap(sutunlar, satirlar):
@@ -272,20 +284,7 @@ def _proje_performans(cursor, bas, bit):
             COUNT(DISTINCT YK.GOODS_ID) AS YUK_SAYISI,
             NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
             - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
-            AS SATIS_GELIRI,
-            ROUND(
-                (NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
-                 - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0))
-                * 100.0
-                / NULLIF(
-                    SUM(
-                        SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END)
-                        - SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END)
-                    ) OVER (),
-                    0
-                ),
-                1
-            ) AS GELIR_PAYI_YUZDE
+            AS SATIS_GELIRI
         FROM LMST_L_GOODS YK
         LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
         LEFT JOIN LMST_L_GOODS_OP_DET OPDET
@@ -295,13 +294,13 @@ def _proje_performans(cursor, bas, bit):
         WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
         {yuk_where}
         GROUP BY NVL(P.PROJECT_CODE, '(Proje Yok)')
-        ORDER BY SATIS_GELIRI DESC
-        FETCH FIRST 20 ROWS ONLY
+        ORDER BY 3 DESC
         """,
         bind,
     )
     sutunlar = [c[0] for c in cursor.description]
-    return _satirlari_dict_yap(sutunlar, cursor.fetchall())
+    satirlar = _gelir_payi_yuzde_ekle(_satirlari_dict_yap(sutunlar, cursor.fetchall()), "SATIS_GELIRI")
+    return satirlar[:20]
 
 
 def _operasyon_dagilimi(cursor, bas, bit):
@@ -315,20 +314,7 @@ def _operasyon_dagilimi(cursor, bas, bit):
             COUNT(*) AS SATIR_SAYISI,
             NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
             - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0)
-            AS TOPLAM_TUTAR,
-            ROUND(
-                (NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END), 0)
-                 - NVL(SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END), 0))
-                * 100.0
-                / NULLIF(
-                    SUM(
-                        SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (2, 4) THEN OPDET.AMT ELSE 0 END)
-                        - SUM(CASE WHEN OPDET.PURCHASE_SALES_TYPE IN (1, 3) THEN OPDET.AMT ELSE 0 END)
-                    ) OVER (),
-                    0
-                ),
-                1
-            ) AS GELIR_PAYI_YUZDE
+            AS TOPLAM_TUTAR
         FROM LMST_L_GOODS_OP_DET OPDET
         JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
         LEFT JOIN INVD_EXPENSE HK ON HK.EXPENSE_ID = OPDET.OPERATION_ID
@@ -337,12 +323,12 @@ def _operasyon_dagilimi(cursor, bas, bit):
           AND OPDET.PURCHASE_SALES_TYPE IN (1, 2, 3, 4)
         {yuk_where}
         GROUP BY NVL(HK.EXPENSE_CODE, 'BILINMIYOR')
-        ORDER BY TOPLAM_TUTAR DESC
+        ORDER BY 3 DESC
         """,
         bind,
     )
     sutunlar = [c[0] for c in cursor.description]
-    return _satirlari_dict_yap(sutunlar, cursor.fetchall())
+    return _gelir_payi_yuzde_ekle(_satirlari_dict_yap(sutunlar, cursor.fetchall()), "TOPLAM_TUTAR")
 
 
 def _fatura_gecikmesi(cursor, bas, bit):
@@ -513,20 +499,22 @@ def _problemleri_tespit_et(cursor, bas, bit, ozet, proje_listesi, marj):
         bind = _bind_ortak(bas, bit)
         yuk_join, yuk_where = _yuk_filtre_sql(bind)
         cursor.execute(
-            f"""
-            SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
-            FROM LMST_L_GOODS YK
-            LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
-            LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD
-              ON TGD.GOODS_ID = YK.GOODS_ID
-             AND TGD.GOODS_ID > 0
-            {yuk_join}
-            WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
-              AND TGD.TRANSPORT_ID IS NULL
-            {yuk_where}
-            ORDER BY YK.DOC_DATE DESC
-            FETCH FIRST 50 ROWS ONLY
-            """,
+            satir_limit_sql(
+                f"""
+                SELECT YK.REFERENCE_NO, YK.DOC_DATE, NVL(P.PROJECT_CODE, '-') AS PROJE
+                FROM LMST_L_GOODS YK
+                LEFT JOIN LMSD_L_AGR_PROJ_TYPE P ON P.PROJECT_ID = YK.PROJECT_ID
+                LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD
+                  ON TGD.GOODS_ID = YK.GOODS_ID
+                 AND TGD.GOODS_ID > 0
+                {yuk_join}
+                WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
+                  AND TGD.TRANSPORT_ID IS NULL
+                {yuk_where}
+                ORDER BY YK.DOC_DATE DESC
+                """,
+                50,
+            ),
             bind,
         )
         sevksiz = cursor.fetchall()

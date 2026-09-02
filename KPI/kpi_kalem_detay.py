@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 import ayarlar
-from oracle_baglanti import tablo_var_mi
+from oracle_baglanti import satir_limit_sql, tablo_var_mi
 
 
 def _decimal(deger) -> Decimal:
@@ -65,8 +65,8 @@ def kalem_detay_semasi_hazir() -> tuple[bool, str]:
 def _detay_sql(limit: int) -> str:
     sk_join, sk_where = _sk_filtre_parcasi()
     yk_join, yk_where = _yk_filtre_parcasi()
-    return f"""
-SELECT * FROM (
+    return satir_limit_sql(
+        f"""
     SELECT 'Sevk Kalemi' TIP,
            US.US_NAME || ' ' || US.US_SURNAME KULLANICI,
            PJ.PROJECT_CODE PROJE_KODU,
@@ -181,10 +181,10 @@ SELECT * FROM (
     {yk_join}
     WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
     {yk_where}
-)
 ORDER BY SEVK_NO, TIP, YUK_NO, OPERASYON_KODU
-FETCH FIRST {limit} ROWS ONLY
-"""
+""",
+        limit,
+    )
 
 
 def kalem_detay_getir(cursor, bas: str, bit: str, bind: dict) -> tuple[list[dict], bool]:

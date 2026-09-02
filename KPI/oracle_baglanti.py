@@ -63,6 +63,19 @@ def tablo_var_mi(tablo_adi):
         return cursor.fetchone()[0] > 0
 
 
+def satir_limit_sql(ic_sorgu: str, limit: int) -> str:
+    """
+    Oracle 11g uyumlu satır sınırı.
+
+    FETCH FIRST (12c+) yerine sıralı alt sorgu + ROWNUM kullanır.
+    """
+    n = int(limit)
+    ic = ic_sorgu.strip().rstrip(";")
+    return f"""SELECT * FROM (
+    {ic}
+) WHERE ROWNUM <= {n}"""
+
+
 def tablo_kolonlari(cursor, tablo_adi: str) -> list[str]:
     """Verilen tablonun kolon adlarını döner (Oracle ALL_TAB_COLUMNS)."""
     cursor.execute(

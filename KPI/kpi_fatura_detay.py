@@ -6,12 +6,11 @@ LMSD_L_OP_DEFINITION yerine — otomasyon/KPI ile aynı doğrulanmış kaynak).
 """
 from __future__ import annotations
 
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import datetime
 from typing import Any
 
 import ayarlar
-from oracle_baglanti import tablo_var_mi
+from oracle_baglanti import satir_limit_sql, tablo_var_mi
 
 
 def _sk_filtre_parcasi() -> tuple[str, str]:
@@ -53,8 +52,8 @@ def fatura_detay_semasi_hazir() -> tuple[bool, str]:
 def _detay_sql(limit: int) -> str:
     sk_join, sk_where = _sk_filtre_parcasi()
     yk_join, yk_where = _yk_filtre_parcasi()
-    return f"""
-SELECT * FROM (
+    return satir_limit_sql(
+        f"""
     SELECT 'Sevk' TIP,
            SE.TRANSPORT_NO SEVK_YUK_NO,
            SE.DOC_DATE BELGE_TARIHI,
@@ -86,10 +85,10 @@ SELECT * FROM (
     {yk_join}
     WHERE Y.DOC_DATE BETWEEN TO_DATE(:bas, 'DD.MM.YYYY') AND TO_DATE(:bit, 'DD.MM.YYYY')
     {yk_where}
-)
 ORDER BY BELGE_TARIHI DESC, SEVK_YUK_NO, TIP
-FETCH FIRST {limit} ROWS ONLY
-"""
+""",
+        limit,
+    )
 
 
 def fatura_detay_getir(cursor, bas: str, bit: str, bind: dict) -> tuple[list[dict], bool]:
