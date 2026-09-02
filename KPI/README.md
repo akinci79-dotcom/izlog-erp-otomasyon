@@ -79,6 +79,10 @@ KPI_BASLANGIC_TARIHI = "01.01.2026"
 KPI_BITIS_TARIHI = "31.01.2026"
 ```
 
+## Sorun giderme
+
+**ORA-00933 (SQL komutu tam doğru olarak sona ermedi):** Uyumsoft Oracle sürümü genelde 11g'dir; `FETCH FIRST` (12c+) desteklenmez. Güncel KPI kodu `ROWNUM` kullanır — yukarıdaki git clone + `Copy-Item` ile dosyaları yenileyin.
+
 ## Rapor içeriği
 
 | Sayfa | İçerik |
