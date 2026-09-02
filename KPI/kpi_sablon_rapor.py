@@ -417,6 +417,74 @@ def _excel_uygulama_ac():
     return excel
 
 
+def _autofit_ayarlari() -> tuple[float, float, float, int]:
+    return (
+        float(getattr(ayarlar, "KPI_SUTUN_MIN_GENISLIK", 10)),
+        float(getattr(ayarlar, "KPI_PARA_SUTUN_MIN_GENISLIK", 18)),
+        float(getattr(ayarlar, "KPI_SUTUN_MAX_GENISLIK", 55)),
+        int(getattr(ayarlar, "KPI_AUTOFIT_MAX_SATIR", 400)),
+    )
+
+
+def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
+    """UsedRange AutoFit + #### tespiti — pivot tutar sütunları (Alış/Satış) için."""
+    min_w, para_w, max_w, varsayilan_satir_limit = _autofit_ayarlari()
+    if satir_limit is None:
+        satir_limit = varsayilan_satir_limit
+
+    try:
+        used = sheet.UsedRange
+        if used is None:
+            return
+    except Exception:
+        return
+
+    try:
+        used.Columns.AutoFit()
+    except Exception:
+        pass
+
+    try:
+        first_col = int(used.Column)
+        col_count = int(used.Columns.Count)
+        first_row = int(used.Row)
+        row_count = min(int(used.Rows.Count), satir_limit)
+    except Exception:
+        return
+
+    for offset in range(col_count):
+        col = first_col + offset
+        hedef = min_w
+        kesin_para = False
+        for row in range(first_row, first_row + row_count):
+            try:
+                text = str(sheet.Cells(row, col).Text or "").strip()
+            except Exception:
+                continue
+            if not text:
+                continue
+            if "#" in text:
+                hedef = max(hedef, para_w)
+                kesin_para = True
+                break
+            genislik_ihtiyaci = min(len(text) * 1.08 + 1.5, max_w)
+            if any(ch in text for ch in "₺%") or ("," in text and any(c.isdigit() for c in text)):
+                hedef = max(hedef, min(genislik_ihtiyaci, para_w))
+                kesin_para = True
+            else:
+                hedef = max(hedef, genislik_ihtiyaci)
+
+        if kesin_para:
+            hedef = max(hedef, para_w)
+
+        try:
+            mevcut = float(sheet.Columns(col).ColumnWidth)
+            if mevcut < hedef:
+                sheet.Columns(col).ColumnWidth = min(hedef, max_w)
+        except Exception:
+            pass
+
+
 def _excel_sayfa_bul(wb, adlar: list[str]):
     ad_norm = {a.strip().upper() for a in adlar}
     for sheet in wb.Worksheets:
@@ -476,7 +544,7 @@ def _excel_sablon_doldur(
         if sutun_autofit:
             for sheet in (ws_veri, ws_filo):
                 try:
-                    sheet.Columns.AutoFit()
+                    _com_sutunlari_genislet(sheet, satir_limit=5000)
                 except Exception as exc:
                     uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
 
@@ -499,7 +567,7 @@ def _excel_sablon_doldur(
                 if int(sheet.Visible) != -1:
                     continue
                 try:
-                    sheet.Columns.AutoFit()
+                    _com_sutunlari_genislet(sheet)
                 except Exception as exc:
                     uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
 
@@ -566,7 +634,7 @@ def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool,
             if int(sheet.Visible) != -1:
                 continue
             try:
-                sheet.Columns.AutoFit()
+                _com_sutunlari_genislet(sheet)
                 autofit_sayisi += 1
             except Exception as exc:
                 uyarilar.append(f"{sheet.Name} AutoFit: {exc}")

@@ -32,6 +32,10 @@ KPI_FILO_BASLIK_SATIRI = 1
 KPI_EXCEL_KULLAN = True
 KPI_PIVOT_YENILE = True
 KPI_SUTUN_AUTOFIT = True
+# Pivot özet sayfalarında tutar sütunları (Alış/Satış) — #### önleme
+KPI_PARA_SUTUN_MIN_GENISLIK = 18
+# KPI_SUTUN_MIN_GENISLIK = 10
+# KPI_SUTUN_MAX_GENISLIK = 55
 
 # Çıktı dosyası — boş bırakılırsa şablon uzantısı kullanılır (.xlsx veya .xlsm)
 # KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
