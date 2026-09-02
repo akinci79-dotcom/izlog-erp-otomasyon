@@ -65,7 +65,9 @@ def _veri_sql_kaynak() -> str:
     dosya = _veri_sql_dosya_yolu()
     if dosya is not None:
         return dosya.read_text(encoding="utf-8-sig")
-    return _veri_sql_varsayilan()
+    if getattr(ayarlar, "KPI_VERI_GENISLETILMIS_SQL", False):
+        return _veri_sql_varsayilan()
+    return _veri_sql_basit()
 
 
 def _kolon_var(tablo: str, kolon: str) -> bool:
@@ -178,12 +180,12 @@ def _veri_sql_varsayilan() -> str:
         else ""
     )
     surucu_select = """MIN(CAST(NULL AS VARCHAR2(200))) AS SURUCU_ADI,
-           MIN(CAST(NULL AS VARCHAR2(50))) AS SURUCU_TEL,"""
+           MIN(CAST(NULL AS VARCHAR2(50))) AS SURUCU_TEL"""
     surucu_join = ""
     if tablo_var_mi("HRMD_ADVANCE"):
         surucu_select = """MIN(SUR.ADVANCE_NAME || ' ' || SUR.ADVANCE_SURNAME)
                KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SURUCU_ADI,
-           MIN(SUR.MOBILE_TEL) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SURUCU_TEL,"""
+           MIN(SUR.MOBILE_TEL) KEEP (DENSE_RANK FIRST ORDER BY SK.DOC_DATE) SURUCU_TEL"""
         surucu_join = "LEFT JOIN HRMD_ADVANCE SUR ON SUR.ADVANCE_ID = SK.DRIVER_ID"
     else:
         surucu_join = ""
@@ -455,7 +457,9 @@ def veri_sql_kaynak_bilgisi() -> str:
     dosya = _veri_sql_dosya_yolu()
     if dosya:
         return f"özel SQL: {dosya.name}"
-    return "varsayılan genişletilmiş SQL (referans/kpi_veri_rapor.sql yok)"
+    if getattr(ayarlar, "KPI_VERI_GENISLETILMIS_SQL", False):
+        return "genişletilmiş varsayılan SQL"
+    return "basit varsayılan SQL (tutarlar + temel alanlar)"
 
 
 def _veri_satir_zenginlestir(satir: dict[str, Any]) -> dict[str, Any]:
@@ -483,7 +487,7 @@ def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[st
         if _veri_sql_dosya_yolu() is not None:
             raise
         mesaj = str(exc)
-        if "ORA-00923" in mesaj or "ORA-00904" in mesaj or "ORA-00942" in mesaj:
+        if any(k in mesaj for k in ("ORA-00923", "ORA-00936", "ORA-00904", "ORA-00942")):
             print(
                 f"  Uyarı: Genişletilmiş VERİ SQL hatası ({mesaj.splitlines()[0]}) — "
                 "basit sorguya düşülüyor.",
