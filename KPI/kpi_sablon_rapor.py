@@ -193,37 +193,94 @@ def _pivot_kaynak_guncelle(wb, ws: Worksheet, baslik_satiri: int, satir_sayisi: 
                 pass
 
 
-def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> bool:
-    """Windows + Excel: pivot yenile + tüm sayfalarda sütun AutoFit."""
+def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool, str | None]:
+    """Windows + Excel: pivot yenile + görünür sayfalarda sütun AutoFit.
+
+    Returns:
+        (basarili, hata_mesaji) — kismi basari durumunda hata_mesaji uyari icerir.
+    """
     try:
         import win32com.client  # type: ignore
     except ImportError:
-        return False
+        return False, "pywin32 kurulu değil"
 
     excel = None
+    wb = None
+    uyarilar: list[str] = []
+    dosya = str(dosya_yolu.resolve())
+
     try:
-        excel = win32com.client.Dispatch("Excel.Application")
+        try:
+            excel = win32com.client.gencache.EnsureDispatch("Excel.Application")
+        except Exception:
+            excel = win32com.client.Dispatch("Excel.Application")
+
         excel.Visible = False
         excel.DisplayAlerts = False
-        wb = excel.Workbooks.Open(str(dosya_yolu.resolve()))
+        excel.ScreenUpdating = False
+        excel.EnableEvents = False
+
+        wb = excel.Workbooks.Open(
+            Filename=dosya,
+            UpdateLinks=0,
+            ReadOnly=False,
+            Notify=False,
+        )
+
         if pivot_yenile:
-            wb.RefreshAll()
-            excel.CalculateFullRebuild()
+            try:
+                wb.RefreshAll()
+            except Exception as exc:
+                uyarilar.append(f"pivot yenileme: {exc}")
+            try:
+                excel.CalculateUntilAsyncQueriesDone()
+            except Exception:
+                pass
+            try:
+                excel.CalculateFullRebuild()
+            except Exception as exc:
+                uyarilar.append(f"hesaplama: {exc}")
+
+        autofit_sayisi = 0
         for sheet in wb.Worksheets:
-            used = sheet.UsedRange
-            if used is not None:
-                used.Columns.AutoFit()
+            # xlSheetVisible = -1 — gizli VERİ sayfasını atla (openpyxl zaten genişletti)
+            if int(sheet.Visible) != -1:
+                continue
+            try:
+                sheet.Columns.AutoFit()
+                autofit_sayisi += 1
+            except Exception as exc:
+                uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
+
         wb.Save()
         wb.Close(SaveChanges=True)
-        return True
-    except Exception:
-        return False
+        wb = None
+
+        if autofit_sayisi == 0:
+            mesaj = "; ".join(uyarilar) if uyarilar else "Görünür sayfa bulunamadı"
+            return False, mesaj
+
+        if uyarilar:
+            return True, f"kısmi uyarı: {'; '.join(uyarilar)}"
+        return True, None
+
+    except Exception as exc:
+        return False, str(exc)
+
     finally:
+        if wb is not None:
+            try:
+                wb.Close(SaveChanges=False)
+            except Exception:
+                pass
         if excel is not None:
-            excel.Quit()
+            try:
+                excel.Quit()
+            except Exception:
+                pass
 
 
-def pivot_yenile(dosya_yolu: Path) -> bool:
+def pivot_yenile(dosya_yolu: Path) -> tuple[bool, str | None]:
     """Windows + Excel kurulu ise pivotları yeniler ve sütunları genişletir."""
     return _excel_islemleri(dosya_yolu, pivot_yenile=True)
 
@@ -314,19 +371,24 @@ def sablon_rapor_olustur(
         pivot_yenile_calistir = getattr(ayarlar, "KPI_PIVOT_YENILE", True)
 
     excel_ok = False
+    excel_mesaj: str | None = None
     if getattr(ayarlar, "KPI_SUTUN_AUTOFIT", True):
-        excel_ok = _excel_islemleri(hedef, pivot_yenile=pivot_yenile_calistir)
+        excel_ok, excel_mesaj = _excel_islemleri(hedef, pivot_yenile=pivot_yenile_calistir)
     elif pivot_yenile_calistir:
-        excel_ok = pivot_yenile(hedef)
+        excel_ok, excel_mesaj = pivot_yenile(hedef)
 
     print(f"BAŞARILI: KPI şablon raporu → {hedef.resolve()}")
     print(f"  Dönem: {bas} — {bit}")
     print(f"  VERİ satırı: {veri_adet}")
     print(f"  Filo Detay satırı: {filo_adet}")
-    if pivot_yenile_calistir and not excel_ok:
+    if excel_ok and excel_mesaj:
+        print(f"  Uyarı: {excel_mesaj}")
+    elif pivot_yenile_calistir and not excel_ok:
         print(
             "  Not: Pivot/sütun otomatik ayarı yapılamadı — Excel'de dosyayı açıp "
             "'Verileri Yenile' ve sütunları çift tıklayarak genişletin."
         )
+        if excel_mesaj:
+            print(f"  Excel hatası: {excel_mesaj}")
 
     return str(hedef.resolve())

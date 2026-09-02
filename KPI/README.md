@@ -89,6 +89,8 @@ Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 **Eski rapor modu çalışıyor:** Konsolda `KPI raporu oluşturuldu` + `Tespit edilen problem` görüyorsanız kod güncellenmemiştir. Güncelleme sonrası `BAŞARILI: KPI şablon raporu` yazmalı.
 
+**Pivot/sütun otomatik ayarı yapılamadı:** Microsoft Excel yüklü olmalı (pywin32 tek başına yetmez). Konsoldaki `Excel hatası:` satırına bakın. Dosya Excel'de açıksa kapatıp tekrar deneyin. Pivot yenileme hata verse bile sütun genişliği artık ayrı denenir.
+
 **Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 
 **VERİ sayfası bulunamadı:** Şablondaki gizli sayfa adını `KPI_VERI_SAYFA_ADLARI` ile ayarlayın.
