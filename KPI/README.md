@@ -6,6 +6,23 @@ Oracle ERP verilerini **mevcut KPI Excel şablonunuza** yapıştırır (VERİ + 
 
 ## Hızlı kurulum (Windows)
 
+**En kolay yol** — KPI klasöründen:
+
+```powershell
+cd "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
+powershell -ExecutionPolicy Bypass -File kpi_kur.ps1
+```
+
+**Güncelleme** (yeni kodu çekmek için — `ayarlar.py` ve şablon korunur):
+
+```powershell
+cd "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
+powershell -ExecutionPolicy Bypass -File kpi_guncelle.ps1
+python kpi_rapor_olustur.py
+```
+
+**Manuel kurulum** (tüm değişkenleri tek seferde yapıştırın; satır satır değil):
+
 ```powershell
 $Base = "C:\Users\hakinci\Desktop\Kodlarım"
 $KpiDir = "$Base\Cursor ERP Otomasyon\KPI"
@@ -67,6 +84,10 @@ VERİ ve Filo Detay sayfaları Excel olmasa bile openpyxl ile önceden genişlet
 Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 ## Sorun giderme
+
+**Copy-Item: izlog-kpi-temp\KPI bulunamadı:** `$Base`, `$KpiDir`, `$Temp` tanımlanmadan sadece alt satırlar çalıştırılmış demektir. Yukarıdaki bloğu **baştan sona tek parça** yapıştırın veya `kpi_guncelle.ps1` kullanın.
+
+**Eski rapor modu çalışıyor:** Konsolda `KPI raporu oluşturuldu` + `Tespit edilen problem` görüyorsanız kod güncellenmemiştir. Güncelleme sonrası `BAŞARILI: KPI şablon raporu` yazmalı.
 
 **Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 
