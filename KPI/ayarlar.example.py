@@ -17,9 +17,6 @@ ORACLE_CLIENT_LIB_DIR = r"C:\instantclient\instantclient_19_32"
 KPI_BASLANGIC_TARIHI = "01.01.2026"
 KPI_BITIS_TARIHI = "31.01.2026"
 
-# Çıktı dosyası — raporlar/ alt klasöründe oluşur
-KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
-
 # Referans KPI şablonu (Temmuz raporunuzun kopyası)
 KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"
 
@@ -31,9 +28,13 @@ KPI_FILO_SAYFA_ADLARI = ["Filo Detay", "Filo detay"]
 KPI_VERI_BASLIK_SATIRI = 1
 KPI_FILO_BASLIK_SATIRI = 1
 
-# Windows'ta Excel ile pivot yenileme + sütun AutoFit (pywin32 gerekir)
+# Windows'ta Excel ile veri yazma + pivot yenileme + sütun AutoFit (pywin32 + Excel gerekir)
+KPI_EXCEL_KULLAN = True
 KPI_PIVOT_YENILE = True
 KPI_SUTUN_AUTOFIT = True
+
+# Çıktı dosyası — boş bırakılırsa şablon uzantısı kullanılır (.xlsx veya .xlsm)
+# KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}

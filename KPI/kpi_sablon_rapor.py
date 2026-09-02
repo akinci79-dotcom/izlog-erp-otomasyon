@@ -1,6 +1,9 @@
 """
 Referans KPI şablonunu doldurur: VERİ + Filo Detay → pivot sayfaları Excel'de güncellenir.
 
+Pivotlu şablonlar openpyxl ile kaydedildiğinde bozulabildiği için (Excel açamaz),
+Windows'ta veri yazımı doğrudan Excel COM ile yapılır.
+
 Kullanım:
   1. Temmuz KPI dosyanızı KPI/referans/kpi_sablon.xlsx olarak kaydedin
   2. python kpi_rapor_olustur.py
@@ -44,12 +47,15 @@ def _raporlar_klasoru() -> Path:
     return klasor
 
 
-def _cikti_yolu() -> Path:
-    dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", "kpi_rapor.xlsx")
-    yol = Path(dosya)
-    if yol.is_absolute():
-        return yol
-    return _raporlar_klasoru() / dosya
+def _cikti_yolu(sablon: Path | None = None) -> Path:
+    dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", None)
+    if dosya:
+        yol = Path(dosya)
+        if yol.is_absolute():
+            return yol
+        return _raporlar_klasoru() / dosya
+    suffix = (sablon or sablon_yolu()).suffix or ".xlsx"
+    return _raporlar_klasoru() / f"kpi_rapor{suffix}"
 
 
 def _normalize_kolon(adi: str) -> str:
@@ -174,31 +180,239 @@ def _sayfa_sutunlarini_genislet(
         ws.column_dimensions[harf].width = max(mevcut, yeni)
 
 
-def _pivot_kaynak_guncelle(wb, ws: Worksheet, baslik_satiri: int, satir_sayisi: int):
-    """Pivot kaynak aralığını yeni satır sayısına göre genişletmeye çalışır."""
+def _excel_kullanilabilir() -> bool:
+    if getattr(ayarlar, "KPI_EXCEL_KULLAN", True) is False:
+        return False
+    try:
+        import win32com.client  # type: ignore  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _com_satir_oku(deger: Any) -> list[Any]:
+    if deger is None:
+        return []
+    if not isinstance(deger, tuple):
+        return [deger]
+    if not deger:
+        return []
+    if not isinstance(deger[0], tuple):
+        return list(deger)
+    return list(deger[0])
+
+
+def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
+    kullanilan = sheet.UsedRange
+    max_col = max(int(kullanilan.Columns.Count), 1)
+    ham = sheet.Range(
+        sheet.Cells(baslik_satiri, 1),
+        sheet.Cells(baslik_satiri, max_col),
+    ).Value
+    basliklar = _com_satir_oku(ham)
+    while basliklar and basliklar[-1] is None:
+        basliklar.pop()
+    return basliklar
+
+
+def _com_sayfaya_yaz(
+    sheet,
+    baslik_satiri: int,
+    satirlar: list[dict[str, Any]],
+    sabit_kolonlar: list[str] | None = None,
+) -> int:
+    basliklar = _com_basliklari_oku(sheet, baslik_satiri)
+    kolon_sayisi = len(basliklar) if basliklar else max(int(sheet.UsedRange.Columns.Count), 1)
+
+    kullanilan = sheet.UsedRange
+    eski_son = max(int(kullanilan.Rows.Count), baslik_satiri + len(satirlar))
+    if eski_son > baslik_satiri:
+        sheet.Range(
+            sheet.Cells(baslik_satiri + 1, 1),
+            sheet.Cells(eski_son, kolon_sayisi),
+        ).ClearContents()
+
+    if not satirlar:
+        return 0
+
+    anahtarlar = sabit_kolonlar or list(satirlar[0].keys())
+    esleme = _kolon_esleme(basliklar, anahtarlar)
+    if not esleme and sabit_kolonlar:
+        esleme = {i + 1: k for i, k in enumerate(sabit_kolonlar) if i < len(basliklar)}
+
+    if sabit_kolonlar:
+        kolon_sayisi = len(sabit_kolonlar)
+    elif esleme:
+        kolon_sayisi = max(esleme.keys())
+    else:
+        kolon_sayisi = len(anahtarlar)
+
+    matris: list[tuple[Any, ...]] = []
+    for satir in satirlar:
+        if sabit_kolonlar:
+            satir_verisi = tuple(hucre_degeri(satir.get(k)) for k in sabit_kolonlar)
+        else:
+            satir_verisi = [None] * kolon_sayisi
+            for col_idx, kolon in esleme.items():
+                satir_verisi[col_idx - 1] = hucre_degeri(satir.get(kolon))
+            satir_verisi = tuple(satir_verisi)
+        matris.append(satir_verisi)
+
+    hedef = sheet.Range(
+        sheet.Cells(baslik_satiri + 1, 1),
+        sheet.Cells(baslik_satiri + len(matris), kolon_sayisi),
+    )
+    if len(matris) == 1:
+        hedef.Value = matris[0]
+    else:
+        hedef.Value = tuple(matris)
+    return len(satirlar)
+
+
+def _com_pivot_kaynak_guncelle(
+    wb,
+    sayfa_adi: str,
+    baslik_satiri: int,
+    satir_sayisi: int,
+    kolon_sayisi: int,
+):
     if satir_sayisi <= 0:
         return
     son_satir = baslik_satiri + satir_sayisi
-    son_kolon = get_column_letter(ws.max_column or 1)
-    yeni_ref = f"'{ws.title}'!$A${baslik_satiri}:${son_kolon}${son_satir}"
+    son_kolon = get_column_letter(max(kolon_sayisi, 1))
+    yeni_kaynak = f"'{sayfa_adi}'!$A${baslik_satiri}:${son_kolon}${son_satir}"
+    try:
+        for i in range(1, int(wb.PivotCaches().Count) + 1):
+            pc = wb.PivotCaches(i)
+            src = str(pc.SourceData or "")
+            if sayfa_adi.upper() in src.upper():
+                pc.SourceData = yeni_kaynak
+    except Exception:
+        pass
 
-    for sheet in wb.worksheets:
-        if not hasattr(sheet, "_pivots") or not sheet._pivots:
-            continue
-        for pivot in sheet._pivots:
+
+def _excel_uygulama_ac():
+    import win32com.client  # type: ignore
+
+    try:
+        excel = win32com.client.gencache.EnsureDispatch("Excel.Application")
+    except Exception:
+        excel = win32com.client.Dispatch("Excel.Application")
+    excel.Visible = False
+    excel.DisplayAlerts = False
+    excel.ScreenUpdating = False
+    excel.EnableEvents = False
+    return excel
+
+
+def _excel_sayfa_bul(wb, adlar: list[str]):
+    ad_norm = {a.strip().upper() for a in adlar}
+    for sheet in wb.Worksheets:
+        if str(sheet.Name).strip().upper() in ad_norm:
+            return sheet
+    return None
+
+
+def _excel_sablon_doldur(
+    dosya_yolu: Path,
+    veri_satirlari: list[dict[str, Any]],
+    filo_satirlari: list[dict[str, Any]],
+    veri_sayfa_adlari: list[str],
+    filo_sayfa_adlari: list[str],
+    veri_baslik_satiri: int,
+    filo_baslik_satiri: int,
+    pivot_yenile: bool,
+    sutun_autofit: bool,
+) -> tuple[bool, str | None, int, int]:
+    """Şablon kopyasına Excel COM ile veri yazar, pivot yeniler, sütunları genişletir."""
+    excel = None
+    wb = None
+    uyarilar: list[str] = []
+    dosya = str(dosya_yolu.resolve())
+
+    try:
+        excel = _excel_uygulama_ac()
+        wb = excel.Workbooks.Open(
+            Filename=dosya,
+            UpdateLinks=0,
+            ReadOnly=False,
+            Notify=False,
+        )
+
+        ws_veri = _excel_sayfa_bul(wb, veri_sayfa_adlari)
+        if ws_veri is None:
+            return False, f"VERİ sayfası bulunamadı: {veri_sayfa_adlari}", 0, 0
+
+        ws_filo = _excel_sayfa_bul(wb, filo_sayfa_adlari)
+        if ws_filo is None:
+            return False, f"Filo Detay sayfası bulunamadı: {filo_sayfa_adlari}", 0, 0
+
+        veri_adet = _com_sayfaya_yaz(ws_veri, veri_baslik_satiri, veri_satirlari)
+        veri_kolon = len(_com_basliklari_oku(ws_veri, veri_baslik_satiri)) or int(ws_veri.UsedRange.Columns.Count)
+        _com_pivot_kaynak_guncelle(wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon)
+
+        filo_yaz = [{k: r.get(k) for k in FILO_DETAY_SUTUNLARI} for r in filo_satirlari]
+        filo_adet = _com_sayfaya_yaz(
+            ws_filo, filo_baslik_satiri, filo_yaz, sabit_kolonlar=FILO_DETAY_SUTUNLARI
+        )
+        filo_kolon = len(FILO_DETAY_SUTUNLARI)
+        _com_pivot_kaynak_guncelle(wb, ws_filo.Name, filo_baslik_satiri, filo_adet, filo_kolon)
+
+        if sutun_autofit:
+            for sheet in (ws_veri, ws_filo):
+                try:
+                    sheet.Columns.AutoFit()
+                except Exception as exc:
+                    uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
+
+        if pivot_yenile:
             try:
-                if pivot.cache and pivot.cache.cacheSource:
-                    pivot.cache.cacheSource.worksheetSource.ref = yeni_ref
+                wb.RefreshAll()
+            except Exception as exc:
+                uyarilar.append(f"pivot yenileme: {exc}")
+            try:
+                excel.CalculateUntilAsyncQueriesDone()
+            except Exception:
+                pass
+            try:
+                excel.CalculateFullRebuild()
+            except Exception as exc:
+                uyarilar.append(f"hesaplama: {exc}")
+
+        if sutun_autofit:
+            for sheet in wb.Worksheets:
+                if int(sheet.Visible) != -1:
+                    continue
+                try:
+                    sheet.Columns.AutoFit()
+                except Exception as exc:
+                    uyarilar.append(f"{sheet.Name} AutoFit: {exc}")
+
+        wb.Save()
+        wb.Close(SaveChanges=True)
+        wb = None
+
+        mesaj = f"kısmi uyarı: {'; '.join(uyarilar)}" if uyarilar else None
+        return True, mesaj, veri_adet, filo_adet
+
+    except Exception as exc:
+        return False, str(exc), 0, 0
+
+    finally:
+        if wb is not None:
+            try:
+                wb.Close(SaveChanges=False)
+            except Exception:
+                pass
+        if excel is not None:
+            try:
+                excel.Quit()
             except Exception:
                 pass
 
 
 def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool, str | None]:
-    """Windows + Excel: pivot yenile + görünür sayfalarda sütun AutoFit.
-
-    Returns:
-        (basarili, hata_mesaji) — kismi basari durumunda hata_mesaji uyari icerir.
-    """
+    """Mevcut dosyada yalnızca pivot yenile + AutoFit (eski akış / test)."""
     try:
         import win32com.client  # type: ignore
     except ImportError:
@@ -210,16 +424,7 @@ def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool,
     dosya = str(dosya_yolu.resolve())
 
     try:
-        try:
-            excel = win32com.client.gencache.EnsureDispatch("Excel.Application")
-        except Exception:
-            excel = win32com.client.Dispatch("Excel.Application")
-
-        excel.Visible = False
-        excel.DisplayAlerts = False
-        excel.ScreenUpdating = False
-        excel.EnableEvents = False
-
+        excel = _excel_uygulama_ac()
         wb = excel.Workbooks.Open(
             Filename=dosya,
             UpdateLinks=0,
@@ -243,7 +448,6 @@ def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool,
 
         autofit_sayisi = 0
         for sheet in wb.Worksheets:
-            # xlSheetVisible = -1 — gizli VERİ sayfasını atla (openpyxl zaten genişletti)
             if int(sheet.Visible) != -1:
                 continue
             try:
@@ -285,6 +489,40 @@ def pivot_yenile(dosya_yolu: Path) -> tuple[bool, str | None]:
     return _excel_islemleri(dosya_yolu, pivot_yenile=True)
 
 
+def _openpyxl_yedek_yaz(
+    hedef: Path,
+    veri_satirlari: list[dict[str, Any]],
+    filo_satirlari: list[dict[str, Any]],
+    veri_sayfa_adlari: list[str],
+    filo_sayfa_adlari: list[str],
+    veri_baslik_satiri: int,
+    filo_baslik_satiri: int,
+) -> tuple[int, int]:
+    """Excel yoksa yedek — pivotlu şablon Excel'de açılamayabilir."""
+    wb = load_workbook(hedef, keep_vba=True)
+
+    ws_veri = _sayfa_bul(wb, veri_sayfa_adlari)
+    if ws_veri is None:
+        wb.close()
+        raise ValueError(f"Şablonda VERİ sayfası bulunamadı: {veri_sayfa_adlari}")
+
+    ws_filo = _sayfa_bul(wb, filo_sayfa_adlari)
+    if ws_filo is None:
+        wb.close()
+        raise ValueError(f"Şablonda Filo Detay sayfası bulunamadı: {filo_sayfa_adlari}")
+
+    veri_adet = _sayfayi_temizle_yaz(ws_veri, veri_baslik_satiri, veri_satirlari)
+    filo_yaz = [{k: r.get(k) for k in FILO_DETAY_SUTUNLARI} for r in filo_satirlari]
+    filo_adet = _sayfayi_temizle_yaz(
+        ws_filo, filo_baslik_satiri, filo_yaz, sabit_kolonlar=FILO_DETAY_SUTUNLARI
+    )
+    _sayfa_sutunlarini_genislet(ws_veri, veri_baslik_satiri, veri_adet)
+    _sayfa_sutunlarini_genislet(ws_filo, filo_baslik_satiri, filo_adet)
+    wb.save(hedef)
+    wb.close()
+    return veri_adet, filo_adet
+
+
 def _bind_olustur(bas: str, bit: str) -> dict:
     bind = {"bas": bas, "bit": bit}
     if getattr(ayarlar, "CO_CODE", None):
@@ -307,7 +545,7 @@ def sablon_rapor_olustur(
     pivot_yenile_calistir: bool | None = None,
 ) -> str:
     kaynak = sablon or sablon_yolu()
-    hedef = cikti or _cikti_yolu()
+    hedef = cikti or _cikti_yolu(kaynak)
 
     if not kaynak.exists():
         raise FileNotFoundError(
@@ -331,64 +569,56 @@ def sablon_rapor_olustur(
         if kiralk_arac_semasi_hazir()[0]:
             filo_satirlari = kiralk_arac_detay_getir(cursor, bas, bit, bind)
 
-    wb = load_workbook(hedef, keep_vba=True)
-
     veri_sayfa_adlari = getattr(ayarlar, "KPI_VERI_SAYFA_ADLARI", ["VERİ", "VERI", "Veri"])
     filo_sayfa_adlari = getattr(ayarlar, "KPI_FILO_SAYFA_ADLARI", ["Filo Detay", "Filo detay"])
     veri_baslik_satiri = int(getattr(ayarlar, "KPI_VERI_BASLIK_SATIRI", 1))
     filo_baslik_satiri = int(getattr(ayarlar, "KPI_FILO_BASLIK_SATIRI", 1))
 
-    ws_veri = _sayfa_bul(wb, veri_sayfa_adlari)
-    if ws_veri is None:
-        raise ValueError(
-            f"Şablonda VERİ sayfası bulunamadı. Aranan adlar: {veri_sayfa_adlari}. "
-            f"Mevcut sayfalar: {wb.sheetnames}"
-        )
-
-    ws_filo = _sayfa_bul(wb, filo_sayfa_adlari)
-    if ws_filo is None:
-        raise ValueError(
-            f"Şablonda Filo Detay sayfası bulunamadı. Aranan adlar: {filo_sayfa_adlari}. "
-            f"Mevcut sayfalar: {wb.sheetnames}"
-        )
-
-    veri_adet = _sayfayi_temizle_yaz(ws_veri, veri_baslik_satiri, veri_satirlari)
-    _pivot_kaynak_guncelle(wb, ws_veri, veri_baslik_satiri, veri_adet)
-
-    filo_yaz = [{k: r.get(k) for k in FILO_DETAY_SUTUNLARI} for r in filo_satirlari]
-    filo_adet = _sayfayi_temizle_yaz(
-        ws_filo, filo_baslik_satiri, filo_yaz, sabit_kolonlar=FILO_DETAY_SUTUNLARI
-    )
-    _pivot_kaynak_guncelle(wb, ws_filo, filo_baslik_satiri, filo_adet)
-
-    _sayfa_sutunlarini_genislet(ws_veri, veri_baslik_satiri, veri_adet)
-    _sayfa_sutunlarini_genislet(ws_filo, filo_baslik_satiri, filo_adet)
-
-    wb.save(hedef)
-    wb.close()
-
     if pivot_yenile_calistir is None:
         pivot_yenile_calistir = getattr(ayarlar, "KPI_PIVOT_YENILE", True)
+    sutun_autofit = getattr(ayarlar, "KPI_SUTUN_AUTOFIT", True)
 
-    excel_ok = False
     excel_mesaj: str | None = None
-    if getattr(ayarlar, "KPI_SUTUN_AUTOFIT", True):
-        excel_ok, excel_mesaj = _excel_islemleri(hedef, pivot_yenile=pivot_yenile_calistir)
-    elif pivot_yenile_calistir:
-        excel_ok, excel_mesaj = pivot_yenile(hedef)
+    veri_adet = 0
+    filo_adet = 0
+
+    if _excel_kullanilabilir():
+        excel_ok, excel_mesaj, veri_adet, filo_adet = _excel_sablon_doldur(
+            hedef,
+            veri_satirlari,
+            filo_satirlari,
+            veri_sayfa_adlari,
+            filo_sayfa_adlari,
+            veri_baslik_satiri,
+            filo_baslik_satiri,
+            pivot_yenile=pivot_yenile_calistir,
+            sutun_autofit=sutun_autofit,
+        )
+        if not excel_ok:
+            raise RuntimeError(
+                f"Excel ile KPI şablonu doldurulamadı: {excel_mesaj}\n"
+                "Pivotlu şablon openpyxl ile güvenle kaydedilemez; Excel kurulu ve dosya kapalı olmalı."
+            )
+    else:
+        print(
+            "  Uyarı: Excel COM kullanılamıyor — openpyxl yedek modu. "
+            "Pivotlu şablon Excel'de açılamayabilir."
+        )
+        veri_adet, filo_adet = _openpyxl_yedek_yaz(
+            hedef,
+            veri_satirlari,
+            filo_satirlari,
+            veri_sayfa_adlari,
+            filo_sayfa_adlari,
+            veri_baslik_satiri,
+            filo_baslik_satiri,
+        )
 
     print(f"BAŞARILI: KPI şablon raporu → {hedef.resolve()}")
     print(f"  Dönem: {bas} — {bit}")
     print(f"  VERİ satırı: {veri_adet}")
     print(f"  Filo Detay satırı: {filo_adet}")
-    if excel_ok and excel_mesaj:
+    if excel_mesaj:
         print(f"  Uyarı: {excel_mesaj}")
-    elif pivot_yenile_calistir and not excel_ok:
-        print(
-            "  Not: Pivot/sütun otomatik ayarı yapılamadı — Excel'de dosyayı açıp "
-            "'Verileri Yenile' ve sütunları çift tıklayarak genişletin."
-        )
-        if excel_mesaj:
-            print(f"  Excel hatası: {excel_mesaj}")
 
     return str(hedef.resolve())

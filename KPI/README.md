@@ -83,10 +83,9 @@ python kpi_rapor_olustur.py
 ```
 
 **Ne yapar:**
-1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx`
-2. **VERİ** sayfasına yük bazında detay Oracle sorgusu yazılır
-3. **Filo Detay** sayfasına tedarikçi hesaplaşma raporu yazılır
-4. Windows + Excel varsa pivotlar yenilenir ve tüm sayfalarda sütunlar içeriğe göre genişletilir (`#######` görünmez); yoksa dosyayı açıp **Verileri Yenile** + sütun başlıklarını çift tıklayarak genişletin
+1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx` (veya şablon `.xlsm` ise `.xlsm`)
+2. **VERİ** ve **Filo Detay** sayfalarına Oracle verisi **Excel COM** ile yazılır (pivot şablonu bozulmaz)
+3. Pivotlar yenilenir, sütunlar genişletilir
 
 ## Eski analiz raporu (isteğe bağlı)
 
@@ -108,13 +107,7 @@ Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 **Eski rapor modu çalışıyor:** Konsolda `KPI raporu oluşturuldu` + `Tespit edilen problem` görüyorsanız kod güncellenmemiştir. Güncelleme sonrası `BAŞARILI: KPI şablon raporu` yazmalı.
 
-**Pivot/sütun otomatik ayarı yapılamadı:** Microsoft Excel yüklü olmalı (pywin32 tek başına yetmez). Konsoldaki `Excel hatası:` satırına bakın. Teşhis için:
-
-```powershell
-python kpi_excel_test.py
-```
-
-Dosya Excel'de açıksa kapatıp tekrar deneyin.
+**Pivot/sütun otomatik ayarı yapılamadı / dosya biçimi geçersiz:** Eski sürümler openpyxl ile pivot şablonunu bozuyordu. Güncel kod veriyi doğrudan Excel ile yazar. `kpi_guncelle.ps1` veya README'deki güncelleme bloğunu çalıştırın, ardından `python kpi_rapor_olustur.py`. Teşhis: `python kpi_excel_test.py`
 
 **Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 
