@@ -1,30 +1,10 @@
-# İzlog Lojistik — KPI Analiz Modülü
+# İzlog Lojistik — KPI Rapor Otomasyonu
 
-Oracle ERP verilerinden üst yönetim KPI raporu üretir.
+Oracle ERP verilerini **mevcut KPI Excel şablonunuza** yapıştırır (VERİ + Filo Detay), pivot sayfalarını günceller.
 
-**Bu klasör otomasyon projesinden tamamen bağımsızdır.** Üst klasördeki
-`izlog_yuk_otomasyon.py`, `ayarlar.py` veya `oracle_okuyucu.py` kullanılmaz.
+**Otomasyon projesinden bağımsızdır** — yalnızca `KPI/` klasörü kullanılır.
 
-## Konum
-
-```
-Cursor ERP Otomasyon\
-└── KPI\                    ← sadece bu klasör
-    ├── ayarlar.py          ← kendi ayarlarınız (git'e commit etmeyin)
-    ├── ayarlar.example.py
-    ├── oracle_baglanti.py
-    ├── kpi_analiz.py
-    ├── kpi_rapor_olustur.py
-    ├── requirements.txt
-    └── raporlar\
-        └── kpi_rapor.xlsx  ← üretilen rapor
-```
-
-## Kurulum (Windows) — tek seferde
-
-### Yöntem A: Tek blok kopyala-yapıştır (PowerShell)
-
-PowerShell'i **Yönetici olarak açmanıza gerek yok.** Aşağıdaki bloğun **tamamını** seçip yapıştırın, Enter'a bir kez basın — hepsi sırayla çalışır:
+## Hızlı kurulum (Windows)
 
 ```powershell
 $Base = "C:\Users\hakinci\Desktop\Kodlarım"
@@ -33,68 +13,61 @@ $Temp = "$Base\izlog-kpi-temp"
 Set-Location $Base
 if (Test-Path $Temp) { Remove-Item $Temp -Recurse -Force }
 git clone -b cursor/kpi-analiz-rapor-0bd3 --depth 1 https://github.com/akinci79-dotcom/izlog-erp-otomasyon.git izlog-kpi-temp
-New-Item -ItemType Directory -Force -Path $KpiDir | Out-Null
 Copy-Item "$Temp\KPI\*" $KpiDir -Recurse -Force
 Remove-Item $Temp -Recurse -Force
 Set-Location $KpiDir
 if (-not (Test-Path ayarlar.py)) { Copy-Item ayarlar.example.py ayarlar.py }
 pip install -r requirements.txt
-python kpi_rapor_olustur.py --ornek
-Write-Host "Bitti! Rapor: $KpiDir\raporlar\kpi_rapor_ORNEK.xlsx" -ForegroundColor Green
 ```
 
-Sonra `ayarlar.py` içinde `DB_SIFRE` doldurun.
+## Şablonu yerleştirin
 
-### Yöntem B: Çift tıkla (dosyalar indikten sonra)
+Temmuz KPI dosyanızı şuraya kopyalayın:
 
-`KPI\kpi_kur.bat` dosyasına çift tıklayın — geri kalanını script yapar.
-
-### Yöntem C: Manuel (adım adım)
-
-```powershell
-cd "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
-copy ayarlar.example.py ayarlar.py
-pip install -r requirements.txt
-python kpi_rapor_olustur.py --ornek
+```
+KPI\referans\kpi_sablon.xlsx
 ```
 
-Oracle Instant Client: `C:\instantclient\instantclient_19_32`
+## ayarlar.py
+
+```python
+KPI_BASLANGIC_TARIHI = "01.07.2026"
+KPI_BITIS_TARIHI = "31.07.2026"
+DB_SIFRE = "..."
+# KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"   # varsayılan: referans/kpi_sablon.xlsx
+# KPI_VERI_SAYFA_ADLARI = ["VERİ", "VERI"]
+# KPI_FILO_SAYFA_ADLARI = ["Filo Detay"]
+```
 
 ## Çalıştırma
 
 ```powershell
 cd KPI
-python kpi_rapor_olustur.py --ornek    # şablon testi (Oracle gerekmez)
-python kpi_rapor_olustur.py            # gerçek veri
+python kpi_rapor_olustur.py
 ```
 
-Rapor: `KPI\raporlar\kpi_rapor.xlsx`
+**Ne yapar:**
+1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx`
+2. **VERİ** sayfasına yük bazında detay Oracle sorgusu yazılır
+3. **Filo Detay** sayfasına tedarikçi hesaplaşma raporu yazılır
+4. Windows + Excel varsa pivotlar otomatik yenilenir; yoksa dosyayı açıp **Verileri Yenile**
 
-## Dönem ayarı
+## Eski analiz raporu (isteğe bağlı)
 
-`ayarlar.py`:
-
-```python
-KPI_BASLANGIC_TARIHI = "01.01.2026"
-KPI_BITIS_TARIHI = "31.01.2026"
+```powershell
+python kpi_rapor_olustur.py --analiz
+python kpi_rapor_olustur.py --ornek
 ```
+
+## Pivot yenileme
+
+Otomatik yenileme için `pip install pywin32` ve yüklü Microsoft Excel gerekir.
+Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 ## Sorun giderme
 
-**ORA-00933 (SQL komutu tam doğru olarak sona ermedi):** Uyumsoft Oracle sürümü genelde 11g'dir; `FETCH FIRST` (12c+) desteklenmez. Güncel KPI kodu `ROWNUM` kullanır — yukarıdaki git clone + `Copy-Item` ile dosyaları yenileyin.
+**Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 
-## Rapor içeriği
+**VERİ sayfası bulunamadı:** Şablondaki gizli sayfa adını `KPI_VERI_SAYFA_ADLARI` ile ayarlayın.
 
-| Sayfa | İçerik |
-|---|---|
-| Yönetici Özeti | Yük, gelir, marj, filo KPI'ları, problem listesi |
-| Problem Detay | Özet problemlerin satır bazında doğrulanabilir listesi |
-| Aylık Trend | Aylık hacim ve gelir |
-| Proje Performansı | Top 20 proje |
-| Operasyon Dağılımı | NAVLUN, UĞRAMA vb. |
-| Filo Detay | Lojistik tedarikçi hesaplaşma raporu (yapıştırma ile aynı kolonlar) |
-| Filo Cari Özet | Tedarikçi bazında filo özeti |
-| Kalem Detay | Sevk/yük kalem satırları (çoklu yük kırılımı) |
-| Sevk Yük Kırılım | Birden fazla yük taşıyan sevklerin kar/zarar özeti |
-| Fatura Detay | Sevk/yük kalemi ↔ fatura eşleşmesi |
-| Faturasız Kalemler | Fatura no'su olmayan satırlar |
+**ORA-00933:** Güncel KPI kodunu git clone ile alın (Oracle 11g uyumlu).

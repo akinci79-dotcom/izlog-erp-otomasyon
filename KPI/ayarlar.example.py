@@ -20,6 +20,23 @@ KPI_BITIS_TARIHI = "31.01.2026"
 # Çıktı dosyası — raporlar/ alt klasöründe oluşur
 KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
 
+# Referans KPI şablonu (Temmuz raporunuzun kopyası)
+KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"
+
+# Şablondaki sayfa adları (gizli VERİ sayfası dahil)
+KPI_VERI_SAYFA_ADLARI = ["VERİ", "VERI", "Veri"]
+KPI_FILO_SAYFA_ADLARI = ["Filo Detay", "Filo detay"]
+
+# VERİ / Filo Detay başlık satırı (genelde 1)
+KPI_VERI_BASLIK_SATIRI = 1
+KPI_FILO_BASLIK_SATIRI = 1
+
+# Windows'ta Excel ile pivot yenileme (pywin32 gerekir)
+KPI_PIVOT_YENILE = True
+
+# Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
+# KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}
+
 # Opsiyonel firma/şube filtresi (Uyumsoft yük detay raporu ile aynı mantık)
 # Boş bırakılırsa tüm firma/şubeler dahil edilir.
 # CO_CODE = "IZLOG"
