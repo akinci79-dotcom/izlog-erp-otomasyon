@@ -16,8 +16,27 @@ powershell -ExecutionPolicy Bypass -File kpi_kur.ps1
 **Güncelleme** (yeni kodu çekmek için — `ayarlar.py` ve şablon korunur):
 
 ```powershell
+$KpiDir = "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
+$Base = "C:\Users\hakinci\Desktop\Kodlarım"
+$Temp = "$Base\izlog-kpi-temp"
+Set-Location $Base
+if (Test-Path $Temp) { Remove-Item $Temp -Recurse -Force }
+git clone -b cursor/kpi-analiz-rapor-0bd3 --depth 1 https://github.com/akinci79-dotcom/izlog-erp-otomasyon.git izlog-kpi-temp
+if (Test-Path "$KpiDir\ayarlar.py") { Copy-Item "$KpiDir\ayarlar.py" "$env:TEMP\izlog_kpi_ayarlar_yedek.py" -Force }
+if (Test-Path "$KpiDir\referans\kpi_sablon.xlsx") { Copy-Item "$KpiDir\referans\kpi_sablon.xlsx" "$env:TEMP\izlog_kpi_sablon_yedek.xlsx" -Force }
+Copy-Item "$Temp\KPI\*" $KpiDir -Recurse -Force
+if (Test-Path "$env:TEMP\izlog_kpi_ayarlar_yedek.py") { Copy-Item "$env:TEMP\izlog_kpi_ayarlar_yedek.py" "$KpiDir\ayarlar.py" -Force }
+if (Test-Path "$env:TEMP\izlog_kpi_sablon_yedek.xlsx") { New-Item -ItemType Directory -Force -Path "$KpiDir\referans" | Out-Null; Copy-Item "$env:TEMP\izlog_kpi_sablon_yedek.xlsx" "$KpiDir\referans\kpi_sablon.xlsx" -Force }
+Remove-Item $Temp -Recurse -Force
+Set-Location $KpiDir
+python kpi_rapor_olustur.py
+```
+
+`kpi_guncelle.ps1` dosyası geldikten sonra kısa yol:
+
+```powershell
 cd "C:\Users\hakinci\Desktop\Kodlarım\Cursor ERP Otomasyon\KPI"
-powershell -ExecutionPolicy Bypass -File kpi_guncelle.ps1
+powershell -ExecutionPolicy Bypass -File ".\kpi_guncelle.ps1"
 python kpi_rapor_olustur.py
 ```
 
@@ -89,7 +108,13 @@ Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
 **Eski rapor modu çalışıyor:** Konsolda `KPI raporu oluşturuldu` + `Tespit edilen problem` görüyorsanız kod güncellenmemiştir. Güncelleme sonrası `BAŞARILI: KPI şablon raporu` yazmalı.
 
-**Pivot/sütun otomatik ayarı yapılamadı:** Microsoft Excel yüklü olmalı (pywin32 tek başına yetmez). Konsoldaki `Excel hatası:` satırına bakın. Dosya Excel'de açıksa kapatıp tekrar deneyin. Pivot yenileme hata verse bile sütun genişliği artık ayrı denenir.
+**Pivot/sütun otomatik ayarı yapılamadı:** Microsoft Excel yüklü olmalı (pywin32 tek başına yetmez). Konsoldaki `Excel hatası:` satırına bakın. Teşhis için:
+
+```powershell
+python kpi_excel_test.py
+```
+
+Dosya Excel'de açıksa kapatıp tekrar deneyin.
 
 **Şablon bulunamadı:** `KPI\referans\kpi_sablon.xlsx` dosyasını oluşturun.
 
