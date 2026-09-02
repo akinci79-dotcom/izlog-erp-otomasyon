@@ -1,15 +1,13 @@
 -- =============================================================================
--- Uyumsoft VERİ sayfası SQL — OLDUĞU GİBİ kaydedin, kod değiştirmez
+-- Uyumsoft VERİ sayfası SQL — LojistikYükSevkKalemRaporu (ERP'deki asıl rapor)
 -- =============================================================================
 --
--- 1. Uyumsoft rapor tasarımcısından (LojistikYükSevkKalemRaporu vb.) SQL'i kopyalayın
--- 2. Bu dosyayı referans/kpi_veri_rapor.sql olarak kaydedin
--- 3. Tarih filtresinde şu parametreleri kullanın (ayarlar.py dönemine bağlanır):
---      :bas   — KPI_BASLANGIC_TARIHI  (örn. 01.07.2026)
---      :bit   — KPI_BITIS_TARIHI      (örn. 31.07.2026)
---    Örnek:  WHERE YK.DOC_DATE BETWEEN TO_DATE(:bas,'DD.MM.YYYY') AND TO_DATE(:bit,'DD.MM.YYYY')
+-- Bu dosya repoda kayıtlıdır; kod SQL metnine alan eklemez/çıkarmaz.
+-- kpi_veri.py çalıştırma anında yalnızca @...@ parametrelerini ayarlardan doldurur:
+--   @CoCode@         → ayarlar.CO_CODE
+--   @BranchCodes@    → ayarlar.BRANCH_CODE
+--   @DocDateF@       → ayarlar.KPI_BASLANGIC_TARIHI
+--   @DocDateL@       → ayarlar.KPI_BITIS_TARIHI
+--   @ReferenceNo@, @TransportNo@, @ProjectCodes@, @VehicleCode@ → null (filtre yok)
 --
--- 4. SELECT alias'ları Excel şablonu 1. satır başlıklarıyla aynı olsun
---    (PROJE_KODU, KULLANICI, YUKLEME_YER_ADI, ALIS_TUTARI, ...)
---
--- Aşağıdaki satırları silip kendi SQL'inizi yapıştırın:
+-- Güncel SQL: referans/kpi_veri_rapor.sql

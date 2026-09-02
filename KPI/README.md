@@ -64,23 +64,16 @@ Temmuz KPI dosyanızı şuraya kopyalayın:
 KPI\referans\kpi_sablon.xlsx
 ```
 
-Uyumsoft VERİ raporu SQL'inizi **olduğu gibi** şuraya kaydedin (kod SQL'e dokunmaz):
-
-```
-KPI\referans\kpi_veri_rapor.sql
-```
-
-Tarih filtresi `:bas` ve `:bit` parametrelerini kullanmalı (ayarlar.py dönem tarihleri).
+Uyumsoft VERİ raporu SQL'i repoda `referans/kpi_veri_rapor.sql` olarak kayıtlıdır (LojistikYükSevkKalemRaporu). Kod SQL'e alan eklemez; çalıştırma anında `@CoCode@`, `@BranchCodes@`, `@DocDateF@`, `@DocDateL@` parametreleri `ayarlar.py` değerleriyle doldurulur.
 
 ## ayarlar.py
 
 ```python
 KPI_BASLANGIC_TARIHI = "01.07.2026"
 KPI_BITIS_TARIHI = "31.07.2026"
+CO_CODE = "IZLOG"
+BRANCH_CODE = "MERKEZ"
 DB_SIFRE = "..."
-# KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"   # varsayılan: referans/kpi_sablon.xlsx
-# KPI_VERI_SAYFA_ADLARI = ["VERİ", "VERI"]
-# KPI_FILO_SAYFA_ADLARI = ["Filo Detay"]
 ```
 
 ## Çalıştırma

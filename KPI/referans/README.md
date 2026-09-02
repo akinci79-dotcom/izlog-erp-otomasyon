@@ -21,9 +21,14 @@ Pivotlu sayfalar (Özet, Filo Analizi, Şube KZ, …) şablonda kalır; script V
 
 VERİ sayfasının 1. satırındaki başlıklar, **kpi_veri_rapor.sql** içindeki SELECT alias'larıyla eşleştirilir.
 
-**Zorunlu:** Uyumsoft VERİ raporu SQL'inizi `referans/kpi_veri_rapor.sql` olarak kaydedin. Kod SQL'e dokunmaz; ne varsa aynen çalıştırır.
+**Zorunlu:** Uyumsoft VERİ raporu SQL'iniz repoda `referans/kpi_veri_rapor.sql` olarak kayıtlıdır. Kod SQL'e alan eklemez/çıkarmaz; çalıştırma anında yalnızca `@...@` parametreleri `ayarlar.py` değerleriyle doldurulur:
 
-Tarih parametreleri: `:bas` ve `:bit` (ayarlar.py dönem tarihleri).
+| Uyumsoft parametresi | ayarlar.py |
+|---|---|
+| `@CoCode@` | `CO_CODE` |
+| `@BranchCodes@` | `BRANCH_CODE` |
+| `@DocDateF@` / `@DocDateL@` | `KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI` |
+| `@ReferenceNo@`, `@TransportNo@`, `@ProjectCodes@`, `@VehicleCode@` | `null` (filtre yok) |
 
 Eşleşmeyen başlık varsa `ayarlar.py` içinde:
 

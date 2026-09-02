@@ -3,9 +3,9 @@ VERİ sayfası — Oracle sorgusu.
 
 Yalnızca referans/kpi_veri_rapor.sql dosyasındaki SQL çalıştırılır.
 Sorguya kod tarafında alan eklenmez/çıkarılmaz; Uyumsoft raporu aynen kullanılır.
+Çalıştırma anında yalnızca @...@ Uyumsoft parametreleri ayarlardan doldurulur.
 
 Dosya: KPI/referans/kpi_veri_rapor.sql
-Tarih parametreleri: :bas ve :bit (DD.MM.YYYY) — ayarlar.py dönem tarihleri
 """
 from __future__ import annotations
 
@@ -17,6 +17,17 @@ from typing import Any
 import ayarlar
 
 _KPI_KOKU = Path(__file__).resolve().parent
+
+_UYUMSOFT_PARAMETRELER = (
+    "@CoCode@",
+    "@BranchCodes@",
+    "@DocDateF@",
+    "@DocDateL@",
+    "@ReferenceNo@",
+    "@TransportNo@",
+    "@ProjectCodes@",
+    "@VehicleCode@",
+)
 
 
 def veri_sql_dosya_yolu() -> Path | None:
@@ -43,6 +54,26 @@ def veri_sql_kaynak_bilgisi() -> str:
     return "TANIMSIZ — referans/kpi_veri_rapor.sql gerekli"
 
 
+def _co_code() -> str:
+    deger = getattr(ayarlar, "CO_CODE", None)
+    if not deger or not str(deger).strip():
+        raise ValueError(
+            "CO_CODE ayarlar.py içinde tanımlı olmalı.\n"
+            "Uyumsoft VERİ raporu firma kodu (@CoCode@) zorunlu kullanır."
+        )
+    return str(deger).strip()
+
+
+def _branch_code() -> str:
+    deger = getattr(ayarlar, "BRANCH_CODE", None)
+    if not deger or not str(deger).strip():
+        raise ValueError(
+            "BRANCH_CODE ayarlar.py içinde tanımlı olmalı.\n"
+            "Uyumsoft VERİ raporu şube kodu (@BranchCodes@) zorunlu kullanır."
+        )
+    return str(deger).strip()
+
+
 def veri_semasi_hazir() -> tuple[bool, str]:
     yol = veri_sql_dosya_yolu()
     if yol is None:
@@ -51,6 +82,11 @@ def veri_semasi_hazir() -> tuple[bool, str]:
             "Uyumsoft VERİ (LojistikYükSevkKalemRaporu) SQL'inizi bu dosyaya "
             "olduğu gibi kaydedin. Kod SQL'e dokunmaz."
         )
+    try:
+        _co_code()
+        _branch_code()
+    except ValueError as exc:
+        return False, str(exc)
     return True, ""
 
 
@@ -65,8 +101,32 @@ def _veri_sql() -> str:
     return yol.read_text(encoding="utf-8-sig")
 
 
+def _uyumsoft_parametreleri_yerlestir(sql: str, bas: str, bit: str) -> str:
+    """Uyumsoft @...@ placeholder'larını ayarlardan doldurur; SQL metnine dokunmaz."""
+    yerlestirme = {
+        "@CoCode@": _co_code(),
+        "@BranchCodes@": _branch_code(),
+        "@DocDateF@": bas,
+        "@DocDateL@": bit,
+        "@ReferenceNo@": "null",
+        "@TransportNo@": "null",
+        "@ProjectCodes@": "null",
+        "@VehicleCode@": "null",
+    }
+    for anahtar, deger in yerlestirme.items():
+        sql = sql.replace(anahtar, deger)
+    kalan = [p for p in _UYUMSOFT_PARAMETRELER if p in sql]
+    if kalan:
+        raise ValueError(
+            f"SQL'de yerleştirilmemiş Uyumsoft parametreleri kaldı: {', '.join(kalan)}"
+        )
+    return sql
+
+
 def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[str, Any]]:
-    cursor.execute(_veri_sql(), bind)
+    del bind  # VERİ sorgusu Uyumsoft placeholder değiştirme kullanır; :bas/:bit bind edilmez
+    sql = _uyumsoft_parametreleri_yerlestir(_veri_sql(), bas, bit)
+    cursor.execute(sql)
     sutunlar = [c[0] for c in cursor.description]
     return [dict(zip(sutunlar, satir)) for satir in cursor.fetchall()]
 

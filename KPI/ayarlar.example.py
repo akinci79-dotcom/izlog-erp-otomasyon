@@ -51,10 +51,9 @@ KPI_ALIS_SUTUN_GENISLIK = 28
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}
 
-# Opsiyonel firma/şube filtresi (Uyumsoft yük detay raporu ile aynı mantık)
-# Boş bırakılırsa tüm firma/şubeler dahil edilir.
-# CO_CODE = "IZLOG"
-# BRANCH_CODE = "MERKEZ"
+# Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
+CO_CODE = "IZLOG"
+BRANCH_CODE = "MERKEZ"
 
 # Kapıdan kapıya yükleri hariç tut (rapor SQL'inde IS_DOOR_TO_DOOR = 0)
 KPI_KAPI_KAPI_HARIC = True
