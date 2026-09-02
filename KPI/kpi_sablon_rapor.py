@@ -126,7 +126,11 @@ def _basliklari_oku(ws: Worksheet, satir: int = 1) -> list[str | None]:
     return [ws.cell(row=satir, column=c).value for c in range(1, max_col + 1)]
 
 
-def _kolon_esleme(basliklar: list[str | None], veri_anahtarlari: list[str]) -> dict[int, str]:
+def _kolon_esleme(
+    basliklar: list[str | None],
+    veri_anahtarlari: list[str],
+    tablo_sol: int = 1,
+) -> dict[int, str]:
     normalized_veri = {_normalize_kolon(k): k for k in veri_anahtarlari}
     for sablon_norm, oracle in _SABLON_KOLON_VARSAYILAN.items():
         if oracle in veri_anahtarlari:
@@ -136,23 +140,34 @@ def _kolon_esleme(basliklar: list[str | None], veri_anahtarlari: list[str]) -> d
         normalized_veri[_normalize_kolon(sablon)] = oracle
 
     esleme: dict[int, str] = {}
-    for col_idx, baslik in enumerate(basliklar, 1):
+    for i, baslik in enumerate(basliklar):
         if baslik is None or str(baslik).strip() == "":
             continue
         norm = _normalize_kolon(str(baslik))
         if norm in normalized_veri:
-            esleme[col_idx] = normalized_veri[norm]
+            esleme[tablo_sol + i] = normalized_veri[norm]
     return esleme
 
 
-def _eslesmeyen_basliklar(basliklar: list[Any], esleme: dict[int, str]) -> list[str]:
+def _eslesmeyen_basliklar(
+    basliklar: list[Any],
+    esleme: dict[int, str],
+    tablo_sol: int = 1,
+) -> list[str]:
     sonuc: list[str] = []
-    for col_idx, baslik in enumerate(basliklar, 1):
+    for i, baslik in enumerate(basliklar):
         if baslik is None or str(baslik).strip() == "":
             continue
+        col_idx = tablo_sol + i
         if col_idx not in esleme:
             sonuc.append(str(baslik).strip())
     return sonuc
+
+
+def _sutun1_arteakt_mi(baslik: Any) -> bool:
+    if baslik is None:
+        return False
+    return _normalize_kolon(str(baslik)) in ("SUTUN1", "COLUMN1")
 
 
 def _sayfayi_temizle_yaz(
@@ -257,25 +272,23 @@ def _com_satir_oku(deger: Any) -> list[Any]:
     return list(deger[0])
 
 
-def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
-    """1. satır başlıkları — Excel tablosu varsa ListColumns adları (pivot kaynağı ile aynı)."""
-    lo = _com_listobject_bul(sheet, baslik_satiri)
-    if lo is not None:
+def _com_basliklari_oku(
+    sheet,
+    baslik_satiri: int,
+    tablo_sol: int = 1,
+    tablo_sag: int | None = None,
+) -> list[Any]:
+    """Başlık satırını fiziksel hücrelerden okur (ListColumns kullanılmaz — kaydırma hatası önlenir)."""
+    if tablo_sag is None:
+        tablo_sag = tablo_sol + 59
         try:
-            adet = int(lo.ListColumns.Count)
-            if adet > 0:
-                return [lo.ListColumns(i).Name for i in range(1, adet + 1)]
+            used = sheet.UsedRange
+            tablo_sag = max(int(used.Column) + int(used.Columns.Count) - 1, tablo_sag)
         except Exception:
             pass
-
-    max_col = 60
-    try:
-        max_col = max(int(sheet.UsedRange.Columns.Count), max_col)
-    except Exception:
-        pass
     ham = sheet.Range(
-        sheet.Cells(baslik_satiri, 1),
-        sheet.Cells(baslik_satiri, max_col),
+        sheet.Cells(baslik_satiri, tablo_sol),
+        sheet.Cells(baslik_satiri, tablo_sag),
     ).Value
     basliklar = _com_satir_oku(ham)
     while basliklar and basliklar[-1] is None:
@@ -283,17 +296,22 @@ def _com_basliklari_oku(sheet, baslik_satiri: int) -> list[Any]:
     return basliklar
 
 
-def _com_kolon_sayisi(sheet, baslik_satiri: int, basliklar: list[Any]) -> int:
-    """Şablon başlık satırı genişliği — her zaman A sütunundan başlar."""
-    if basliklar:
-        return len(basliklar)
-    lo = _com_listobject_bul(sheet, baslik_satiri)
-    if lo is not None:
-        try:
-            return max(int(lo.ListColumns.Count), 1)
-        except Exception:
-            pass
-    return 1
+def _com_sutun1_baslangic_temizle(sheet, baslik_satiri: int) -> bool:
+    """Resize hatasıyla A sütununa eklenen 'Sütun1' artefaktını kaldırır."""
+    try:
+        a1 = sheet.Cells(baslik_satiri, 1).Value
+        b1 = sheet.Cells(baslik_satiri, 2).Value
+    except Exception:
+        return False
+    if not _sutun1_arteakt_mi(a1):
+        return False
+    if b1 is None or str(b1).strip() == "":
+        return False
+    try:
+        sheet.Columns(1).Delete()
+        return True
+    except Exception:
+        return False
 
 
 def _com_listobject_bul(sheet, baslik_satiri: int):
@@ -314,15 +332,20 @@ def _com_listobject_bul(sheet, baslik_satiri: int):
     return None
 
 
-def _com_tablo_kolon_sayisi(sheet, baslik_satiri: int, basliklar: list[Any]) -> int:
-    return _com_kolon_sayisi(sheet, baslik_satiri, basliklar)
-
-
 def _com_tablo_konumu(sheet, baslik_satiri: int) -> tuple[int, int, Any | None]:
-    """Veri her zaman A sütunundan yazılır (başlık satırı ile hizalı)."""
-    basliklar = _com_basliklari_oku(sheet, baslik_satiri)
+    """Excel tablosunun gerçek sol sütun ve kolon sayısını döndürür."""
     lo = _com_listobject_bul(sheet, baslik_satiri)
-    return 1, _com_kolon_sayisi(sheet, baslik_satiri, basliklar), lo
+    if lo is not None:
+        try:
+            hdr = lo.HeaderRowRange
+            tablo_sol = int(hdr.Column)
+            kolon_sayisi = int(hdr.Columns.Count)
+            if kolon_sayisi > 0:
+                return tablo_sol, kolon_sayisi, lo
+        except Exception:
+            pass
+    basliklar = _com_basliklari_oku(sheet, baslik_satiri, 1)
+    return 1, max(len(basliklar), 1), lo
 
 
 def _com_veri_matrisi_hazirla(
@@ -330,16 +353,20 @@ def _com_veri_matrisi_hazirla(
     satirlar: list[dict[str, Any]],
     sabit_kolonlar: list[str] | None,
     kolon_sayisi: int,
+    tablo_sol: int = 1,
 ) -> list[tuple[Any, ...]]:
     if not satirlar:
         return []
 
     anahtarlar = sabit_kolonlar or list(satirlar[0].keys())
-    esleme = _kolon_esleme(basliklar, anahtarlar)
+    esleme = _kolon_esleme(basliklar, anahtarlar, tablo_sol)
     if not esleme and sabit_kolonlar:
-        esleme = {i + 1: k for i, k in enumerate(sabit_kolonlar) if i < len(basliklar)}
+        esleme = {
+            tablo_sol + i: k for i, k in enumerate(sabit_kolonlar) if i < len(basliklar)
+        }
 
     matris: list[tuple[Any, ...]] = []
+    tablo_sag = tablo_sol + kolon_sayisi - 1
     for satir in satirlar:
         if sabit_kolonlar:
             satir_verisi: list[Any] = [
@@ -350,8 +377,8 @@ def _com_veri_matrisi_hazirla(
         else:
             satir_verisi = [None] * kolon_sayisi
             for col_idx, kolon in esleme.items():
-                if 1 <= col_idx <= kolon_sayisi:
-                    satir_verisi[col_idx - 1] = hucre_degeri(satir.get(kolon))
+                if tablo_sol <= col_idx <= tablo_sag:
+                    satir_verisi[col_idx - tablo_sol] = hucre_degeri(satir.get(kolon))
         matris.append(tuple(satir_verisi))
     return matris
 
@@ -370,44 +397,64 @@ def _com_sayfaya_yaz(
     baslik_satiri: int,
     satirlar: list[dict[str, Any]],
     sabit_kolonlar: list[str] | None = None,
-) -> tuple[int, dict[int, str], list[str], int]:
-    """Pivot kaynağına yazar — tablo Resize pivot ile çakışırsa doğrudan aralığa yazar."""
-    basliklar = _com_basliklari_oku(sheet, baslik_satiri)
+) -> tuple[int, dict[int, str], list[str], int, int]:
+    """Pivot kaynağına yazar — tablo sütun sınırları korunur, A'ya genişletme yapılmaz."""
+    if _com_sutun1_baslangic_temizle(sheet, baslik_satiri):
+        lo = _com_listobject_bul(sheet, baslik_satiri)
+        if lo is not None:
+            try:
+                lo = sheet.ListObjects(lo.Name)
+            except Exception:
+                pass
+
     tablo_sol, kolon_sayisi, lo = _com_tablo_konumu(sheet, baslik_satiri)
+    tablo_sag = tablo_sol + kolon_sayisi - 1
+    basliklar = _com_basliklari_oku(sheet, baslik_satiri, tablo_sol, tablo_sag)
+    if basliklar:
+        kolon_sayisi = len(basliklar)
+        tablo_sag = tablo_sol + kolon_sayisi - 1
+
     anahtarlar = sabit_kolonlar or (list(satirlar[0].keys()) if satirlar else [])
-    esleme = _kolon_esleme(basliklar, anahtarlar)
+    esleme = _kolon_esleme(basliklar, anahtarlar, tablo_sol)
     if not esleme and sabit_kolonlar:
-        esleme = {i + 1: k for i, k in enumerate(sabit_kolonlar) if i < len(basliklar)}
-    eslesmeyen = _eslesmeyen_basliklar(basliklar, esleme) if not sabit_kolonlar else []
+        esleme = {
+            tablo_sol + i: k for i, k in enumerate(sabit_kolonlar) if i < len(basliklar)
+        }
+    eslesmeyen = (
+        _eslesmeyen_basliklar(basliklar, esleme, tablo_sol) if not sabit_kolonlar else []
+    )
 
     if not satirlar:
-        return 0, esleme, eslesmeyen, kolon_sayisi
+        return 0, esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
-    matris = _com_veri_matrisi_hazirla(basliklar, satirlar, sabit_kolonlar, kolon_sayisi)
+    matris = _com_veri_matrisi_hazirla(
+        basliklar, satirlar, sabit_kolonlar, kolon_sayisi, tablo_sol
+    )
     if not matris:
-        return 0, esleme, eslesmeyen, kolon_sayisi
+        return 0, esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
     son_satir = baslik_satiri + len(matris)
-    tablo_sol = 1
-    tablo_sag = kolon_sayisi
     hedef = sheet.Range(
         sheet.Cells(baslik_satiri + 1, tablo_sol),
         sheet.Cells(son_satir, tablo_sag),
     )
 
     if lo is not None:
-        yeni_tablo = sheet.Range(
-            sheet.Cells(baslik_satiri, tablo_sol),
-            sheet.Cells(son_satir, tablo_sag),
-        )
         try:
+            hdr = lo.HeaderRowRange
+            resize_sol = int(hdr.Column)
+            resize_sag = resize_sol + int(hdr.Columns.Count) - 1
+            yeni_tablo = sheet.Range(
+                sheet.Cells(baslik_satiri, resize_sol),
+                sheet.Cells(son_satir, resize_sag),
+            )
             lo.Resize(yeni_tablo)
         except Exception:
             pass
 
     _com_araliga_yaz(hedef, matris)
 
-    return len(satirlar), esleme, eslesmeyen, kolon_sayisi
+    return len(satirlar), esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
 
 def _com_pivot_kaynak_guncelle(
@@ -416,12 +463,14 @@ def _com_pivot_kaynak_guncelle(
     baslik_satiri: int,
     satir_sayisi: int,
     kolon_sayisi: int,
+    tablo_sol: int = 1,
 ):
     if satir_sayisi <= 0:
         return
     son_satir = baslik_satiri + satir_sayisi
-    son_kolon = get_column_letter(max(kolon_sayisi, 1))
-    yeni_kaynak = f"'{sayfa_adi}'!$A${baslik_satiri}:${son_kolon}${son_satir}"
+    bas_kolon = get_column_letter(max(tablo_sol, 1))
+    son_kolon = get_column_letter(max(tablo_sol + kolon_sayisi - 1, tablo_sol))
+    yeni_kaynak = f"'{sayfa_adi}'!${bas_kolon}${baslik_satiri}:${son_kolon}${son_satir}"
     try:
         for i in range(1, int(wb.PivotCaches().Count) + 1):
             pc = wb.PivotCaches(i)
@@ -580,16 +629,20 @@ def _excel_sablon_doldur(
         if ws_filo is None:
             return False, f"Filo Detay sayfası bulunamadı: {filo_sayfa_adlari}", 0, 0, []
 
-        veri_adet, _, eslesmeyen_veri, veri_kolon = _com_sayfaya_yaz(
+        veri_adet, _, eslesmeyen_veri, veri_kolon, veri_tablo_sol = _com_sayfaya_yaz(
             ws_veri, veri_baslik_satiri, veri_satirlari
         )
-        _com_pivot_kaynak_guncelle(wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon)
+        _com_pivot_kaynak_guncelle(
+            wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon, veri_tablo_sol
+        )
 
         filo_yaz = [{k: r.get(k) for k in FILO_DETAY_SUTUNLARI} for r in filo_satirlari]
-        filo_adet, _, _, filo_kolon = _com_sayfaya_yaz(
+        filo_adet, _, _, filo_kolon, filo_tablo_sol = _com_sayfaya_yaz(
             ws_filo, filo_baslik_satiri, filo_yaz, sabit_kolonlar=FILO_DETAY_SUTUNLARI
         )
-        _com_pivot_kaynak_guncelle(wb, ws_filo.Name, filo_baslik_satiri, filo_adet, filo_kolon)
+        _com_pivot_kaynak_guncelle(
+            wb, ws_filo.Name, filo_baslik_satiri, filo_adet, filo_kolon, filo_tablo_sol
+        )
 
         if sutun_autofit:
             for sheet in (ws_veri, ws_filo):
