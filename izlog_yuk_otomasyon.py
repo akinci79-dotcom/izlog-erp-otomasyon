@@ -3,11 +3,16 @@ import shutil
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright
 
 import ayarlar
-from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritabaninda_guncelle
+from oracle_okuyucu import (
+    kaynak_yuk_verilerini_getir,
+    yeni_kayitlari_veritabaninda_guncelle,
+    yuk_goods_id_getir,
+)
 
 # NOT: Aktif geliştirme/hata ayıklama sırasında HER başarılı satırda ek
 # "sağlama" ekran görüntüsü almak faydalıydı, ama normal çalışmada klasörü
@@ -299,9 +304,96 @@ def _fiyat_satirini_duzenlemeye_ac(sayfa, grid_onek, kaynak_yuk_no, etiket):
     sayfa.wait_for_selector(tutar_sel, state="visible", timeout=15000)
 
 
+def _yuk_listesinde_ara_ve_sec(page, yuk_no):
+    """
+    Yük Listesi ekranına gider, referans no'ya göre arar ve satırı seçer.
+    Hem Faz 1'in başındaki hem de `_kayitli_yuk_detay_formunu_ac`'ın kendi
+    kendine yeter (self-contained) olması için ortak kullanılıyor -- direkt
+    URL denemesi (`page.goto`) sayfayı listeden uzaklaştırdıysa, yedek
+    (fallback) yönteme geçerken listeye GERİ DÖNÜLMESİ gerekiyor.
+    """
+    page.goto(ayarlar.ERP_YUK_LISTESI_URL)
+    page.wait_for_selector("#myListPage_DXFREditorcol1_I", state="visible", timeout=15000)
+    page.fill("#myListPage_DXFREditorcol1_I", yuk_no)
+    page.press("#myListPage_DXFREditorcol1_I", "Enter")
+    page.wait_for_timeout(2000)
+    saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{yuk_no}')"
+    page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
+    page.click(saglam_secici)
+    return saglam_secici
+
+
+def _kayitli_yuk_detay_formunu_direkt_url_ile_ac(page, islem_yuk_no, kaynak_yuk_no):
+    """
+    Kayıtlı Yük'ün İncele (Analyze) formunu Oracle'dan okunan GOODS_ID ile
+    DOĞRUDAN URL üzerinden açar -- buton tıklama / id tahmini YOK.
+
+    ✅ DOĞRULANMIŞ [kullanıcı canlı ERP'de bu URL'yi ekran görüntüsüyle
+    paylaştı]: İncele ekranının adresi `GeneralCard.aspx?CommandName=
+    LGoodsCollection.Analyze&ObjectId={GOODS_ID}&WinId=01` kalıbında --
+    `ayarlar.ERP_YUK_LISTESI_URL` içindeki `CommandName=LGoodsCollection.
+    Show` ile AYNI aile, sadece komut adı farklı. Bu, Yük Listesi'nde
+    satırı arayıp "İncele" butonunu bulup tıklamaktan (yeni pencere mi/
+    aynı sayfa mı belirsizliği, buton id/metin tahmini dahil) ÇOK daha
+    güvenilir. Başarısız olursa (Oracle'dan GOODS_ID okunamazsa veya
+    açılan sayfa beklenen alanları göstermezse) `None` döner -- çağıran
+    taraf eski buton/çift-tıklama yöntemine (`_kayitli_yuk_detay_formunu_ac`)
+    düşer.
+    """
+    try:
+        goods_id = yuk_goods_id_getir(islem_yuk_no)
+    except Exception as e:
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: {islem_yuk_no} için GOODS_ID Oracle'dan "
+            f"okunamadı ({e}) -- buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    taban = urlsplit(ayarlar.ERP_LOGIN_URL)
+    incele_url = (
+        f"{taban.scheme}://{taban.netloc}/GeneralCard.aspx"
+        f"?CommandName=LGoodsCollection.Analyze&ObjectId={goods_id}&WinId=01"
+    )
+
+    try:
+        page.goto(incele_url)
+        page.wait_for_selector("#TabControl_txt_ReferenceNo_I", state="visible", timeout=15000)
+        okunan_ref = (page.input_value("#TabControl_txt_ReferenceNo_I") or "").strip()
+    except Exception as e:
+        try:
+            page.screenshot(path=f"debug_sevk_direkt_url_hata_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: Doğrudan URL ({incele_url}) ile açılan sayfada "
+            f"ReferenceNo alanı görünmedi ({e}) -- buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    if islem_yuk_no not in okunan_ref:
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: Doğrudan URL (GOODS_ID={goods_id}) ile açılan formun "
+            f"referans no'su ('{okunan_ref}') beklenenle ('{islem_yuk_no}') eşleşmiyor -- "
+            f"buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    print(
+        f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} İncele formu "
+        f"DOĞRUDAN URL ile açıldı (GOODS_ID={goods_id})."
+    )
+    return page
+
+
 def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     """
     Liste satırı seçiliyken kayıtlı Yük detay formunu açar.
+
+    NOT: Öncelikli yöntem `_kayitli_yuk_detay_formunu_direkt_url_ile_ac`'tır
+    (doğrudan URL, buton tahmini yok) -- bu fonksiyon SADECE o başarısız
+    olursa yedek olarak çağrılır. Kendi kendine yeterlidir: `page`'in hangi
+    ekranda olduğuna bakmadan Yük Listesi'ne yeniden gider ve arar (direkt
+    URL denemesi sayfayı listeden uzaklaştırmış olabilir).
 
     NEDEN: `YÜK OLUŞTU` / `HATA_SEVK` devamında kod Yük Listesi'nde yeni Yük
     satırını seçiyordu ama formu HİÇ açmıyordu; ardından detay alanına
@@ -335,9 +427,7 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     (eskiden sabit 800ms sonra pencere sayısı kontrol ediliyordu -- pencere
     800ms'den yavaş açılırsa bu kaçırılabiliyordu).
     """
-    saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{islem_yuk_no}')"
-    page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
-    page.click(saglam_secici)
+    saglam_secici = _yuk_listesinde_ara_ve_sec(page, islem_yuk_no)
     page.wait_for_timeout(500)
 
     def _form_gercekten_acik_mi(sayfa, timeout_ms):
@@ -485,17 +575,8 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     yuk_tarihi = oracle_data.get("YUK_TARIHI", "")
     saf_tarih = yuk_tarihi.replace(".", "") if yuk_tarihi else ""
 
-    page.goto(ayarlar.ERP_YUK_LISTESI_URL)
-    page.wait_for_selector("#myListPage_DXFREditorcol1_I", state="visible", timeout=15000)
-
-    page.fill("#myListPage_DXFREditorcol1_I", islem_yuk_no)
-    page.press("#myListPage_DXFREditorcol1_I", "Enter")
-
     # --- YÜK SEÇİMİ (ORİJİNAL SAĞLAM OMURGA) ---
-    page.wait_for_timeout(2000)  # Arama yapıldıktan sonra listenin güncellenmesini bekle
-    saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{islem_yuk_no}')"
-    page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
-    page.click(saglam_secici)
+    _yuk_listesinde_ara_ve_sec(page, islem_yuk_no)
 
     # DERİN TEST MODU: ayarlar.py'de DRY_RUN=True VE DERIN_TEST_MODU=True ise,
     # sadece arama/seçimle sınırlı kalınmaz; Kopyalama + tüm veri girişi +
@@ -538,7 +619,12 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             f"[{kaynak_yuk_no}] Bilgi: Durum '{mevcut_durum}' — Yük fazı atlanıyor, "
             f"kayıtlı Yük {islem_yuk_no} açılarak Sevk'ten devam edilecek."
         )
-        aktif_sayfa = _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no)
+        # Önce doğrudan URL yöntemi (GOODS_ID ile) denenir -- buton tıklama/
+        # tahmin yok. Başarısız olursa (Oracle veya sayfa doğrulaması
+        # patlarsa) eski buton/çift-tıklama yöntemine düşülür.
+        aktif_sayfa = _kayitli_yuk_detay_formunu_direkt_url_ile_ac(page, islem_yuk_no, kaynak_yuk_no)
+        if aktif_sayfa is None:
+            aktif_sayfa = _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no)
         okunan_ref = (aktif_sayfa.input_value("#TabControl_txt_ReferenceNo_I") or "").strip()
         if islem_yuk_no not in okunan_ref:
             try:

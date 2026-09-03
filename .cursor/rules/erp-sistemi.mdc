@@ -590,6 +590,39 @@ mu (sadece tıklanan tam nokta değil)? Cevap gelince kod (satır: `aktif_sayfa.
 click("#TabControl_txt_ReferenceNo_I", button="right")`) kesin seçici veya
 sabit viewport koordinatıyla güncellenecek.
 
+### ✅ BÜYÜK BULUŞ — İncele ekranı DOĞRUDAN URL ile açılabiliyor, buton tıklamaya hiç gerek yok [DOĞRULANMIŞ]
+Kullanıcının paylaştığı ikinci ekran görüntüsünün tarayıcı adres çubuğunda
+şu URL görüldü:
+
+```
+https://erp.izlog.com.tr/GeneralCard.aspx?CommandName=LGoodsCollection.Analyze&ObjectId=650642&WinId=01
+```
+
+Bu, `ayarlar.example.py`'deki `ERP_YUK_LISTESI_URL` ile AYNI aile:
+`"https://erp.izlog.com.tr/MainList.aspx?CommandName=LGoodsCollection.Show&M=1&MenuId=654&WinId=01"`
+-- sadece komut adı `Show` (liste) yerine `Analyze` (İncele/detay). `ObjectId`
+parametresi `LMST_L_GOODS.GOODS_ID` (Yük'ün Oracle birincil anahtarı,
+`REFERENCE_NO` DEĞİL). Bu, Yük Listesi'nde satırı arayıp "İncele" butonunu
+bulup tıklamaktan (id/metin tahmini, yeni pencere/aynı sayfa belirsizliği
+dahil) ÇOK daha güvenilir bir yöntem.
+
+**Uygulanan düzeltme**: `oracle_okuyucu.py`'ye `yuk_goods_id_getir(yuk_no)`
+eklendi (`LMST_L_GOODS.GOODS_ID` sorgusu). `izlog_yuk_otomasyon.py`'de
+`_kayitli_yuk_detay_formunu_direkt_url_ile_ac()` bu GOODS_ID ile doğrudan
+`page.goto(...)` yapıyor, ardından `#TabControl_txt_ReferenceNo_I`'nin
+görünür olduğunu VE referans no'nun beklenenle eşleştiğini doğruluyor.
+Devam (resume) akışında bu artık BİRİNCİL yöntem; Oracle sorgusu veya sayfa
+doğrulaması başarısız olursa eski buton/çift-tıklama yöntemine
+(`_kayitli_yuk_detay_formunu_ac`) düşülüyor (fallback olarak KORUNDU,
+silinmedi).
+
+**Not**: Bu, sadece devam (resume: `YÜK OLUŞTU`/`HATA_SEVK`) akışı için
+geçerli. Taze oluşturulan bir Yük için (aynı turda Kopya+Kaydet yapıldıysa)
+zaten `aktif_sayfa` doğru pencerede kalıyor (bkz. yukarıdaki "KRİTİK AKIŞ
+DÜZELTMESİ" notu), bu yeni fonksiyona hiç ihtiyaç yok.
+
+Sağ tık hedefi (boş alan) sorunu bu buluştan BAĞIMSIZ, hâlâ açık.
+
 ## Format Kuralları [DOĞRULANMIŞ]
 
 - **Tarih**: Excel/Oracle'dan `GG.AA.YYYY` string olarak gelir; ekrana
