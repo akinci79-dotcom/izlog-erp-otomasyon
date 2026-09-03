@@ -23,6 +23,62 @@ from oracle_okuyucu import (
 TESHIS_EKRAN_GORUNTUSU_AL = bool(getattr(ayarlar, "TESHIS_EKRAN_GORUNTUSU_AL", False))
 
 # --- YARDIMCI FONKSİYONLAR ---
+def _alana_odaklan_ve_temizle(sayfa, selector, max_deneme=5):
+    """
+    Bir alana tıklar ve GERÇEKTEN odaklandığını (`document.activeElement`)
+    doğruladıktan SONRA `Ctrl+A` + `Delete` ile içeriğini temizler.
+
+    ⚠️ KRİTİK BUG BULUNDU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
+    Sayfa kaynağının en sonunda `SetFocus('bte_BranchCode')` çağrısı var --
+    bu, "İşyeri Kodu" alanına ERP'nin KENDİ JS'i tarafından, HER sayfa
+    yüklendiğinde otomatik olarak odaklanıldığı anlamına geliyor. Eskiden
+    tüm alan doldurma yardımcıları `sayfa.click(selector)` sonrasında
+    HİÇBİR odak doğrulaması yapmadan GLOBAL `sayfa.keyboard.press(
+    "Control+A")` + `"Delete"` gönderiyordu. Eğer `click()` çağrımız bu
+    ERP JS'inin odağı geri çalmasıyla (örn. sayfa henüz tam
+    yüklenmemişken tıklarsak) YARIŞ durumuna girerse, click Playwright'a
+    göre "başarılı" sayılsa da GERÇEK tarayıcı odağı hâlâ İşyeri Kodu'nda
+    kalabiliyor -- sonraki global Ctrl+A/Delete o zaman YANLIŞ alanı
+    (İşyeri Kodu'nu) temizliyor. Kullanıcı canlı testte çoklu satır
+    çalıştırıldığında 3-4 işlemde bir tam bu semptomu (İşyeri Kodu'nun
+    nedensiz yere boşalması) gözlemledi -- tek satırlık testlerde HİÇ
+    görülmedi (bu, zamanlamaya bağlı, ara sıra oluşan bir yarış durumuyla
+    tam uyumlu).
+
+    Düzeltme: tıkladıktan sonra `document.activeElement`'in GERÇEKTEN
+    hedef alan olduğu JS ile doğrulanıyor; değilse kısa bir bekleme ile
+    tekrar tıklanıyor (en fazla `max_deneme` kez). Hiçbir denemede odak
+    doğrulanamazsa Ctrl+A/Delete HİÇ gönderilmiyor -- yanlış bir alanı
+    sessizce silmek yerine net bir hata fırlatılıyor.
+    """
+    element_id = selector.lstrip("#")
+    odakli_mi = False
+    for _ in range(max_deneme):
+        sayfa.click(selector, force=True)
+        try:
+            odakli_mi = sayfa.evaluate(
+                "(id) => !!document.activeElement && document.activeElement.id === id",
+                element_id
+            )
+        except Exception:
+            odakli_mi = False
+        if odakli_mi:
+            break
+        sayfa.wait_for_timeout(150)
+
+    if not odakli_mi:
+        raise RuntimeError(
+            f"HATA: '{selector}' alanına {max_deneme} denemede GERÇEKTEN "
+            f"odaklanılamadı (document.activeElement hep farklı bir elementi "
+            f"gösterdi -- muhtemelen ERP'nin sayfa yüklenirken kendi odak "
+            f"çağırması [SetFocus] ile yarış durumu). Ctrl+A/Delete "
+            f"gönderilmedi (yanlış alanı silme riskini önlemek için)."
+        )
+
+    sayfa.keyboard.press("Control+A")
+    sayfa.keyboard.press("Delete")
+
+
 def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     """
     DevExpress maskeli tarih alanını temizler ve yeni tarihi yazar.
@@ -37,9 +93,7 @@ def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     yerine).
     """
     sayfa.wait_for_selector(selector, state="visible", timeout=15000)
-    sayfa.click(selector)
-    sayfa.keyboard.press("Control+A")
-    sayfa.keyboard.press("Delete")
+    _alana_odaklan_ve_temizle(sayfa, selector)
     sayfa.wait_for_timeout(200)
 
     try:
@@ -275,9 +329,7 @@ def _devexpress_alana_yaz(sayfa, selector, metin, delay=50, sonra_tus="Tab"):
     karakter karakter type() → Tab (veya verilen tuş). `.fill()` KULLANILMAZ.
     """
     sayfa.wait_for_selector(selector, state="visible", timeout=15000)
-    sayfa.click(selector, force=True)
-    sayfa.keyboard.press("Control+A")
-    sayfa.keyboard.press("Delete")
+    _alana_odaklan_ve_temizle(sayfa, selector)
     sayfa.type(selector, metin, delay=delay)
     if sonra_tus:
         sayfa.press(selector, sonra_tus)
@@ -797,9 +849,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # ÖNEK yazıp Tab'a basıyor (kullanıcının elle yaptığı ile
                 # birebir aynı davranış).
                 onek_ucret_tipi = ucret_tipi[:3]
-                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
-                aktif_sayfa.keyboard.press("Control+A")
-                aktif_sayfa.keyboard.press("Delete")
+                _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", onek_ucret_tipi, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
@@ -812,9 +862,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
                 # NOT: Aynı önek+Tab düzeltmesi Operasyon Kodu için de geçerli.
                 onek_op_kodu = op_kodu[:3]
-                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
-                aktif_sayfa.keyboard.press("Control+A")
-                aktif_sayfa.keyboard.press("Delete")
+                _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", onek_op_kodu, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
@@ -857,9 +905,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # sil -> karakter karakter yaz. Ayrıca yazmanın gerçekten tuttuğu
             # doğrulanıyor; tutmadıysa hemen NET bir hata veriliyor (belirsiz
             # bir timeout yerine).
-            aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", force=True)
-            aktif_sayfa.keyboard.press("Control+A")
-            aktif_sayfa.keyboard.press("Delete")
+            _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I")
             aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", formatli_tutar, delay=50)
             aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", "Tab")
             aktif_sayfa.wait_for_timeout(400)

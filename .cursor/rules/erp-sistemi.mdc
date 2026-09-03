@@ -1140,6 +1140,42 @@ görünür bir popup/uyarı varsa metni doğrudan hata mesajında görünecek. (
 yazılmayacak, bu yüzden 1. ve 2. satırın TAM veri akışı ayrı ayrı
 incelenebilecek.
 
+### ⚠️⚠️ KRİTİK BUG BULUNDU VE DÜZELTİLDİ — Çoklu satırda 3-4 işlemde bir "İşyeri Kodu" alanı boşalıyordu [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]
+Tek satırlık testlerde HİÇ görülmeyen, ama çoklu satır çalıştırıldığında
+3-4 işlemde bir ortaya çıkan bir hata: "İşyeri Kodu" alanı (Yük/Sevk
+formunun en üstündeki `#TabControl_bte_BranchCode_I`) nedensiz yere
+boşalıyordu.
+
+**Kök neden**: Sayfa kaynağının en sonunda (her sayfa yüklendiğinde
+çalışan inline script'te) `SetFocus('bte_BranchCode')` çağrısı var --
+ERP'nin KENDİ JavaScript'i, her sayfa yüklenişinde tarayıcı odağını
+İşyeri Kodu alanına çekiyor. Otomasyonun tüm alan doldurma yardımcıları
+(`devexpress_tarih_yaz`, `_devexpress_alana_yaz`, Ücret Tipi/Operasyon
+Kodu/Tutar alanları) şu deseni kullanıyordu:
+```python
+sayfa.click(selector)              # hedef alana tıkla
+sayfa.keyboard.press("Control+A")  # GLOBAL tuş -- o an odaklı olan HERHANGİ
+sayfa.keyboard.press("Delete")     # bir alana uygulanır, hedefe DEĞİL
+```
+`sayfa.click(selector)` Playwright'a göre "başarılı" sayılsa da, eğer bu
+tıklama ERP'nin `SetFocus('bte_BranchCode')` çağrısıyla YARIŞ durumuna
+girerse (örn. sayfa henüz tam yüklenmemişken tıklanırsa), GERÇEK tarayıcı
+odağı hâlâ İşyeri Kodu'nda kalabiliyordu. Sonraki GLOBAL `Ctrl+A`+`Delete`
+o zaman hedef alanı DEĞİL, İşyeri Kodu'nu temizliyordu. Bu, zamanlamaya
+bağlı ARA SIRA oluşan bir yarış durumu olduğu için tek satırlık (yavaş,
+tek seferlik) testlerde hiç tetiklenmedi ama çoklu satır arka arkaya hızla
+işlendiğinde 3-4 işlemde bir ortaya çıktı.
+
+**Uygulanan düzeltme**: Yeni bir merkezi yardımcı fonksiyon
+`_alana_odaklan_ve_temizle(sayfa, selector)` eklendi -- tıkladıktan sonra
+`document.activeElement.id === selector`'ın GERÇEKTEN doğru olduğunu JS
+ile doğruluyor; değilse kısa bir bekleme ile tekrar tıklıyor (en fazla 5
+kez). Hiçbir denemede odak doğrulanamazsa Ctrl+A/Delete HİÇ
+gönderilmiyor -- yanlış bir alanı sessizce silmek yerine net bir
+`RuntimeError` fırlatılıyor. TÜM riskli noktalar (tarih, Plaka/Tutar/genel
+alan yardımcısı, Ücret Tipi, Operasyon Kodu, Yük'ün satır Tutar alanı) bu
+yeni fonksiyonu kullanacak şekilde güncellendi.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
