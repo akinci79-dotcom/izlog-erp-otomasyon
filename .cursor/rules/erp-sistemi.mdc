@@ -1250,6 +1250,48 @@ doğru. Bir sonraki canlı testte "Mal Depoda mı?" kutusunun GERÇEKTEN
 işaretli kaldığı ve "Door to Door" raporunda kayıtların göründüğü
 doğrulanmalı.
 
+### ⚠️⚠️ KRİTİK GÜVENLİK BİLGİSİ — Kaydedilmiş bir Yük'e "Düzelt" ile geri dönmek "Mal Depoda mı?" işaretini otomatik kaldırıyor [DOĞRULANMIŞ, kullanıcı bildirdi]
+Kullanıcı, önceki "Mal Depoda mı?" checkbox toggle bugını incelerken
+kritik bir düzeltme yaptı: bu checkbox'ın kaynak Yük'te işaretli olma
+ihtimali YOKTU (o teori yanlıştı). Ama şunu bildirdi: **bir Yük'te bu
+işaret konulduktan SONRA o Yük'e "Düzelt" ile geri dönülürse, işaret
+OTOMATİK OLARAK KALKIYOR.**
+
+Bu, kod incelemesiyle BAŞKA bir gerçek bug ortaya çıkardı:
+`_kayitli_yuk_detay_formunu_ac()`'in `_form_gercekten_acik_mi()` kontrolü
+`#TabControl_txt_ReferenceNo_I` İLE BİRLİKTE `#btnSave_CD`'nin de görünür
+olmasını ŞART koşuyordu. Ama İncele modunda "Kaydet" butonu HİÇ YOK
+(toolbar sadece Yeni/Düzelt/Sil/Kopya/Dosya/Takip/Yorum/Etiket + Vazgeç
+gösteriyor). Yani İncele BAŞARIYLA açılsa bile bu kontrol "başarısız"
+sanıp riskli "Düzelt"/"Aç" buton tahminlerine (`#btnEdit_CD` vb.) ve son
+çare çift tıklamaya düşüyordu -- bunlardan biri gerçekten "Düzelt"i
+tetiklerse, zaten kaydedilmiş ve doğru işaretlenmiş bir Yük'ün "Mal
+Depoda mı?" durumunu SESSİZCE bozabilirdi (yanlış bir Sevk numarasından
+çok daha ciddi bir sonuç: gerçek veri bozulması).
+
+**Uygulanan düzeltme**:
+1. `_form_gercekten_acik_mi()` artık SADECE `#TabControl_txt_ReferenceNo_I`
+   görünürlüğüne bakıyor (`#btnSave_CD` şartı kaldırıldı) -- GOODS_ID
+   doğrudan URL yönteminde zaten kullanılan, kanıtlanmış aynı kontrol.
+2. "Düzelt"/"Aç" buton ID tahminleri (`#btnEdit_CD`, `#btnUpdate_CD`,
+   `#btnOpen_CD`, `#btnView_CD`, `#btnExamine_CD`) ve son çare çift
+   tıklama TAMAMEN KALDIRILDI -- çift tıklamanın da örtük olarak edit
+   moduna girme ihtimali olduğu için (kesin bilinmiyor) güvenli
+   sayılmadı.
+3. Artık devam (resume) akışında SADECE İKİ yöntem var: GOODS_ID
+   doğrudan URL (birincil) ve "İncele" metin araması (ikincil). İKİSİ DE
+   başarısız olursa, riskli bir tahmin denemeden NET bir hata ile
+   duruluyor -- kullanıcıdan F12 ile "İncele" butonunun gerçek id'sini
+   öğrenmesi isteniyor.
+
+**Genel prensip**: Bu proje boyunca "önce sor, tahmin etme" ilkesi
+benimsenmişti; bu olay bunun NEDENİNİ de gösterdi -- bir tahmin sadece
+"işe yaramayabilir" değil, GERÇEKTEN VERİ BOZABİLİR. Sevk/Yük akışında
+zaten kaydedilmiş bir kayda geri dönüldüğünde (resume), sadece KESİNLİKLE
+salt-okunur (İncele) olduğu bilinen yollar kullanılmalı; "Düzelt" veya
+belirsiz davranışlı aksiyonlar (çift tıklama gibi) asla yedek olarak
+kullanılmamalı.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle

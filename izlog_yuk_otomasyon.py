@@ -523,21 +523,44 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     teyit etti]: "Sevk Oluştur" menüsü SADECE Yük penceresi **İncele
     modunda** açıkken çıkıyor (bu, "Düzelt" DEĞİL "İncele" butonuyla açılan
     pencere -- toolbar'da "Yeni, Düzelt, Sil, İncele, Kopya, Filtre, Ara"
-    olarak görünüyor). Bu yüzden deneme sırası artık önce "İncele" butonu
-    (görünür METİN ile bulunuyor, id tahmini YAPILMIYOR -- Türkçe "İ"
-    karakteri bozulma riskine karşı regex joker kullanılıyor), sonra eski
-    id tahminleri (`#btnEdit_CD` vb.) son çare olarak kalıyor. Her adım
-    `expect_page()` ile YENİ pencere açılışını yarış durumu olmadan bekler
-    (eskiden sabit 800ms sonra pencere sayısı kontrol ediliyordu -- pencere
-    800ms'den yavaş açılırsa bu kaçırılabiliyordu).
+    olarak görünüyor). Bu yüzden deneme SADECE "İncele" butonuyla (görünür
+    METİN ile bulunuyor, id tahmini YAPILMIYOR -- Türkçe "İ" karakteri
+    bozulma riskine karşı regex joker kullanılıyor) yapılıyor.
+
+    ⚠️⚠️ GÜVENLİK NEDENİYLE KALDIRILAN YEDEK YÖNTEMLER [kullanıcı canlı
+    ERP bilgisiyle uyardı]: Eskiden "İncele" başarısız olursa `#btnEdit_CD`
+    gibi buton ID TAHMİNLERİ ve son çare çift tıklama deneniyordu. Kullanıcı
+    kritik bir ERP davranışı bildirdi: bir Yük'te "Mal Depoda mı?"
+    işaretlendikten SONRA o Yük'e "Düzelt" ile geri dönülürse işaret
+    OTOMATİK OLARAK KALKIYOR. Çift tıklamanın da örtük olarak edit moduna
+    girme ihtimali var (kesin bilinmiyor). Bu yüzden İKİSİ DE TAMAMEN
+    KALDIRILDI -- "İncele" başarısız olursa artık riskli bir tahmin
+    denemeden NET bir hata ile duruluyor.
+
+    `expect_page()` ile YENİ pencere açılışı yarış durumu olmadan
+    bekleniyor (eskiden sabit 800ms sonra pencere sayısı kontrol
+    ediliyordu -- pencere 800ms'den yavaş açılırsa bu kaçırılabiliyordu).
     """
     saglam_secici = _yuk_listesinde_ara_ve_sec(page, islem_yuk_no)
     page.wait_for_timeout(500)
 
     def _form_gercekten_acik_mi(sayfa, timeout_ms):
+        # ⚠️ KRİTİK BUG BULUNDU [kod incelemesiyle bulundu, kullanıcının
+        # "Düzelt sonrası Mal Depoda işareti otomatik kalkıyor" uyarısı
+        # üzerine fark edildi]: Bu kontrol eskiden `#btnSave_CD`'nin de
+        # görünür olmasını ŞART koşuyordu. Ama "Sevk Oluştur" için ihtiyaç
+        # duyulan İncele modunda "Kaydet" butonu HİÇ YOK (toolbar sadece
+        # Yeni/Düzelt/Sil/Kopya/Dosya/Takip/Yorum/Etiket + Vazgeç
+        # gösteriyor -- kullanıcının paylaştığı ekran görüntüsüyle
+        # teyitli). Yani İncele BAŞARIYLA açılsa bile bu kontrol "başarısız"
+        # sanıp aşağıdaki (kaldırılmış) Düzelt/Aç buton denemelerine
+        # düşüyordu -- bu da "Düzelt" tıklarsa zaten kaydedilmiş bir
+        # Yük'ün "Mal Depoda mı?" işaretini SESSİZCE bozma riski taşıyordu.
+        # Düzeltme: artık SADECE ReferenceNo alanının görünür olması
+        # isteniyor (GOODS_ID doğrudan URL yönteminde de kullanılan aynı,
+        # kanıtlanmış kontrol).
         try:
             sayfa.wait_for_selector("#TabControl_txt_ReferenceNo_I", state="visible", timeout=timeout_ms)
-            sayfa.wait_for_selector("#btnSave_CD", state="visible", timeout=1500)
             return True
         except Exception:
             return False
@@ -585,45 +608,39 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     except Exception:
         pass
 
-    for btn_id, etiket in (
-        ("#btnEdit_CD", "Düzelt butonu #btnEdit_CD"),
-        ("#btnUpdate_CD", "Düzelt butonu #btnUpdate_CD"),
-        ("#btnOpen_CD", "Aç butonu #btnOpen_CD"),
-        ("#btnView_CD", "İncele butonu #btnView_CD"),
-        ("#btnExamine_CD", "İncele butonu #btnExamine_CD"),
-    ):
-        try:
-            btn = page.locator(btn_id)
-            if btn.count() == 0:
-                continue
-        except Exception:
-            continue
-
-        sonuc = _eylemden_sonra_formu_bul(
-            lambda b=btn: b.first.click(force=True, timeout=3000), etiket
-        )
-        if sonuc is not None:
-            return sonuc
-
-    # Son çare: çift tıklama.
-    sonuc = _eylemden_sonra_formu_bul(
-        lambda: page.dblclick(saglam_secici), "liste satırına çift tıklama"
-    )
-    if sonuc is not None:
-        return sonuc
-
+    # ⚠️⚠️ KRİTİK GÜVENLİK KARARI [kullanıcı canlı ERP bilgisiyle uyardı]:
+    # Eskiden bu noktada "Düzelt"/"Aç" BUTON ID TAHMİNLERİ (`#btnEdit_CD`,
+    # `#btnUpdate_CD`, `#btnOpen_CD`, ...) ve son çare olarak liste
+    # satırına ÇİFT TIKLAMA deneniyordu. Kullanıcı KRİTİK bir ERP
+    # davranışı bildirdi: bir Yük'te "Mal Depoda mı?" işaretlendikten
+    # SONRA o Yük'e "Düzelt" ile geri dönülürse, işaret OTOMATİK OLARAK
+    # KALKIYOR. Çift tıklamanın da (birçok ERP'de yaygın bir kalıp
+    # olduğu gibi) örtük olarak Düzelt/edit moduna girme ihtimali var --
+    # bu KESİN olarak bilinmiyor. Yani her iki yedek yöntem de, eğer
+    # tetiklenirlerse, zaten kaydedilmiş bir Yük'ün "Mal Depoda mı?"
+    # işaretini SESSİZCE bozma riski taşıyor -- bu, yanlış bir Sevk
+    # numarasından çok daha kötü bir sonuç (veri bozulması).
+    #
+    # Bu yüzden bu riskli yedek yöntemler TAMAMEN KALDIRILDI. Bu noktaya
+    # gelindiyse (GOODS_ID doğrudan URL YÖNTEMİ ve "İncele" metin araması
+    # İKİSİ DE başarısız oldu), kod artık daha fazla tahmin/deneme
+    # yapmadan NET bir hata ile duruyor -- riskli bir işlem denemektense
+    # durup kullanıcıdan F12 ile "İncele" butonunun gerçek id'sini
+    # öğrenmesini istemek daha güvenli.
     try:
         page.screenshot(path=f"debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png")
     except Exception:
         pass
     raise RuntimeError(
         f"[{kaynak_yuk_no}] HATA: YÜK OLUŞTU/HATA_SEVK devamında kayıtlı Yük "
-        f"{islem_yuk_no} detay formu açılamadı (Düzelt/Aç butonları ve çift "
-        f"tıklama denendi, hiçbiri #TabControl_txt_ReferenceNo_I + #btnSave_CD "
-        f"ikilisini birlikte görünür yapmadı). 'Sevk Oluştur' için detay formu "
-        f"şart. Lütfen ERP'de bu satırı seçip 'Düzelt' butonuna elle tıklayın: "
-        f"yeni pencere mi açılıyor, aynı sayfa mı değişiyor, yoksa hiç mi "
-        f"tepki vermiyor? Ekran görüntüsü: debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png"
+        f"{islem_yuk_no} detay formu ne doğrudan URL (GOODS_ID) yöntemiyle ne "
+        f"de 'İncele' metin araması ile açılabildi. GÜVENLİK NEDENİYLE "
+        f"'Düzelt' butonu veya çift tıklama gibi riskli yedek yöntemler "
+        f"KASITLI OLARAK denenmedi -- bunlar zaten kaydedilmiş bir Yük'ün "
+        f"'Mal Depoda mı?' işaretini otomatik olarak KALDIRABİLİR (kullanıcı "
+        f"tarafından teyit edilmiş bir ERP davranışı). Lütfen ERP'de bu "
+        f"satırı elle açıp 'İncele' butonunun gerçek id'sini F12 ile kontrol "
+        f"edin. Ekran görüntüsü: debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png"
     )
 
 
