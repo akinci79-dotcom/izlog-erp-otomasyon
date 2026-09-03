@@ -577,18 +577,38 @@ YANLIŞTI.
   ile eşleştiriliyor -- Türkçe karakter encoding riski), sonra eski id
   tahminlerine (`#btnEdit_CD` vb.) düşüyor.
 
-**⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan kesin bilgi bekleniyor, sağ tık
-HEDEFİ kasıtlı olarak HENÜZ değiştirilmedi]**: "Üst taraftaki boş alan"ın
-tam DOM konumu/id'si bilinmiyor -- koordinat bazlı ("KABA KUVVET") tıklama
-önceki turlarda (Fatura kutusu sorununda) güvenilmez çıktığı için tercih
-edilmiyor, ama o durumda hedef GRID SATIRINA göre değişiyordu (dinamik);
-burada tek kayıtlı, sabit görünümlü bir detay sayfası olduğu için koordinat
-biraz daha güvenilir olabilir. Kullanıcıya soruldu: (1) o boş alana F12 ile
-bakıp id/class paylaşabilir mi, YA DA (2) o BÜYÜK boş alanın (alanların
-sağındaki beyaz boşluk) HERHANGİ bir noktasına sağ tıklamak da işe yarıyor
-mu (sadece tıklanan tam nokta değil)? Cevap gelince kod (satır: `aktif_sayfa.
-click("#TabControl_txt_ReferenceNo_I", button="right")`) kesin seçici veya
-sabit viewport koordinatıyla güncellenecek.
+**✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, kullanıcının paylaştığı sayfa
+kaynağıyla (view-source / "İkinci resim bu" olarak paylaşılan tam HTML)
+teyit edildi]**: Sayfanın en altındaki inline script'te şu çağrı var:
+
+```javascript
+FormContextMenu('pop_PopupForm');
+```
+
+`pop_PopupForm` (içinde SADECE "Sevk Oluştur" öğesi olan popup menü)
+**DOKÜMAN (sayfa) SEVİYESİNDE** bağlanıyor -- belirli bir DOM elementine
+değil. Yani sağ tık, kendi `oncontextmenu` işleyicisi olan bir elemente
+(grid'ler -- `oncontextmenu="return ASPx.GVContextMenu(...)"` -- gibi)
+denk gelmediği sürece sayfanın HER YERİNDE bu menüyü açar.
+
+**Asıl kök neden bulundu**: `#TabControl_txt_ReferenceNo_I` alanının
+HTML'inde `disabled=""` özniteliği var (İncele modunda TÜM alanlar
+salt-okunur/disabled). Disabled form elemanları tarayıcıda sağ tık dahil
+çoğu mouse olayını (contextmenu) hiç tetiklemiyor -- olay `document`
+seviyesine hiç ulaşmıyor, bu yüzden menü asla açılmıyor ve "Sevk Oluştur"
+sağ tıkı her zaman 30sn timeout'a düşüyordu. Referans No alanına sağ tık
+denemesi bu yüzden GARANTİ OLARAK başarısız olacaktı -- rastlantı değildi.
+
+**Uygulanan düzeltme**: Sağ tık artık ASLA disabled olmayan, statik bir
+`<span>` etiketi olan "Yük No" label'ine (`#TabControl_lbl_lblReferenceNo`)
+yapılıyor -- bu, grid'in DIŞINDA, her Yük detay/İncele formunda mutlaka
+bulunan, hiçbir zaman disabled olmayan bir element (etiketler asla
+disable edilmez). Kod: `aktif_sayfa.click("#TabControl_lbl_lblReferenceNo",
+button="right")`.
+
+Bu düzeltme, kod incelemesiyle (gerçek sayfa kaynağı) kanıtlanmış olsa da
+henüz canlı bir Sevk denemesiyle TEYİT EDİLMEDİ -- bir sonraki canlı testte
+kesinleşecek.
 
 ### ✅ BÜYÜK BULUŞ — İncele ekranı DOĞRUDAN URL ile açılabiliyor, buton tıklamaya hiç gerek yok [DOĞRULANMIŞ]
 Kullanıcının paylaştığı ikinci ekran görüntüsünün tarayıcı adres çubuğunda

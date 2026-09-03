@@ -1118,17 +1118,21 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             checkpoint_kaydet(yeni_yuk_no)
 
     # --- FAZ 4: SEVK OLUŞTURMA ---
-    # ✅ DOĞRULANMIŞ [kullanıcı canlı ERP ekran görüntüsüyle teyit etti]:
-    # "Sevk Oluştur" menüsü, Yük penceresi İncele modundayken ve sağ tık
-    # ReferenceNo alanı DEĞİL, pencerenin üst tarafındaki BOŞ bir alana
-    # yapıldığında çıkıyor (küçük, tek satırlık bir popup olarak görünüyor).
-    # ⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan kesin seçici bekleniyor]:
-    # Bu "boş alan"ın tam DOM konumu/id'si henüz bilinmiyor -- koordinat
-    # tahmini yapmak yerine kullanıcıya soruldu (Fatura kutusundaki eski
-    # "KABA KUVVET" coord tıklama deneyiminin tekrarlanmaması için). Aşağıdaki
-    # satır HENÜZ eski (bilinen YANLIŞ) hedefi kullanıyor -- kesin bilgi
-    # gelince güncellenecek.
-    aktif_sayfa.click("#TabControl_txt_ReferenceNo_I", button="right")
+    # ✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, kullanıcının paylaştığı sayfa
+    # kaynağıyla (view-source) teyit edildi]: Sayfanın en altında
+    # `FormContextMenu('pop_PopupForm')` çağrısı var -- "Sevk Oluştur"
+    # menüsü (`pop_PopupForm`) DOKÜMAN (sayfa) SEVİYESİNDE bağlanıyor,
+    # belirli bir alana değil. Sağ tık, kendi `oncontextmenu` işleyicisi
+    # olan bir elemente (grid'ler gibi) denk gelmediği sürece HER YERDE
+    # çalışır. `#TabControl_txt_ReferenceNo_I` alanının HTML'inde
+    # `disabled=""` özniteliği var -- devre dışı form elemanları
+    # tarayıcıda sağ tık dahil çoğu mouse olayını hiç tetiklemiyor, bu
+    # yüzden olay `document`'a ulaşmıyor ve menü asla açılmıyor (30sn
+    # timeout'un GERÇEK nedeni buydu). Düzeltme: sağ tık artık ASLA
+    # disabled olmayan, statik bir etiket olan "Yük No" span'ine
+    # (`#TabControl_lbl_lblReferenceNo`) yapılıyor -- bu grid'in dışında,
+    # her Yük formunda mutlaka var ve hiçbir zaman disabled olmuyor.
+    aktif_sayfa.click("#TabControl_lbl_lblReferenceNo", button="right")
     # NOT: "ş" karakteri regex joker (".") ile eşleştiriliyor -- yukarıdaki
     # sekme başlıklarındaki encoding bozulma sorununa karşı aynı savunma.
     sevk_olustur_menu = aktif_sayfa.locator("div.uyum-popup-menu span").filter(
