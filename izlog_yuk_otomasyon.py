@@ -1282,15 +1282,30 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         except Exception:
             pass
 
+    # ⚠️ KRİTİK BUG BULUNDU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
+    # Sevk formunun "Belge Numarası" (`#TabControl_txt_TransportNo_I`) alanı
+    # pencere AÇILIR AÇILMAZ (Kaydet'e hiç basılmadan, Plaka/Tarih hâlâ
+    # boşken) ZATEN dolu geliyor (örn. "S-644110") -- bu numara kayıt
+    # anında değil, form AÇILIRKEN rezerve ediliyor. Eski kontrol sadece
+    # "alan S- ile başlıyor mu" diye bakıyordu -- bu, Kaydet HİÇ
+    # başarılı olmasa (veya hiç tıklanmasa) bile baştan True dönerdi.
+    # Canlı testte tam bu oldu: Excel'e "S-644110 / BAŞARILI" yazıldı ama
+    # Sevk sistemde GERÇEKTEN oluşmadı.
+    #
+    # ✅ DÜZELTME: Yük tarafında zaten doğrulanmış "Kaydet sonrası ERP
+    # gerçek navigasyon yapıyor" deseniyle (New&ObjectId=0 -> Analyze&
+    # ObjectId={gerçek_id}) aynı mantık kullanılıyor. Kaydet'ten ÖNCEKİ
+    # URL kaydediliyor; Kaydet sonrası URL'in DEĞİŞMESİ VE "ObjectId=0"
+    # içermemesi bekleniyor -- bu, gerçek bir veritabanı kaydının
+    # oluştuğunun tek güvenilir kanıtı (alan değeri güvenilir değil).
+    sevk_url_kaydet_oncesi = aktif_sayfa.url
     aktif_sayfa.click("#btnSave_CD", force=True)
 
     try:
-        aktif_sayfa.wait_for_function('''
-            () => {
-                let val = document.querySelector("#TabControl_txt_TransportNo_I").value.trim();
-                return val !== "" && val.startsWith("S-");
-            }
-        ''', timeout=20000)
+        aktif_sayfa.wait_for_url(
+            lambda url: url != sevk_url_kaydet_oncesi and "ObjectId=0" not in url,
+            timeout=20000
+        )
     except Exception as orijinal_hata:
         popup_metni = _teshis_gorunur_popup_metni(aktif_sayfa)
         teshis_dosyasi = f"debug_sevk_kaydet_timeout_{kaynak_yuk_no}.png"
@@ -1304,12 +1319,28 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             else "Ekranda bilinen bir popup/uyarı deseni yok."
         )
         raise RuntimeError(
-            f"[{kaynak_yuk_no}] HATA: Sevk ana Kaydet sonrası Transport No "
-            f"(S-...) 20sn içinde oluşmadı. {ek} Ekran görüntüsü: {teshis_dosyasi}. "
-            f"(Orijinal hata: {orijinal_hata})"
+            f"[{kaynak_yuk_no}] HATA: Sevk ana Kaydet sonrası ERP'nin GERÇEKTEN "
+            f"kaydettiğini gösteren navigasyon (New&ObjectId=0 -> Analyze&ObjectId=...) "
+            f"20sn içinde gerçekleşmedi -- yani Sevk sisteme GERÇEKTEN kaydedilmemiş "
+            f"olabilir (Belge Numarası alanı zaten form açılırken önceden dolu "
+            f"geldiği için tek başına güvenilir değil). {ek} "
+            f"Ekran görüntüsü: {teshis_dosyasi}. (Orijinal hata: {orijinal_hata})"
         ) from orijinal_hata
 
+    _agsakinligini_bekle(aktif_sayfa)
     yeni_sevk_no = aktif_sayfa.input_value("#TabControl_txt_TransportNo_I")
+
+    if not (yeni_sevk_no or "").strip().startswith("S-"):
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_kaydet_gecersiz_no_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Sevk Kaydet sonrası navigasyon oldu ama "
+            f"Transport No alanı geçerli bir 'S-...' değeri göstermiyor "
+            f"(görülen: '{yeni_sevk_no}'). Ekran görüntüsü: "
+            f"debug_sevk_kaydet_gecersiz_no_{kaynak_yuk_no}.png"
+        )
 
     if aktif_sayfa is not page:
         try:

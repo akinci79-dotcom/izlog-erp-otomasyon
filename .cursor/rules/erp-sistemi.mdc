@@ -675,6 +675,47 @@ Beklenen sıra [kullanıcı doğruladı]: önce Sevk Tarihi (Belge Tarihi), sonr
 Plaka (Çekici Seri/Plaka No), sonra Alış Fiyatı (Finans Bilgileri
 grid'inde satır ekleme) -- kod bu sırayla zaten çalışıyor.
 
+### ⚠️⚠️ KRİTİK BUG BULUNDU VE DÜZELTİLDİ — Sevk "BAŞARILI" yazıldı ama gerçekte OLUŞMAMIŞ [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]
+Canlı testte Excel'e `S-644110 / BAŞARILI` yazıldı, ama kullanıcı ERP'de
+kontrol edince Sevk'in **GERÇEKTEN oluşmadığını** gördü.
+
+**Kök neden**: Sevk formunun "Belge Numarası" alanı
+(`#TabControl_txt_TransportNo_I`), pencere AÇILIR AÇILMAZ -- Kaydet'e HİÇ
+basılmadan, Plaka/Tarih hâlâ boşken -- ZATEN dolu geliyor (bkz. yukarıdaki
+ekran görüntüsü notu: "Belge Numarası: S-644110" pencere ilk açıldığında
+görünüyordu). Bu numara **kayıt anında değil, form açılırken rezerve**
+ediliyor (muhtemelen bir sıra/sequence numarası). Eski kontrol (`aktif_
+sayfa.wait_for_function(...val.startsWith("S-")...)`) SADECE "alan S- ile
+başlıyor mu" diye bakıyordu -- bu koşul Kaydet'e hiç basılmasa (veya
+basılıp başarısız olsa) bile EN BAŞTAN True dönerdi. Yani bu kontrol
+HİÇBİR ZAMAN gerçek bir kayıt doğrulaması yapmıyordu.
+
+**Düzeltme**: Yük tarafında zaten doğrulanmış "Kaydet sonrası ERP gerçek
+navigasyon yapıyor" deseniyle (`CommandName=L...Collection.New&ObjectId=0`
+-> `...Analyze&ObjectId={gerçek_id}`) AYNI mantık kullanıldı. Ana Kaydet'e
+basmadan ÖNCEKİ URL kaydediliyor; Kaydet SONRASI URL'in hem DEĞİŞMESİ HEM
+DE `ObjectId=0` içermemesi bekleniyor (`wait_for_url` ile bir predicate
+fonksiyonu) -- bu, gerçek bir veritabanı kaydının oluştuğunun tek
+güvenilir kanıtı (alan değeri tek başına güvenilir DEĞİL). Navigasyon
+gerçekleşmezse net bir `RuntimeError` ile durur (Excel'e sahte
+"BAŞARILI" yazılmaz). Navigasyon olsa bile Transport No alanı hâlâ
+`S-...` formatında değilse ek bir kontrolle yine hata verilir.
+
+**[VARSAYIM/TODO, henüz F12 ile teyit edilmedi]**: Kaydet sonrası
+Sevk'in de tam olarak `LTransportCollection.Analyze` komutuna geçtiği
+varsayılıyor (Yük'ün `.New`→`.Analyze` kalıbıyla tutarlı olduğu için) --
+kesin komut adı henüz görülmedi, ama kontrol zaten spesifik komut adına
+değil, "URL değişti VE ObjectId=0 değil" şartına bakıyor, bu yüzden tam
+komut adı bilinmese de çalışması bekleniyor.
+
+**Yük tarafı için not**: Aynı riskin (ReferenceNo alanının Kaydet'ten ÖNCE
+de dolu gelmesi) Yük tarafında da teorik olarak mümkün olduğu
+düşünülebilir, ama Yük'ün oluşturduğu kayıtlar canlı testte GERÇEKTEN
+ERP'de görülüp doğrulandı (İncele ekranında doğru satış satırları/fatura
+verisiyle) -- yani Yük tarafı GERÇEK bir kayıtla teyitli, bu yüzden o
+kısım şimdilik değiştirilmedi (riski düşük, kanıtlanmış davranışı
+bozmamak için).
+
 **✅ Yük fazı 3 satırlı gerçek senaryoda BAŞARILI [DOĞRULANMIŞ, canlı test]**:
 `Y-576188` (Navlun + 2 Ek_Navlun satırı, hepsi aynı faturaya `IZK2026000000076`
 bağlı) sorunsuz oluşturuldu, yeni Yük No `Y-578367`. Bu, önceki testlerde
