@@ -38,6 +38,43 @@ UCRET_TIPI_ENUM_ESLEME = {
 }
 
 
+def yuk_goods_id_getir(yuk_no):
+    """
+    Verilen Yük referans no'sunun (Y-...) Oracle GOODS_ID'sini (LMST_L_GOODS
+    tablosunun birincil anahtarı) döndürür.
+
+    NEDEN: Uyumsoft'un İncele ekranı `GeneralCard.aspx?CommandName=
+    LGoodsCollection.Analyze&ObjectId={GOODS_ID}&WinId=01` URL kalıbıyla
+    DOĞRUDAN açılabiliyor [DOĞRULANMIŞ, kullanıcı canlı ERP'de bu URL'yi
+    ekran görüntüsüyle paylaştı -- `ayarlar.example.py`'deki
+    `ERP_YUK_LISTESI_URL` içindeki `CommandName=LGoodsCollection.Show` ile
+    AYNI aile, sadece komut adı "Show" değil "Analyze"]. Bu, Yük Listesi'nde
+    satırı arayıp seçip "İncele" butonunu bulup tıklamaktan (id/metin
+    tahmini, yeni pencere/aynı sayfa belirsizliği dahil) ÇOK daha güvenilir
+    -- `izlog_yuk_otomasyon.py`'deki devam (resume) akışında birincil
+    yöntem olarak kullanılıyor, buton tıklama sadece yedek (fallback).
+    """
+    KULLANICI = ayarlar.DB_KULLANICI
+    SIFRE = ayarlar.DB_SIFRE
+    DSN = ayarlar.DB_DSN
+
+    baglanti = None
+    try:
+        baglanti = oracledb.connect(user=KULLANICI, password=SIFRE, dsn=DSN)
+        cursor = baglanti.cursor()
+        cursor.execute(
+            "SELECT GOODS_ID FROM LMST_L_GOODS WHERE REFERENCE_NO = :yuk_no",
+            {"yuk_no": yuk_no}
+        )
+        satir = cursor.fetchone()
+        if not satir or satir[0] is None:
+            raise ValueError(f"Yük veritabanında bulunamadı (GOODS_ID sorgusu): {yuk_no}")
+        return satir[0]
+    finally:
+        if baglanti:
+            baglanti.close()
+
+
 def kaynak_yuk_verilerini_getir(kaynak_yuk_no):
     KULLANICI = ayarlar.DB_KULLANICI
     SIFRE = ayarlar.DB_SIFRE

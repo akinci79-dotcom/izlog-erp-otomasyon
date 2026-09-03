@@ -3,11 +3,16 @@ import shutil
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright
 
 import ayarlar
-from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritabaninda_guncelle
+from oracle_okuyucu import (
+    kaynak_yuk_verilerini_getir,
+    yeni_kayitlari_veritabaninda_guncelle,
+    yuk_goods_id_getir,
+)
 
 # NOT: Aktif geliştirme/hata ayıklama sırasında HER başarılı satırda ek
 # "sağlama" ekran görüntüsü almak faydalıydı, ama normal çalışmada klasörü
@@ -18,6 +23,62 @@ from oracle_okuyucu import kaynak_yuk_verilerini_getir, yeni_kayitlari_veritaban
 TESHIS_EKRAN_GORUNTUSU_AL = bool(getattr(ayarlar, "TESHIS_EKRAN_GORUNTUSU_AL", False))
 
 # --- YARDIMCI FONKSİYONLAR ---
+def _alana_odaklan_ve_temizle(sayfa, selector, max_deneme=5):
+    """
+    Bir alana tıklar ve GERÇEKTEN odaklandığını (`document.activeElement`)
+    doğruladıktan SONRA `Ctrl+A` + `Delete` ile içeriğini temizler.
+
+    ⚠️ KRİTİK BUG BULUNDU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
+    Sayfa kaynağının en sonunda `SetFocus('bte_BranchCode')` çağrısı var --
+    bu, "İşyeri Kodu" alanına ERP'nin KENDİ JS'i tarafından, HER sayfa
+    yüklendiğinde otomatik olarak odaklanıldığı anlamına geliyor. Eskiden
+    tüm alan doldurma yardımcıları `sayfa.click(selector)` sonrasında
+    HİÇBİR odak doğrulaması yapmadan GLOBAL `sayfa.keyboard.press(
+    "Control+A")` + `"Delete"` gönderiyordu. Eğer `click()` çağrımız bu
+    ERP JS'inin odağı geri çalmasıyla (örn. sayfa henüz tam
+    yüklenmemişken tıklarsak) YARIŞ durumuna girerse, click Playwright'a
+    göre "başarılı" sayılsa da GERÇEK tarayıcı odağı hâlâ İşyeri Kodu'nda
+    kalabiliyor -- sonraki global Ctrl+A/Delete o zaman YANLIŞ alanı
+    (İşyeri Kodu'nu) temizliyor. Kullanıcı canlı testte çoklu satır
+    çalıştırıldığında 3-4 işlemde bir tam bu semptomu (İşyeri Kodu'nun
+    nedensiz yere boşalması) gözlemledi -- tek satırlık testlerde HİÇ
+    görülmedi (bu, zamanlamaya bağlı, ara sıra oluşan bir yarış durumuyla
+    tam uyumlu).
+
+    Düzeltme: tıkladıktan sonra `document.activeElement`'in GERÇEKTEN
+    hedef alan olduğu JS ile doğrulanıyor; değilse kısa bir bekleme ile
+    tekrar tıklanıyor (en fazla `max_deneme` kez). Hiçbir denemede odak
+    doğrulanamazsa Ctrl+A/Delete HİÇ gönderilmiyor -- yanlış bir alanı
+    sessizce silmek yerine net bir hata fırlatılıyor.
+    """
+    element_id = selector.lstrip("#")
+    odakli_mi = False
+    for _ in range(max_deneme):
+        sayfa.click(selector, force=True)
+        try:
+            odakli_mi = sayfa.evaluate(
+                "(id) => !!document.activeElement && document.activeElement.id === id",
+                element_id
+            )
+        except Exception:
+            odakli_mi = False
+        if odakli_mi:
+            break
+        sayfa.wait_for_timeout(150)
+
+    if not odakli_mi:
+        raise RuntimeError(
+            f"HATA: '{selector}' alanına {max_deneme} denemede GERÇEKTEN "
+            f"odaklanılamadı (document.activeElement hep farklı bir elementi "
+            f"gösterdi -- muhtemelen ERP'nin sayfa yüklenirken kendi odak "
+            f"çağırması [SetFocus] ile yarış durumu). Ctrl+A/Delete "
+            f"gönderilmedi (yanlış alanı silme riskini önlemek için)."
+        )
+
+    sayfa.keyboard.press("Control+A")
+    sayfa.keyboard.press("Delete")
+
+
 def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     """
     DevExpress maskeli tarih alanını temizler ve yeni tarihi yazar.
@@ -32,9 +93,7 @@ def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     yerine).
     """
     sayfa.wait_for_selector(selector, state="visible", timeout=15000)
-    sayfa.click(selector)
-    sayfa.keyboard.press("Control+A")
-    sayfa.keyboard.press("Delete")
+    _alana_odaklan_ve_temizle(sayfa, selector)
     sayfa.wait_for_timeout(200)
 
     try:
@@ -53,6 +112,58 @@ def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     sayfa.wait_for_timeout(500)
     sayfa.keyboard.press("Tab")
     sayfa.wait_for_timeout(500)
+
+
+def _checkbox_isaretli_mi(sayfa, span_selector):
+    """
+    DevExpress checkbox'ının (ASPxCheckBox) GÖRÜNÜR span'inin `class`
+    özniteliğine bakarak o an İŞARETLİ mi olduğunu döndürür.
+
+    NEDEN BÖYLE: DevExpress bu bilgiyi CSS SINIF ADINDA taşıyor -- işaretli
+    durumda `dxWeb_edtCheckBoxChecked...`, işaretsiz durumda `dxWeb_
+    edtCheckBoxUnchecked...` sınıfı kullanılıyor (sayfa kaynağındaki
+    `imageProperties` JS meta verisiyle teyitli). "Unchecked" alt dizesi
+    "Checked"i de İÇERDİĞİ için (Un-Checked), doğru kontrol SADECE
+    "Unchecked" varlığına bakıp SONUCU TERSİNE çevirmek -- "Checked"
+    aramak yanlış pozitif verir (her zaman True döner).
+    """
+    try:
+        class_adi = sayfa.get_attribute(span_selector, "class") or ""
+    except Exception:
+        class_adi = ""
+    return "Unchecked" not in class_adi
+
+
+def _checkbox_isaretle(sayfa, span_selector, kaynak_yuk_no="", alan_adi=""):
+    """
+    Bir DevExpress checkbox'ını İŞARETLİ hale getirir.
+
+    ⚠️ KRİTİK BUG BULUNDU [kullanıcının canlı ERP raporunda fark ettiği
+    bir tutarsızlıkla ortaya çıktı]: Eski kod bu checkbox'a HER ZAMAN
+    KÖRLEMESİNE tıklıyordu (`aktif_sayfa.click(...)`), mevcut durumunu
+    hiç kontrol etmeden. DevExpress checkbox'ları tıklamayla TOGGLE olur
+    (aç/kapa) -- eğer "Kopya" ile açılan yeni pencerede bu kutu kaynak
+    Yük'ten kalıtımla ZATEN işaretli geliyorsa, körlemesine tıklama onu
+    İŞARETSİZ hale getirirdi (yanlışlıkla kapatırdı)! Kullanıcı, "Door to
+    Door" raporunda hiçbir kaydın görünmediğini fark edip bu ihtimali
+    sordu -- rapor büyük olasılıkla bu checkbox'a (ya da ilişkili bir
+    alana) göre filtreleniyor.
+
+    Düzeltme: önce mevcut durum okunuyor, SADECE işaretli DEĞİLSE
+    tıklanıyor (zaten işaretliyse HİÇ dokunulmuyor, gereksiz toggle
+    riski ortadan kalkıyor). Tıklama sonrası da GERÇEKTEN işaretli
+    olduğu doğrulanıyor -- değilse net bir hata verilir.
+    """
+    if not _checkbox_isaretli_mi(sayfa, span_selector):
+        sayfa.click(span_selector)
+        sayfa.wait_for_timeout(300)
+
+    if not _checkbox_isaretli_mi(sayfa, span_selector):
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: '{alan_adi}' checkbox'ı ({span_selector}) "
+            f"işaretlenmeye çalışıldı ama tıklama sonrası HÂLÂ işaretsiz "
+            f"görünüyor. Bu satırın işlenmesi durduruldu."
+        )
 
 
 def _agsakinligini_bekle(sayfa, timeout=10000, yedek_bekleme=1500):
@@ -236,6 +347,334 @@ def _emptyrow_bekle_teshisli(sayfa, kaynak_yuk_no, satir_index, op_kodu, satir_e
         ) from orijinal_hata
 
 
+def _plaka_normalize(metin):
+    """Plakayı karşılaştırma için sadeleştirir: boşluk/tire/nokta atılır, büyük harf."""
+    return re.sub(r"[^A-Z0-9]", "", (metin or "").upper())
+
+
+def _input_tutarini_coz(metin):
+    """
+    Bir input kutusundan okunan tutarı Decimal'e çevirir.
+    Hem giriş formatını (`73000,00`) hem grid formatını (`73.000,00`) kabul eder.
+
+    ÖNEMLİ: Önce TÜM metin parse edilir. Grid-aday regex'i (`1.234,56`)
+    `73000,00` içinde yanlışlıkla `000,00` yakalayıp 0 döndürebilir.
+    """
+    metin = (metin or "").strip()
+    if not metin:
+        return None
+    try:
+        if "," in metin:
+            return Decimal(metin.replace(".", "").replace(",", "."))
+        return Decimal(metin.replace(",", ""))
+    except InvalidOperation:
+        pass
+    adaylar = _tutar_adaylarini_ayikla(metin)
+    if adaylar:
+        return adaylar[0]
+    return None
+
+
+def _devexpress_alana_yaz(sayfa, selector, metin, delay=50, sonra_tus="Tab"):
+    """
+    DevExpress editörüne güvenli yazma: tıkla → tümünü seç → sil →
+    karakter karakter type() → Tab (veya verilen tuş). `.fill()` KULLANILMAZ.
+    """
+    sayfa.wait_for_selector(selector, state="visible", timeout=15000)
+    _alana_odaklan_ve_temizle(sayfa, selector)
+    sayfa.type(selector, metin, delay=delay)
+    if sonra_tus:
+        sayfa.press(selector, sonra_tus)
+
+
+def _fiyat_satirini_duzenlemeye_ac(sayfa, grid_onek, kaynak_yuk_no, etiket):
+    """
+    Fiyat grid'inde düzenlenebilir satırı hazırlar. Yük tarafında doğrulanan
+    desen: ERP bazen satırı otomatik açar (`DXEditor4_I` zaten görünür) —
+    o durumda `EmptyRow_btnNew`'e basılmaz. Görünmüyorsa butona basılır.
+    """
+    tutar_sel = f"#{grid_onek}_DXEditor4_I"
+    yeni_btn = f"#{grid_onek}_EmptyRow_btnNew"
+    try:
+        sayfa.wait_for_selector(tutar_sel, state="visible", timeout=2000)
+        print(
+            f"[{kaynak_yuk_no}] Bilgi: {etiket} fiyat satırı ZATEN açık görünüyor "
+            f"-- 'Yeni Satır Ekle' butonuna basılmıyor."
+        )
+        return
+    except Exception:
+        pass
+    sayfa.click(yeni_btn)
+    sayfa.wait_for_selector(tutar_sel, state="visible", timeout=15000)
+
+
+def _yuk_listesinde_ara_ve_sec(page, yuk_no):
+    """
+    Yük Listesi ekranına gider, referans no'ya göre arar ve satırı seçer.
+    Hem Faz 1'in başındaki hem de `_kayitli_yuk_detay_formunu_ac`'ın kendi
+    kendine yeter (self-contained) olması için ortak kullanılıyor -- direkt
+    URL denemesi (`page.goto`) sayfayı listeden uzaklaştırdıysa, yedek
+    (fallback) yönteme geçerken listeye GERİ DÖNÜLMESİ gerekiyor.
+    """
+    page.goto(ayarlar.ERP_YUK_LISTESI_URL)
+    page.wait_for_selector("#myListPage_DXFREditorcol1_I", state="visible", timeout=15000)
+    page.fill("#myListPage_DXFREditorcol1_I", yuk_no)
+    page.press("#myListPage_DXFREditorcol1_I", "Enter")
+    page.wait_for_timeout(2000)
+    saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{yuk_no}')"
+    page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
+    page.click(saglam_secici)
+    return saglam_secici
+
+
+def _kayitli_yuk_detay_formunu_direkt_url_ile_ac(page, islem_yuk_no, kaynak_yuk_no):
+    """
+    Kayıtlı Yük'ün İncele (Analyze) formunu Oracle'dan okunan GOODS_ID ile
+    DOĞRUDAN URL üzerinden açar -- buton tıklama / id tahmini YOK.
+
+    ✅ DOĞRULANMIŞ [kullanıcı canlı ERP'de bu URL'yi ekran görüntüsüyle
+    paylaştı]: İncele ekranının adresi `GeneralCard.aspx?CommandName=
+    LGoodsCollection.Analyze&ObjectId={GOODS_ID}&WinId=01` kalıbında --
+    `ayarlar.ERP_YUK_LISTESI_URL` içindeki `CommandName=LGoodsCollection.
+    Show` ile AYNI aile, sadece komut adı farklı. Bu, Yük Listesi'nde
+    satırı arayıp "İncele" butonunu bulup tıklamaktan (yeni pencere mi/
+    aynı sayfa mı belirsizliği, buton id/metin tahmini dahil) ÇOK daha
+    güvenilir. Başarısız olursa (Oracle'dan GOODS_ID okunamazsa veya
+    açılan sayfa beklenen alanları göstermezse) `None` döner -- çağıran
+    taraf eski buton/çift-tıklama yöntemine (`_kayitli_yuk_detay_formunu_ac`)
+    düşer.
+    """
+    try:
+        goods_id = yuk_goods_id_getir(islem_yuk_no)
+    except Exception as e:
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: {islem_yuk_no} için GOODS_ID Oracle'dan "
+            f"okunamadı ({e}) -- buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    taban = urlsplit(ayarlar.ERP_LOGIN_URL)
+    incele_url = (
+        f"{taban.scheme}://{taban.netloc}/GeneralCard.aspx"
+        f"?CommandName=LGoodsCollection.Analyze&ObjectId={goods_id}&WinId=01"
+    )
+
+    try:
+        page.goto(incele_url)
+        page.wait_for_selector("#TabControl_txt_ReferenceNo_I", state="visible", timeout=15000)
+        okunan_ref = (page.input_value("#TabControl_txt_ReferenceNo_I") or "").strip()
+    except Exception as e:
+        try:
+            page.screenshot(path=f"debug_sevk_direkt_url_hata_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: Doğrudan URL ({incele_url}) ile açılan sayfada "
+            f"ReferenceNo alanı görünmedi ({e}) -- buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    if islem_yuk_no not in okunan_ref:
+        print(
+            f"[{kaynak_yuk_no}] Uyarı: Doğrudan URL (GOODS_ID={goods_id}) ile açılan formun "
+            f"referans no'su ('{okunan_ref}') beklenenle ('{islem_yuk_no}') eşleşmiyor -- "
+            f"buton/çift tıklama yöntemine düşülüyor."
+        )
+        return None
+
+    print(
+        f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} İncele formu "
+        f"DOĞRUDAN URL ile açıldı (GOODS_ID={goods_id})."
+    )
+    return page
+
+
+def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
+    """
+    Liste satırı seçiliyken kayıtlı Yük detay formunu açar.
+
+    NOT: Öncelikli yöntem `_kayitli_yuk_detay_formunu_direkt_url_ile_ac`'tır
+    (doğrudan URL, buton tahmini yok) -- bu fonksiyon SADECE o başarısız
+    olursa yedek olarak çağrılır. Kendi kendine yeterlidir: `page`'in hangi
+    ekranda olduğuna bakmadan Yük Listesi'ne yeniden gider ve arar (direkt
+    URL denemesi sayfayı listeden uzaklaştırmış olabilir).
+
+    NEDEN: `YÜK OLUŞTU` / `HATA_SEVK` devamında kod Yük Listesi'nde yeni Yük
+    satırını seçiyordu ama formu HİÇ açmıyordu; ardından detay alanına
+    (`#TabControl_txt_ReferenceNo_I`) sağ tıklayıp "Sevk Oluştur" demeye
+    çalışıyordu. O alan listede yok — ilk canlı Sevk denemesi Yük'ü oluşturup
+    Sevk'te patlarsa bir sonraki çalıştırma bu yüzden baştan kırılıyordu.
+
+    ❌ ÇÜRÜTÜLDÜ (v1) [DOĞRULANMIŞ, canlı testte teyit edildi]: Bu fonksiyonun
+    ilk hali SADECE `#TabControl_txt_ReferenceNo_I`'nin "visible" olmasına
+    bakıyordu ve bunu "form gerçekten açıldı" kabul ediyordu. Canlı testte
+    bu YANLIŞ POZİTİF üretti: fonksiyon "form açık" diye döndü (hiçbir hata
+    fırlatmadı), ama hemen sonrasındaki "Sevk Oluştur" sağ tık işlemi o alan
+    üzerinde 30sn timeout'a düştü ve ekran görüntüsü sadece Yük Listesi'ni
+    (hiçbir detay formu açılmamış) gösterdi. [VARSAYIM/TODO, henüz F12 ile
+    kesin teyit edilmedi]: ASPx/DevExpress sayfalarında bu ID'li alanın bir
+    kopyası DOM'da her zaman (ekran dışı/gizli ama Playwright'ın "visible"
+    saydığı bir konumda) bulunabiliyor -- bu yüzden tek alan kontrolü
+    yanıltıcı. Düzeltme: artık `#TabControl_txt_ReferenceNo_I` İLE BİRLİKTE
+    `#btnSave_CD`'nin de görünür olması isteniyor (ikisi de sadece GERÇEK
+    detay formunda olur).
+
+    ✅ GÜNCEL BİLGİ [DOĞRULANMIŞ, kullanıcı canlı ERP ekran görüntüsüyle
+    teyit etti]: "Sevk Oluştur" menüsü SADECE Yük penceresi **İncele
+    modunda** açıkken çıkıyor (bu, "Düzelt" DEĞİL "İncele" butonuyla açılan
+    pencere -- toolbar'da "Yeni, Düzelt, Sil, İncele, Kopya, Filtre, Ara"
+    olarak görünüyor). Bu yüzden deneme SADECE "İncele" butonuyla (görünür
+    METİN ile bulunuyor, id tahmini YAPILMIYOR -- Türkçe "İ" karakteri
+    bozulma riskine karşı regex joker kullanılıyor) yapılıyor.
+
+    ⚠️⚠️ GÜVENLİK NEDENİYLE KALDIRILAN YEDEK YÖNTEMLER [kullanıcı canlı
+    ERP bilgisiyle uyardı]: Eskiden "İncele" başarısız olursa `#btnEdit_CD`
+    gibi buton ID TAHMİNLERİ ve son çare çift tıklama deneniyordu. Kullanıcı
+    kritik bir ERP davranışı bildirdi: bir Yük'te "Mal Depoda mı?"
+    işaretlendikten SONRA o Yük'e "Düzelt" ile geri dönülürse işaret
+    OTOMATİK OLARAK KALKIYOR. Çift tıklamanın da örtük olarak edit moduna
+    girme ihtimali var (kesin bilinmiyor). Bu yüzden İKİSİ DE TAMAMEN
+    KALDIRILDI -- "İncele" başarısız olursa artık riskli bir tahmin
+    denemeden NET bir hata ile duruluyor.
+
+    `expect_page()` ile YENİ pencere açılışı yarış durumu olmadan
+    bekleniyor (eskiden sabit 800ms sonra pencere sayısı kontrol
+    ediliyordu -- pencere 800ms'den yavaş açılırsa bu kaçırılabiliyordu).
+    """
+    saglam_secici = _yuk_listesinde_ara_ve_sec(page, islem_yuk_no)
+    page.wait_for_timeout(500)
+
+    def _form_gercekten_acik_mi(sayfa, timeout_ms):
+        # ⚠️ KRİTİK BUG BULUNDU [kod incelemesiyle bulundu, kullanıcının
+        # "Düzelt sonrası Mal Depoda işareti otomatik kalkıyor" uyarısı
+        # üzerine fark edildi]: Bu kontrol eskiden `#btnSave_CD`'nin de
+        # görünür olmasını ŞART koşuyordu. Ama "Sevk Oluştur" için ihtiyaç
+        # duyulan İncele modunda "Kaydet" butonu HİÇ YOK (toolbar sadece
+        # Yeni/Düzelt/Sil/Kopya/Dosya/Takip/Yorum/Etiket + Vazgeç
+        # gösteriyor -- kullanıcının paylaştığı ekran görüntüsüyle
+        # teyitli). Yani İncele BAŞARIYLA açılsa bile bu kontrol "başarısız"
+        # sanıp aşağıdaki (kaldırılmış) Düzelt/Aç buton denemelerine
+        # düşüyordu -- bu da "Düzelt" tıklarsa zaten kaydedilmiş bir
+        # Yük'ün "Mal Depoda mı?" işaretini SESSİZCE bozma riski taşıyordu.
+        # Düzeltme: artık SADECE ReferenceNo alanının görünür olması
+        # isteniyor (GOODS_ID doğrudan URL yönteminde de kullanılan aynı,
+        # kanıtlanmış kontrol).
+        try:
+            sayfa.wait_for_selector("#TabControl_txt_ReferenceNo_I", state="visible", timeout=timeout_ms)
+            return True
+        except Exception:
+            return False
+
+    def _eylemden_sonra_formu_bul(eylem, etiket):
+        yeni = None
+        try:
+            with page.context.expect_page(timeout=4000) as pencere_bilgisi:
+                eylem()
+            yeni = pencere_bilgisi.value
+        except Exception:
+            yeni = None
+
+        if yeni is not None and _form_gercekten_acik_mi(yeni, 15000):
+            print(
+                f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
+                f"yeni pencerede açıldı ({etiket})."
+            )
+            return yeni
+
+        if _form_gercekten_acik_mi(page, 5000):
+            print(
+                f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
+                f"aynı sayfada açıldı ({etiket})."
+            )
+            return page
+
+        return None
+
+    # ÖNCELİK: "İncele" butonu -- kullanıcı canlı ERP'de "Sevk Oluştur"
+    # menüsünün SADECE İncele modunda açılan pencerede çıktığını teyit etti.
+    # Metin ile bulunuyor (id tahmini YOK); "İ" harfi joker (".") ile
+    # eşleştiriliyor (dosya encoding bozulma riski, bkz. diğer Türkçe
+    # karakterli seçicilerdeki aynı savunma).
+    try:
+        incele_adayi = page.locator("a, span, div").filter(
+            has_text=re.compile(r"^\s*.ncele\s*$")
+        ).first
+        if incele_adayi.count() > 0:
+            sonuc = _eylemden_sonra_formu_bul(
+                lambda: incele_adayi.click(force=True, timeout=3000), "İncele butonu (metin ile)"
+            )
+            if sonuc is not None:
+                return sonuc
+    except Exception:
+        pass
+
+    # ⚠️⚠️ KRİTİK GÜVENLİK KARARI [kullanıcı canlı ERP bilgisiyle uyardı]:
+    # Eskiden bu noktada "Düzelt"/"Aç" BUTON ID TAHMİNLERİ (`#btnEdit_CD`,
+    # `#btnUpdate_CD`, `#btnOpen_CD`, ...) ve son çare olarak liste
+    # satırına ÇİFT TIKLAMA deneniyordu. Kullanıcı KRİTİK bir ERP
+    # davranışı bildirdi: bir Yük'te "Mal Depoda mı?" işaretlendikten
+    # SONRA o Yük'e "Düzelt" ile geri dönülürse, işaret OTOMATİK OLARAK
+    # KALKIYOR. Çift tıklamanın da (birçok ERP'de yaygın bir kalıp
+    # olduğu gibi) örtük olarak Düzelt/edit moduna girme ihtimali var --
+    # bu KESİN olarak bilinmiyor. Yani her iki yedek yöntem de, eğer
+    # tetiklenirlerse, zaten kaydedilmiş bir Yük'ün "Mal Depoda mı?"
+    # işaretini SESSİZCE bozma riski taşıyor -- bu, yanlış bir Sevk
+    # numarasından çok daha kötü bir sonuç (veri bozulması).
+    #
+    # Bu yüzden bu riskli yedek yöntemler TAMAMEN KALDIRILDI. Bu noktaya
+    # gelindiyse (GOODS_ID doğrudan URL YÖNTEMİ ve "İncele" metin araması
+    # İKİSİ DE başarısız oldu), kod artık daha fazla tahmin/deneme
+    # yapmadan NET bir hata ile duruyor -- riskli bir işlem denemektense
+    # durup kullanıcıdan F12 ile "İncele" butonunun gerçek id'sini
+    # öğrenmesini istemek daha güvenli.
+    try:
+        page.screenshot(path=f"debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png")
+    except Exception:
+        pass
+    raise RuntimeError(
+        f"[{kaynak_yuk_no}] HATA: YÜK OLUŞTU/HATA_SEVK devamında kayıtlı Yük "
+        f"{islem_yuk_no} detay formu ne doğrudan URL (GOODS_ID) yöntemiyle ne "
+        f"de 'İncele' metin araması ile açılabildi. GÜVENLİK NEDENİYLE "
+        f"'Düzelt' butonu veya çift tıklama gibi riskli yedek yöntemler "
+        f"KASITLI OLARAK denenmedi -- bunlar zaten kaydedilmiş bir Yük'ün "
+        f"'Mal Depoda mı?' işaretini otomatik olarak KALDIRABİLİR (kullanıcı "
+        f"tarafından teyit edilmiş bir ERP davranışı). Lütfen ERP'de bu "
+        f"satırı elle açıp 'İncele' butonunun gerçek id'sini F12 ile kontrol "
+        f"edin. Ekran görüntüsü: debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png"
+    )
+
+
+def _sevk_formunun_acilmasini_bekle(sayfa, kaynak_yuk_no):
+    """
+    'Sevk Oluştur' tıklamasından sonra Sevk formunun gerçekten yüklendiğini
+    plaka alanının görünmesiyle doğrular. Timeout olursa görünür popup
+    metni + ekran görüntüsü ile net hata verir (onay diyaloğu kaçmasın diye).
+    """
+    try:
+        sayfa.wait_for_selector(
+            "#TabControl_bte_TractorSerialNoPlateNo_I", state="visible", timeout=20000
+        )
+    except Exception as orijinal_hata:
+        popup_metni = _teshis_gorunur_popup_metni(sayfa)
+        teshis_dosyasi = f"debug_sevk_form_acilmadi_{kaynak_yuk_no}.png"
+        try:
+            sayfa.screenshot(path=teshis_dosyasi)
+        except Exception:
+            pass
+        if popup_metni:
+            ek = f"Ekranda görünür bir popup/uyarı metni tespit edildi: '{popup_metni}'."
+        else:
+            ek = (
+                "Ekranda bilinen bir popup/uyarı deseni yok; 'Sevk Oluştur' "
+                "sonrası form hiç açılmamış veya onay diyaloğu kaçırılmış olabilir."
+            )
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: 'Sevk Oluştur' tıklandı ama Sevk formu "
+            f"(plaka alanı) 20sn içinde görünmedi. {ek} "
+            f"Ekran görüntüsü: {teshis_dosyasi}. (Orijinal hata: {orijinal_hata})"
+        ) from orijinal_hata
+
+
 # ==========================================
 # UYUMSOFT ERP PLAYWRIGHT OPERASYONU V4.1 (FATURA TUTAR EŞLEŞTİRME DÜZELTMESİ)
 # ==========================================
@@ -245,7 +684,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     islem_yuk_no = kaynak_yuk_no
     aktif_sayfa = page
 
-    if mevcut_durum in ["YÜK OLUŞTU", "HATA_SEVK"] and onceki_yeni_yuk_no:
+    # GÜVENLİK KİLİDİ [kullanıcı isteği: yeniden denemelerde mükerrer Yük
+    # oluşmasın]: DURUM metnine ("YÜK OLUŞTU"/"HATA_SEVK") bakmak yerine,
+    # Excel'in H kolonunda (YENI_YUK_NO) HERHANGİ bir değer varsa Yük'ün
+    # zaten oluşturulduğu kabul edilip Faz 1-3 (Kopya + veri girişi) ASLA
+    # tekrar çalıştırılmaz -- DURUM beklenmedik/elle bozulmuş bir değerde
+    # olsa bile (örn. "HATA_BİLİNMEYEN" ya da boş) bu koruma devrede kalır.
+    if onceki_yeni_yuk_no:
         atla_faz_123 = True
         islem_yuk_no = onceki_yeni_yuk_no
 
@@ -257,17 +702,8 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     yuk_tarihi = oracle_data.get("YUK_TARIHI", "")
     saf_tarih = yuk_tarihi.replace(".", "") if yuk_tarihi else ""
 
-    page.goto(ayarlar.ERP_YUK_LISTESI_URL)
-    page.wait_for_selector("#myListPage_DXFREditorcol1_I", state="visible", timeout=15000)
-
-    page.fill("#myListPage_DXFREditorcol1_I", islem_yuk_no)
-    page.press("#myListPage_DXFREditorcol1_I", "Enter")
-
     # --- YÜK SEÇİMİ (ORİJİNAL SAĞLAM OMURGA) ---
-    page.wait_for_timeout(2000)  # Arama yapıldıktan sonra listenin güncellenmesini bekle
-    saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{islem_yuk_no}')"
-    page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
-    page.click(saglam_secici)
+    _yuk_listesinde_ara_ve_sec(page, islem_yuk_no)
 
     # DERİN TEST MODU: ayarlar.py'de DRY_RUN=True VE DERIN_TEST_MODU=True ise,
     # sadece arama/seçimle sınırlı kalınmaz; Kopyalama + tüm veri girişi +
@@ -287,6 +723,47 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
     yeni_yuk_no = onceki_yeni_yuk_no
 
+    # YÜK OLUŞTU / HATA_SEVK devamı: liste satırı seçili, ama Sevk menüsü
+    # detay formundaki Referans No alanına sağ tık ister. Formu açmadan
+    # devam etmek ilk canlı Sevk hatasından sonra yeniden denemeyi kırıyordu.
+    if atla_faz_123:
+        if derin_test:
+            print(
+                f"[{kaynak_yuk_no}] DERİN TEST: Durum '{mevcut_durum}' — Sevk fazı "
+                f"bilinçli olarak atlanıyor (gerçek kayıt ister)."
+            )
+            return {
+                "durum": "DERİN_TEST BAŞARILI",
+                "yeni_yuk_no": yeni_yuk_no,
+                "yeni_sevk_no": None,
+                "proje": proje_kodu,
+                "fatura_no": tum_faturalar,
+                "fatura_tarihi": tum_fatura_tarihleri,
+                "tarih": yuk_tarihi,
+                "aktif_sayfa": page
+            }
+        print(
+            f"[{kaynak_yuk_no}] Bilgi: Durum '{mevcut_durum}' — Yük fazı atlanıyor, "
+            f"kayıtlı Yük {islem_yuk_no} açılarak Sevk'ten devam edilecek."
+        )
+        # Önce doğrudan URL yöntemi (GOODS_ID ile) denenir -- buton tıklama/
+        # tahmin yok. Başarısız olursa (Oracle veya sayfa doğrulaması
+        # patlarsa) eski buton/çift-tıklama yöntemine düşülür.
+        aktif_sayfa = _kayitli_yuk_detay_formunu_direkt_url_ile_ac(page, islem_yuk_no, kaynak_yuk_no)
+        if aktif_sayfa is None:
+            aktif_sayfa = _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no)
+        okunan_ref = (aktif_sayfa.input_value("#TabControl_txt_ReferenceNo_I") or "").strip()
+        if islem_yuk_no not in okunan_ref:
+            try:
+                aktif_sayfa.screenshot(path=f"debug_sevk_yanlis_yuk_{kaynak_yuk_no}.png")
+            except Exception:
+                pass
+            raise RuntimeError(
+                f"[{kaynak_yuk_no}] HATA: Açılan Yük formu beklenen referans "
+                f"'{islem_yuk_no}' değil (alanda görülen: '{okunan_ref}'). "
+                f"Ekran görüntüsü: debug_sevk_yanlis_yuk_{kaynak_yuk_no}.png"
+            )
+
     if not atla_faz_123:
         with page.context.expect_page() as yeni_pencere_beklentisi:
             page.click("#btnCopy_CD")
@@ -304,7 +781,10 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         # dayanıklı.
         aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Y.k Di.er Bilgiler")).first.click()
         aktif_sayfa.wait_for_selector("#TabControl_chk_IsGoodsInWhouse_S_D", state="visible", timeout=5000)
-        aktif_sayfa.click("#TabControl_chk_IsGoodsInWhouse_S_D")
+        _checkbox_isaretle(
+            aktif_sayfa, "#TabControl_chk_IsGoodsInWhouse_S_D",
+            kaynak_yuk_no, "Mal Depoda mı?"
+        )
 
         aktif_sayfa.wait_for_timeout(500)
         aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Yurti.i Y.k Tan.m.")).first.click()
@@ -441,9 +921,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
                 # ÖNEK yazıp Tab'a basıyor (kullanıcının elle yaptığı ile
                 # birebir aynı davranış).
                 onek_ucret_tipi = ucret_tipi[:3]
-                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", force=True)
-                aktif_sayfa.keyboard.press("Control+A")
-                aktif_sayfa.keyboard.press("Delete")
+                _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", onek_ucret_tipi, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor1_I", "Tab")
@@ -456,9 +934,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
 
                 # NOT: Aynı önek+Tab düzeltmesi Operasyon Kodu için de geçerli.
                 onek_op_kodu = op_kodu[:3]
-                aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", force=True)
-                aktif_sayfa.keyboard.press("Control+A")
-                aktif_sayfa.keyboard.press("Delete")
+                _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I")
                 aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", onek_op_kodu, delay=50)
                 aktif_sayfa.wait_for_timeout(900)
                 aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor9_I", "Tab")
@@ -501,9 +977,7 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             # sil -> karakter karakter yaz. Ayrıca yazmanın gerçekten tuttuğu
             # doğrulanıyor; tutmadıysa hemen NET bir hata veriliyor (belirsiz
             # bir timeout yerine).
-            aktif_sayfa.click("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", force=True)
-            aktif_sayfa.keyboard.press("Control+A")
-            aktif_sayfa.keyboard.press("Delete")
+            _alana_odaklan_ve_temizle(aktif_sayfa, "#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I")
             aktif_sayfa.type("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", formatli_tutar, delay=50)
             aktif_sayfa.press("#TabControl_grd_LGoodsOpDetailCollection_DXEditor4_I", "Tab")
             aktif_sayfa.wait_for_timeout(400)
@@ -767,63 +1241,121 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         if checkpoint_kaydet:
             checkpoint_kaydet(yeni_yuk_no)
 
+        # ⚠️ CANLI TESTTE GÖZLEMLENDİ [DOĞRULANMIŞ]: Ana Kaydet'e basıldıktan
+        # sonra referans no AJAX ile ANINDA güncelleniyor (yukarıdaki
+        # wait_for_function bunu yakalıyor), ama ERP kısa bir süre sonra
+        # AYRICA gerçek bir tarayıcı navigasyonu yapıp aynı pencereyi
+        # `GeneralCard.aspx?CommandName=LGoodsCollection.Analyze&ObjectId=...`
+        # (İncele modu) adresine götürüyor. Checkpoint'ten hemen sonra sağ
+        # tık denemek bu navigasyonla YARIŞ durumuna girip "element was
+        # detached from the DOM" / disabled hatalarına yol açabiliyor
+        # (canlı testte tam bu semptomla karşılaşıldı). Bu navigasyon
+        # olursa tamamlanmasını bekleyip, olmazsa (bazı senaryolarda hiç
+        # gerçekleşmeyebilir) sessizce devam ediyoruz.
+        try:
+            aktif_sayfa.wait_for_url(
+                re.compile(r"CommandName=LGoodsCollection\.Analyze"), timeout=15000
+            )
+        except Exception:
+            pass
+        _agsakinligini_bekle(aktif_sayfa)
+
     # --- FAZ 4: SEVK OLUŞTURMA ---
-    aktif_sayfa.click("#TabControl_txt_ReferenceNo_I", button="right")
+    # ✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, kullanıcının paylaştığı sayfa
+    # kaynağıyla (view-source) teyit edildi]: Sayfanın en altında
+    # `FormContextMenu('pop_PopupForm')` çağrısı var -- "Sevk Oluştur"
+    # menüsü (`pop_PopupForm`) DOKÜMAN (sayfa) SEVİYESİNDE bağlanıyor,
+    # belirli bir alana değil. Sağ tık, kendi `oncontextmenu` işleyicisi
+    # olan bir elemente (grid'ler gibi) denk gelmediği sürece HER YERDE
+    # çalışır. `#TabControl_txt_ReferenceNo_I` alanının HTML'inde
+    # `disabled=""` özniteliği var -- devre dışı form elemanları
+    # tarayıcıda sağ tık dahil çoğu mouse olayını hiç tetiklemiyor, bu
+    # yüzden olay `document`'a ulaşmıyor ve menü asla açılmıyor (30sn
+    # timeout'un GERÇEK nedeni buydu). Düzeltme: sağ tık artık ASLA
+    # disabled olmayan, statik bir etiket olan "Yük No" span'ine
+    # (`#TabControl_lbl_lblReferenceNo`) yapılıyor -- bu grid'in dışında,
+    # her Yük formunda mutlaka var ve hiçbir zaman disabled olmuyor.
+    aktif_sayfa.click("#TabControl_lbl_lblReferenceNo", button="right")
     # NOT: "ş" karakteri regex joker (".") ile eşleştiriliyor -- yukarıdaki
     # sekme başlıklarındaki encoding bozulma sorununa karşı aynı savunma.
     sevk_olustur_menu = aktif_sayfa.locator("div.uyum-popup-menu span").filter(
         has_text=re.compile(r"^Sevk Olu.tur$")
     )
     sevk_olustur_menu.first.wait_for(state="visible", timeout=15000)
-    sevk_olustur_menu.first.click()
+
+    # ✅ DOĞRULANMIŞ [kullanıcı canlı ekran görüntüsüyle teyit etti]:
+    # "Sevk Oluştur" GERÇEKTEN yeni bir pencere açıyor -- Sevk formu
+    # (toolbar: "Kaydet, Kaydet Kapat, Kaydet Yeni" + "Sevk" başlığı,
+    # tamamen farklı alan adları/yerleşimi) Yük'ün İncele penceresinden
+    # BAMBAŞKA bir ekran. İlk denemede `expect_page(timeout=3000)` bu
+    # pencereyi YAKALAYAMADI -- muhtemelen pencerenin açılması 3sn'den
+    # uzun sürdü (Kaydet sonrası Analyze navigasyonunun da birkaç saniye
+    # sürdüğü zaten gözlemlenmişti). Zaman aşımı 15sn'ye çıkarıldı.
+    yeni_pencere = None
+    try:
+        with aktif_sayfa.context.expect_page(timeout=15000) as pencere_bilgisi:
+            sevk_olustur_menu.first.click()
+        yeni_pencere = pencere_bilgisi.value
+        yeni_pencere.wait_for_load_state("load", timeout=15000)
+    except Exception:
+        yeni_pencere = None
+
+    if yeni_pencere is not None:
+        print(
+            f"[{kaynak_yuk_no}] Bilgi: 'Sevk Oluştur' sonrası YENİ pencere açıldı "
+            f"-- Sevk formu bu pencerede aranacak."
+        )
+        aktif_sayfa = yeni_pencere
+
+    _sevk_formunun_acilmasini_bekle(aktif_sayfa, kaynak_yuk_no)
+    _agsakinligini_bekle(aktif_sayfa)
 
     devexpress_tarih_yaz(aktif_sayfa, "#TabControl_dte_DocDate_I", saf_tarih)
 
-    # ⚠️ HENÜZ CANLI/DERİN TESTTE HİÇ DENENMEDİ [VARSAYIM/TODO]: DERİN_TEST_MODU
-    # Sevk fazını hiç çalıştırmıyor (gerçek bir Yük referans numarasına
-    # ihtiyaç duyduğu için), bu yüzden aşağıdaki Plaka ve Sevk Fiyatı alanları
-    # şimdiye kadar SADECE gerçek/canlı çalıştırmada test edilebilecek. Yük
-    # tarafındaki Tarih/Tutar/Ücret Tipi/Operasyon Kodu alanlarında `.fill()`
-    # DEFALARCA güvenilmez çıktığı (bkz. `devexpress_tarih_yaz` ve OP_DET Tutar
-    # alanındaki NOT'lar) için, aynı sürprizi burada canlı denemede yaşamamak
-    # adına bu iki alan ÖNCEDEN aynı kanıtlanmış güvenli desenle (tıkla ->
-    # tümünü seç -> sil -> karakter karakter yaz -> doğrula) yazıldı.
     plaka_selector = "#TabControl_bte_TractorSerialNoPlateNo_I"
-    aktif_sayfa.click(plaka_selector)
-    aktif_sayfa.keyboard.press("Control+A")
-    aktif_sayfa.keyboard.press("Delete")
-    aktif_sayfa.type(plaka_selector, plaka, delay=50)
-    aktif_sayfa.press(plaka_selector, "Enter")
-    aktif_sayfa.wait_for_timeout(2000)
+    beklenen_plaka = str(plaka or "").strip()
+    # Yük tarafında Enter, grid satırını erken kaydetmeye çalışabiliyordu.
+    # Plaka form alanı olsa da aynı riski almamak için Tab kullanılıyor.
+    _devexpress_alana_yaz(aktif_sayfa, plaka_selector, beklenen_plaka, sonra_tus="Tab")
+    aktif_sayfa.wait_for_timeout(1500)
 
     try:
         yazilan_plaka = (aktif_sayfa.input_value(plaka_selector) or "").strip()
     except Exception:
         yazilan_plaka = ""
 
-    if not yazilan_plaka:
+    if not yazilan_plaka or (
+        beklenen_plaka
+        and _plaka_normalize(beklenen_plaka) not in _plaka_normalize(yazilan_plaka)
+        and _plaka_normalize(yazilan_plaka) not in _plaka_normalize(beklenen_plaka)
+    ):
         try:
             aktif_sayfa.screenshot(path=f"debug_sevk_plaka_hata_{kaynak_yuk_no}.png")
         except Exception:
             pass
         raise RuntimeError(
             f"[{kaynak_yuk_no}] HATA: Sevk formunda Plaka alanı doldurulamadı "
-            f"(beklenen: '{plaka}', alanda görülen: '{yazilan_plaka}'). "
-            f"Ekran görüntüsü: debug_sevk_plaka_hata_{kaynak_yuk_no}.png"
+            f"(beklenen: '{beklenen_plaka}', alanda görülen: '{yazilan_plaka}'). "
+            f"Bu alan lookup ise tam plaka + Tab yetmeyebilir — canlı ekran "
+            f"görüntüsüne bakılmalı. Ekran görüntüsü: debug_sevk_plaka_hata_{kaynak_yuk_no}.png"
         )
 
-    aktif_sayfa.click("#TabControl_grd_LTransOpDetailCollection_EmptyRow_btnNew")
-    aktif_sayfa.wait_for_selector("#TabControl_grd_LTransOpDetailCollection_DXEditor4_I", state="visible", timeout=15000)
+    if TESHIS_EKRAN_GORUNTUSU_AL:
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_plaka_sonrasi_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+
+    _fiyat_satirini_duzenlemeye_ac(
+        aktif_sayfa, "TabControl_grd_LTransOpDetailCollection",
+        kaynak_yuk_no, "Sevk"
+    )
 
     sevk_guvenli = Decimal(str(sevk_alis_fiyati)) if sevk_alis_fiyati else Decimal('0.00')
     formatli_sevk_fiyati = f"{sevk_guvenli:.2f}".replace(".", ",")
 
     sevk_tutar_selector = "#TabControl_grd_LTransOpDetailCollection_DXEditor4_I"
-    aktif_sayfa.click(sevk_tutar_selector, force=True)
-    aktif_sayfa.keyboard.press("Control+A")
-    aktif_sayfa.keyboard.press("Delete")
-    aktif_sayfa.type(sevk_tutar_selector, formatli_sevk_fiyati, delay=50)
-    aktif_sayfa.press(sevk_tutar_selector, "Tab")
+    _devexpress_alana_yaz(aktif_sayfa, sevk_tutar_selector, formatli_sevk_fiyati, sonra_tus="Tab")
     aktif_sayfa.wait_for_timeout(400)
 
     try:
@@ -831,15 +1363,23 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     except Exception:
         yazilan_sevk_tutari = ""
 
-    if yazilan_sevk_tutari in ("", "0,00", "0", "0,00000000", "0.00"):
+    okunan_sevk_tutari = _input_tutarini_coz(yazilan_sevk_tutari)
+    if okunan_sevk_tutari is None or abs(okunan_sevk_tutari - sevk_guvenli) > Decimal("0.01"):
         try:
             aktif_sayfa.screenshot(path=f"debug_sevk_tutar_hata_{kaynak_yuk_no}.png")
         except Exception:
             pass
         raise RuntimeError(
-            f"[{kaynak_yuk_no}] HATA: Sevk Fiyatı alanı doğru yazılamadı (beklenen ~'{formatli_sevk_fiyati}', "
-            f"alanda görülen: '{yazilan_sevk_tutari}'). Ekran görüntüsü: debug_sevk_tutar_hata_{kaynak_yuk_no}.png"
+            f"[{kaynak_yuk_no}] HATA: Sevk Fiyatı alanı doğru yazılamadı "
+            f"(beklenen ~'{formatli_sevk_fiyati}', alanda görülen: '{yazilan_sevk_tutari}'). "
+            f"Ekran görüntüsü: debug_sevk_tutar_hata_{kaynak_yuk_no}.png"
         )
+
+    if TESHIS_EKRAN_GORUNTUSU_AL:
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_tutar_sonrasi_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
 
     aktif_sayfa.click("a[id*='editnew']:has-text('Kaydet')", force=True)
 
@@ -854,19 +1394,82 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         grid_onek="TabControl_grd_LTransOpDetailCollection"
     )
 
+    if TESHIS_EKRAN_GORUNTUSU_AL:
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_satir_kaydet_sonrasi_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+
+    # ⚠️ KRİTİK BUG BULUNDU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
+    # Sevk formunun "Belge Numarası" (`#TabControl_txt_TransportNo_I`) alanı
+    # pencere AÇILIR AÇILMAZ (Kaydet'e hiç basılmadan, Plaka/Tarih hâlâ
+    # boşken) ZATEN dolu geliyor (örn. "S-644110"). NOT: Bu numara
+    # "rezerve edilmiş" değil -- kullanıcı düzeltti: o an BOŞTA olan
+    # sıradaki numara gösteriliyor; işlem tamamlanmadan başka biri (veya
+    # başka bir işlem) o numarayı kullanırsa, GERÇEK Kaydet anında ERP
+    # otomatik olarak bir SONRAKİ müsait numarayı atayabilir -- yani
+    # form açılışında görünen numara ile Kaydet SONRASI gerçekte atanan
+    # numara FARKLI olabilir. Eski kontrol sadece "alan S- ile başlıyor
+    # mu" diye bakıyordu -- bu, Kaydet HİÇ başarılı olmasa (veya hiç
+    # tıklanmasa) bile baştan True dönerdi. Canlı testte tam bu oldu:
+    # Excel'e "S-644110 / BAŞARILI" yazıldı ama Sevk sistemde GERÇEKTEN
+    # oluşmadı.
+    #
+    # ✅ DÜZELTME: Yük tarafında zaten doğrulanmış "Kaydet sonrası ERP
+    # gerçek navigasyon yapıyor" deseniyle (New&ObjectId=0 -> Analyze&
+    # ObjectId={gerçek_id}) aynı mantık kullanılıyor. Kaydet'ten ÖNCEKİ
+    # URL kaydediliyor; Kaydet sonrası URL'in DEĞİŞMESİ VE "ObjectId=0"
+    # içermemesi bekleniyor -- bu, gerçek bir veritabanı kaydının
+    # oluştuğunun tek güvenilir kanıtı (alan değeri güvenilir değil).
+    sevk_url_kaydet_oncesi = aktif_sayfa.url
     aktif_sayfa.click("#btnSave_CD", force=True)
 
-    aktif_sayfa.wait_for_function('''
-        () => {
-            let val = document.querySelector("#TabControl_txt_TransportNo_I").value.trim();
-            return val !== "" && val.startsWith("S-");
-        }
-    ''', timeout=20000)
+    try:
+        aktif_sayfa.wait_for_url(
+            lambda url: url != sevk_url_kaydet_oncesi and "ObjectId=0" not in url,
+            timeout=20000
+        )
+    except Exception as orijinal_hata:
+        popup_metni = _teshis_gorunur_popup_metni(aktif_sayfa)
+        teshis_dosyasi = f"debug_sevk_kaydet_timeout_{kaynak_yuk_no}.png"
+        try:
+            aktif_sayfa.screenshot(path=teshis_dosyasi)
+        except Exception:
+            pass
+        ek = (
+            f"Ekranda görünür popup/uyarı: '{popup_metni}'."
+            if popup_metni
+            else "Ekranda bilinen bir popup/uyarı deseni yok."
+        )
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Sevk ana Kaydet sonrası ERP'nin GERÇEKTEN "
+            f"kaydettiğini gösteren navigasyon (New&ObjectId=0 -> Analyze&ObjectId=...) "
+            f"20sn içinde gerçekleşmedi -- yani Sevk sisteme GERÇEKTEN kaydedilmemiş "
+            f"olabilir (Belge Numarası alanı Kaydet'ten ÖNCE de o an boşta olan bir "
+            f"numarayı gösterebildiği için tek başına güvenilir değil). {ek} "
+            f"Ekran görüntüsü: {teshis_dosyasi}. (Orijinal hata: {orijinal_hata})"
+        ) from orijinal_hata
 
+    _agsakinligini_bekle(aktif_sayfa)
     yeni_sevk_no = aktif_sayfa.input_value("#TabControl_txt_TransportNo_I")
 
-    if not atla_faz_123:
-        aktif_sayfa.close()
+    if not (yeni_sevk_no or "").strip().startswith("S-"):
+        try:
+            aktif_sayfa.screenshot(path=f"debug_sevk_kaydet_gecersiz_no_{kaynak_yuk_no}.png")
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: Sevk Kaydet sonrası navigasyon oldu ama "
+            f"Transport No alanı geçerli bir 'S-...' değeri göstermiyor "
+            f"(görülen: '{yeni_sevk_no}'). Ekran görüntüsü: "
+            f"debug_sevk_kaydet_gecersiz_no_{kaynak_yuk_no}.png"
+        )
+
+    if aktif_sayfa is not page:
+        try:
+            aktif_sayfa.close()
+        except Exception:
+            pass
 
     return {
         "durum": "BAŞARILI",
@@ -933,6 +1536,17 @@ def main():
 
             print(f"\n--- İŞLEM BAŞLIYOR: {kaynak_yuk_no} ---")
 
+            # Güvenlik önlemi: önceki satırdan (beklenmedik şekilde) kalmış
+            # olabilecek ekstra pencereler varsa, bu satıra GERÇEKTEN temiz
+            # başlamak için kapatılıyor (bkz. aşağıdaki hata bloğundaki
+            # "sızıntı" notu -- bu, o düzeltmenin ikinci bir güvencesi).
+            for ekstra_sayfa in list(context.pages):
+                if ekstra_sayfa is not page:
+                    try:
+                        ekstra_sayfa.close()
+                    except Exception:
+                        pass
+
             hata_sayfasi = page
             try:
                 oracle_data = kaynak_yuk_verilerini_getir(kaynak_yuk_no)
@@ -968,25 +1582,57 @@ def main():
                 zaman_damgasi = datetime.now().strftime("%H%M%S")
                 hata_foto = f"hata_{kaynak_yuk_no}_{zaman_damgasi}.png"
 
+                # KRİTİK: durum, bu turda yazılmış checkpoint'e bakılarak
+                # seçilir — döngü başındaki eski `mevcut_durum` değil.
+                # Eskiden Yük aynı turda oluşup Sevk patlarsa HATA_YUK yazılıp
+                # yeni Yük no siliniyordu; sonraki çalıştırma aynı Yük'ü
+                # tekrar kopyalıyordu.
+                guncel_durum = ws.cell(row=i, column=10).value
+                guncel_yeni_yuk = ws.cell(row=i, column=8).value
+                yuk_zaten_olusmus = (
+                    guncel_durum in ["YÜK OLUŞTU", "HATA_SEVK"]
+                    or bool(guncel_yeni_yuk)
+                )
+                ws.cell(row=i, column=10).value = "HATA_SEVK" if yuk_zaten_olusmus else "HATA_YUK"
+                if not yuk_zaten_olusmus:
+                    ws.cell(row=i, column=8).value = None
+                ws.cell(row=i, column=11).value = hata_mesaji
+
                 try:
                     if len(context.pages) > 1:
                         hata_sayfasi = context.pages[-1]
 
                     hata_sayfasi.screenshot(path=hata_foto)
                     hata_sayfasi.keyboard.press("Escape")
-
-                    if mevcut_durum in ["YÜK OLUŞTU", "HATA_SEVK"]:
-                        ws.cell(row=i, column=10).value = "HATA_SEVK"
-                    else:
-                        ws.cell(row=i, column=10).value = "HATA_YUK"
-                        ws.cell(row=i, column=8).value = None
-
-                    if len(context.pages) > 1:
-                        hata_sayfasi.close()
                 except Exception:
-                    ws.cell(row=i, column=10).value = "HATA_BİLİNMEYEN"
+                    print(f"[{kaynak_yuk_no}] Uyarı: hata ekran görüntüsü alınamadı; durum yine de kaydedildi.")
 
-                ws.cell(row=i, column=11).value = hata_mesaji
+                # ⚠️ SIZINTI BULUNDU [DOĞRULANMIŞ, kullanıcının 15 satırlık
+                # canlı test logunda dolaylı olarak görüldü]: Bir satır hata
+                # verdiğinde, Kopya/Sevk Oluştur ile açılmış YENİ pencere(ler)
+                # normalde fonksiyonun EN SONUNDAKİ `aktif_sayfa.close()`
+                # çağrısıyla kapanıyordu -- ama hata bu satırdan ÖNCE
+                # fırlatıldığı için o kapatma HİÇ ÇALIŞMIYORDU. Eski kod da
+                # SADECE `context.pages[-1]` (son pencere) kapatıyordu --
+                # eğer bir satırda BİRDEN FAZLA pencere açık kalmışsa (örn.
+                # başarısız bir Sevk denemesi + hemen ardından yeni bir Yük
+                # için açılan Kopya penceresi), diğerleri AÇIK KALIYORDU.
+                # Bu, arka arkaya çok satır işlenirken tarayıcıda giderek
+                # artan sayıda "hayalet" sekme birikmesine yol açıyordu --
+                # her biri DevExpress'in arka plan keep-alive isteklerini
+                # atmaya devam ederek sunucu tarafında ekstra yük
+                # oluşturabilir, bu da sonraki satırlarda ARA SIRA görülen
+                # açıklanamayan timeout'ları (örn. "navigasyon gerçekleşmedi",
+                # "locator bulunamadı") kısmen açıklayabilir. Düzeltme: artık
+                # ana `page` HARİÇ TÜM açık pencereler kapatılıyor, böylece
+                # her satır GERÇEKTEN temiz bir durumdan başlıyor.
+                for ekstra_sayfa in list(context.pages):
+                    if ekstra_sayfa is not page:
+                        try:
+                            ekstra_sayfa.close()
+                        except Exception:
+                            pass
+
                 wb.save(excel_dosyasi)
                 print(f"Hata detayı kaydedildi. Ekran Görüntüsü: {hata_foto}")
 
