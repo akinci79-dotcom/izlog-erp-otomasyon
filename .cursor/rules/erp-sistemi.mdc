@@ -482,25 +482,51 @@ desenler ÖNCEDEN (canlı test beklenmeden) Sevk koduna da uygulandı:
   Ana Kaydet sonrası `S-...` oluşmazsa aynı şekilde
   `debug_sevk_kaydet_timeout_*.png`.
 
-**✅ Kod incelemesiyle bulunan iki Sevk devam hatası (henüz canlı teyit yok)**:
+**✅ Kod incelemesiyle bulunan iki Sevk devam hatası**:
 1. **`YÜK OLUŞTU` / `HATA_SEVK` devamında detay formu açılmıyordu**
    [kod incelemesi]: Liste satırı seçilip hemen `#TabControl_txt_ReferenceNo_I`
    üzerine sağ tıklanıyordu. O alan listede yok — Sevk menüsü hiç çıkmazdı.
-   Düzeltme: `_kayitli_yuk_detay_formunu_ac()` önce satıra çift tıklar
-   (yeni pencere veya aynı sayfa), olmazsa `#btnUpdate_CD` / `#btnEdit_CD`
-   / `#btnOpen_CD` dener. Açılan referans no beklenen Yük no ile
-   eşleşmezse durur. [VARSAYIM/TODO]: çift tıklamanın gerçekten formu
-   açtığı canlı ERP'de henüz teyit edilmedi.
-2. **Aynı turda Yük oluşup Sevk patlarsa checkpoint siliniyordu**
-   [kod incelemesi]: `except` bloğu döngü başındaki eski `mevcut_durum`'a
-   bakıyordu. Checkpoint `YÜK OLUŞTU` yazmış olsa bile durum `HATA_YUK`
-   oluyor, kolon H (yeni Yük no) `None` yapılıyordu — sonraki çalıştırma
-   AYNI Yük'ü tekrar kopyalıyordu. Düzeltme: Excel'deki GÜNCEL durum /
-   H kolonu okunuyor; Yük no varsa `HATA_SEVK` yazılır, H kolonu korunur.
-   Ekran görüntüsü alınamazsa bile durum artık `HATA_BİLİNMEYEN`'e
-   düşürülmüyor.
+2. **Aynı turda Yük oluşup Sevk patlarsa checkpoint siliniyordu** [kod
+   incelemesi, canlı testte DOLAYLI TEYİT edildi -- bkz. aşağıdaki
+   "checkpoint korundu" notu]: `except` bloğu döngü başındaki eski
+   `mevcut_durum`'a bakıyordu. Checkpoint `YÜK OLUŞTU` yazmış olsa bile
+   durum `HATA_YUK` oluyor, kolon H (yeni Yük no) `None` yapılıyordu —
+   sonraki çalıştırma AYNI Yük'ü tekrar kopyalıyordu. Düzeltme: Excel'deki
+   GÜNCEL durum / H kolonu okunuyor; Yük no varsa `HATA_SEVK` yazılır,
+   H kolonu korunur.
 
-Bu düzeltmeler HENÜZ canlı ekranla teyit edilmedi -- ilk canlı Sevk
+**❌ ÇÜRÜTÜLDÜ (v1 düzeltmesi) — "SADECE ReferenceNo alanı görünür olsun"
+kontrolü YANLIŞ POZİTİF üretti [DOĞRULANMIŞ, kullanıcı canlı testte teyit
+etti]**: `_kayitli_yuk_detay_formunu_ac()`'in ilk hali, `#TabControl_txt_
+ReferenceNo_I`'nin Playwright'a göre "visible" olmasını "form gerçekten
+açıldı" kabul ediyordu (çift tıklama + `#btnUpdate_CD`/`#btnEdit_CD`/
+`#btnOpen_CD` denemeleri sonrası). Canlı testte (`Y-576196` → devam Yük'ü
+`Y-578364`) fonksiyon HİÇBİR HATA vermeden "form açıldı" diye döndü
+(muhtemelen alan bir yerde her zaman DOM'da "visible" sayılan bir kopyaya
+sahip [VARSAYIM/TODO, F12 ile kesin teyit edilmedi]), ama hemen sonrasında
+"Sevk Oluştur" için yapılan sağ tık (`#TabControl_txt_ReferenceNo_I`,
+`button="right"`) tam 30 saniye sonra `Timeout 30000ms exceeded` ile
+patladı. Kullanıcının paylaştığı ekran görüntüsü NET gösterdi: hiçbir detay
+formu açılmamıştı, sadece Yük Listesi ekranı (satır Y-578364 seçili/
+turuncu) görünüyordu -- yani double-click/buton denemelerinden HİÇBİRİ
+gerçek bir popup açmamıştı, ama kontrol yine de "açıldı" sanmıştı.
+
+**✅ UYGULANAN DÜZELTME (v2)**: `_form_gercekten_acik_mi()` artık İKİ alanı
+BİRLİKTE (`#TabControl_txt_ReferenceNo_I` VE `#btnSave_CD`) görünür ister --
+ikisi de sadece GERÇEK detay formunda birlikte bulunur, tek bir hayalet
+elemanın yanlış pozitif üretme ihtimalini düşürür. Ayrıca pencere açılışı
+artık `page.context.expect_page(timeout=4000)` ile yarış durumu olmadan
+bekleniyor (eskiden sabit 800ms sonra pencere sayısı kontrol ediliyordu --
+pencere 800ms'den yavaş açılırsa kaçırılabiliyordu). Deneme sırası: önce
+"Düzelt" butonu (muhtemel id `#btnEdit_CD` -- "Kopya"→`#btnCopy_CD`,
+"Kaydet"→`#btnSave_CD` isimlendirme kalıbıyla aynı varsayım
+[VARSAYIM/TODO]), sonra `#btnUpdate_CD`/`#btnOpen_CD`, son çare çift
+tıklama. Hâlâ başarısız olursa hata mesajı kullanıcıdan ERP'de bu satırı
+seçip "Düzelt"e ELLE tıklamasını ve ne olduğunu (yeni pencere/aynı sayfa/
+hiç tepki) bildirmesini istiyor -- bu, ID'yi F12 ile kesinleştirmenin
+en hızlı yolu.
+
+Bu v2 düzeltmesi HENÜZ canlı ekranla teyit edilmedi -- ilk canlı Sevk
 denemesinde bir hata çıkarsa, önce buradaki yeni `RuntimeError` mesajlarına
 ve `debug_sevk_*` ekran görüntülerine bakılmalı.
 

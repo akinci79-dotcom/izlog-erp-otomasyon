@@ -309,66 +309,90 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     çalışıyordu. O alan listede yok — ilk canlı Sevk denemesi Yük'ü oluşturup
     Sevk'te patlarsa bir sonraki çalıştırma bu yüzden baştan kırılıyordu.
 
-    [VARSAYIM/TODO, henüz canlı ekranla teyit edilmedi]: Uyumsoft liste
-    satırına çift tıklama genelde detayı YENİ pencerede açar; aynı sayfada
-    da açılabilir. İkisi de beklenir. Olmazsa bilinen Düzelt/Aç toolbar
-    butonları (`#btnUpdate_CD`, `#btnEdit_CD`, `#btnOpen_CD`) denenir.
+    ❌ ÇÜRÜTÜLDÜ (v1) [DOĞRULANMIŞ, canlı testte teyit edildi]: Bu fonksiyonun
+    ilk hali SADECE `#TabControl_txt_ReferenceNo_I`'nin "visible" olmasına
+    bakıyordu ve bunu "form gerçekten açıldı" kabul ediyordu. Canlı testte
+    bu YANLIŞ POZİTİF üretti: fonksiyon "form açık" diye döndü (hiçbir hata
+    fırlatmadı), ama hemen sonrasındaki "Sevk Oluştur" sağ tık işlemi o alan
+    üzerinde 30sn timeout'a düştü ve ekran görüntüsü sadece Yük Listesi'ni
+    (hiçbir detay formu açılmamış) gösterdi. [VARSAYIM/TODO, henüz F12 ile
+    kesin teyit edilmedi]: ASPx/DevExpress sayfalarında bu ID'li alanın bir
+    kopyası DOM'da her zaman (ekran dışı/gizli ama Playwright'ın "visible"
+    saydığı bir konumda) bulunabiliyor -- bu yüzden tek alan kontrolü
+    yanıltıcı. Düzeltme: artık `#TabControl_txt_ReferenceNo_I` İLE BİRLİKTE
+    `#btnSave_CD`'nin de görünür olması isteniyor (ikisi de sadece GERÇEK
+    detay formunda olur).
+
+    Deneme sırası: önce Yük Listesi araç çubuğundaki "Düzelt" butonu
+    (muhtemel id `#btnEdit_CD` -- "Kopya"→`#btnCopy_CD`, "Kaydet"→
+    `#btnSave_CD` kalıbıyla aynı isimlendirme varsayımı [VARSAYIM/TODO]),
+    ardından diğer olası id'ler, son çare olarak çift tıklama. Her adım
+    `expect_page()` ile YENİ pencere açılışını yarış durumu olmadan bekler
+    (eskiden sabit 800ms sonra pencere sayısı kontrol ediliyordu -- pencere
+    800ms'den yavaş açılırsa bu kaçırılabiliyordu).
     """
     saglam_secici = f"tr.dxgvDataRow_Aqua:has-text('{islem_yuk_no}')"
     page.wait_for_selector(saglam_secici, state="visible", timeout=15000)
+    page.click(saglam_secici)
+    page.wait_for_timeout(500)
 
-    def _form_bu_sayfada_mi(sayfa, timeout_ms):
+    def _form_gercekten_acik_mi(sayfa, timeout_ms):
         try:
             sayfa.wait_for_selector("#TabControl_txt_ReferenceNo_I", state="visible", timeout=timeout_ms)
+            sayfa.wait_for_selector("#btnSave_CD", state="visible", timeout=1500)
             return True
         except Exception:
             return False
 
-    onceki_sayfa_sayisi = len(page.context.pages)
-    page.dblclick(saglam_secici)
+    def _eylemden_sonra_formu_bul(eylem, etiket):
+        yeni = None
+        try:
+            with page.context.expect_page(timeout=4000) as pencere_bilgisi:
+                eylem()
+            yeni = pencere_bilgisi.value
+        except Exception:
+            yeni = None
 
-    for _ in range(40):
-        if len(page.context.pages) > onceki_sayfa_sayisi:
-            yeni = page.context.pages[-1]
-            if _form_bu_sayfada_mi(yeni, 15000):
-                print(
-                    f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
-                    f"yeni pencerede açıldı (liste satırına çift tıklama)."
-                )
-                return yeni
-            break
-        if _form_bu_sayfada_mi(page, 250):
+        if yeni is not None and _form_gercekten_acik_mi(yeni, 15000):
             print(
                 f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
-                f"aynı sayfada açıldı (liste satırına çift tıklama)."
+                f"yeni pencerede açıldı ({etiket})."
+            )
+            return yeni
+
+        if _form_gercekten_acik_mi(page, 5000):
+            print(
+                f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
+                f"aynı sayfada açıldı ({etiket})."
             )
             return page
-        page.wait_for_timeout(300)
 
-    for btn_id in ("#btnUpdate_CD", "#btnEdit_CD", "#btnOpen_CD"):
+        return None
+
+    for btn_id, etiket in (
+        ("#btnEdit_CD", "Düzelt butonu #btnEdit_CD"),
+        ("#btnUpdate_CD", "Düzelt butonu #btnUpdate_CD"),
+        ("#btnOpen_CD", "Aç butonu #btnOpen_CD"),
+    ):
         try:
             btn = page.locator(btn_id)
             if btn.count() == 0:
                 continue
-            onceki = len(page.context.pages)
-            btn.first.click(timeout=3000)
-            page.wait_for_timeout(800)
-            if len(page.context.pages) > onceki:
-                yeni = page.context.pages[-1]
-                if _form_bu_sayfada_mi(yeni, 15000):
-                    print(
-                        f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
-                        f"yeni pencerede açıldı ({btn_id})."
-                    )
-                    return yeni
-            if _form_bu_sayfada_mi(page, 5000):
-                print(
-                    f"[{kaynak_yuk_no}] Bilgi: Kayıtlı Yük {islem_yuk_no} detay formu "
-                    f"aynı sayfada açıldı ({btn_id})."
-                )
-                return page
         except Exception:
             continue
+
+        sonuc = _eylemden_sonra_formu_bul(
+            lambda b=btn: b.first.click(force=True, timeout=3000), etiket
+        )
+        if sonuc is not None:
+            return sonuc
+
+    # Son çare: çift tıklama.
+    sonuc = _eylemden_sonra_formu_bul(
+        lambda: page.dblclick(saglam_secici), "liste satırına çift tıklama"
+    )
+    if sonuc is not None:
+        return sonuc
 
     try:
         page.screenshot(path=f"debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png")
@@ -376,9 +400,12 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
         pass
     raise RuntimeError(
         f"[{kaynak_yuk_no}] HATA: YÜK OLUŞTU/HATA_SEVK devamında kayıtlı Yük "
-        f"{islem_yuk_no} detay formu açılamadı (liste satırına çift tıklama ve "
-        f"bilinen Düzelt/Aç butonları denendi). 'Sevk Oluştur' için detay formu "
-        f"şart. Ekran görüntüsü: debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png"
+        f"{islem_yuk_no} detay formu açılamadı (Düzelt/Aç butonları ve çift "
+        f"tıklama denendi, hiçbiri #TabControl_txt_ReferenceNo_I + #btnSave_CD "
+        f"ikilisini birlikte görünür yapmadı). 'Sevk Oluştur' için detay formu "
+        f"şart. Lütfen ERP'de bu satırı seçip 'Düzelt' butonuna elle tıklayın: "
+        f"yeni pencere mi açılıyor, aynı sayfa mı değişiyor, yoksa hiç mi "
+        f"tepki vermiyor? Ekran görüntüsü: debug_sevk_yuk_formu_acilamadi_{kaynak_yuk_no}.png"
     )
 
 
