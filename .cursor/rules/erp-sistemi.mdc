@@ -644,20 +644,36 @@ zaten biliniyordu, benzer bir gecikme burada da olabilir). **Düzeltme**:
 zaman aşımı 15sn'ye çıkarıldı, ayrıca yeni pencerenin `load` state'ine
 ulaşması da bekleniyor.
 
-**⚠️ HÂLÂ AÇIK — Sevk formunun GERÇEK alan id'leri bilinmiyor
-[VARSAYIM/TODO]**: Bu form Yük'ten tamamen farklı bir ekran (muhtemelen
-"TabControl" önekini bile kullanmıyor, farklı bir kontrol kök adı olabilir)
--- kodun şu anki `#TabControl_bte_TractorSerialNoPlateNo_I`,
-`#TabControl_grd_LTransOpDetailCollection_*`, `#TabControl_txt_
-TransportNo_I` seçicileri Yük tarafının isimlendirme kalıbından TAHMİN
-edilmişti ve bu ekran görüntüsüyle YANLIŞ olduğu netleşti. Kullanıcıdan bu
-Sevk formunun TAM sayfa kaynağı (view-source) bekleniyor -- kesin alan
-id'leri gelmeden bu kısım tahminle düzeltilmeyecek (Fatura kutusundaki
-"KABA KUVVET" deneyiminin tekrarlanmaması için).
+**✅ ÇÜRÜTÜLDÜ — "alan id'leri tamamen farklı" varsayımı YANLIŞTI
+[DOĞRULANMIŞ, kullanıcı F12 ile üç kritik alanı doğrudan gösterdi]**:
+Sevk formu görsel olarak (araç çubuğu, sekmeler, alan etiketleri) Yük'ten
+çok farklı görünse de, **AYNI DevExpress "TabControl" page control
+kalıbını** kullanıyor. F12 ile doğrulanan üç alan, kodun ÖNCEDEN
+(Yük tarafından türetilerek) TAHMİN ettiği id'lerle BİREBİR eşleşti:
+- Belge Tarihi (Sevk Tarihi) → `#TabControl_dte_DocDate_I` ✅ kod zaten bunu kullanıyor
+- Plaka (Çekici Seri/Plaka No) → `#TabControl_bte_TractorSerialNoPlateNo_I` ✅ kod zaten bunu kullanıyor
+- "Yeni kayıt için tıklayınız" (Finans Bilgileri grid'inde yeni satır) →
+  `#TabControl_grd_LTransOpDetailCollection_EmptyRow_btnNew` ✅ kod zaten
+  bunu kullanıyor (Yük'teki `EmptyRow_btnNew` ile AYNI kalıp, sadece görsel
+  olarak "+" butonu yerine "Yeni kayıt için tıklayınız" bağlantısı olarak
+  render ediliyor -- aynı DevExpress grid kontrolünün farklı bir görsel
+  temsili).
+
+**Sonuç**: Kodun Sevk formu alan seçicileri (Plaka, Tarih, Tutar grid'i)
+DEĞİŞTİRİLMEDİ -- zaten doğruydu. Tek gerçek sorun, "Sevk Oluştur"
+sonrası açılan YENİ pencereyi yakalama zaman aşımıydı (3sn → 15sn, zaten
+düzeltildi). Bir sonraki canlı test bu formun tamamını (Plaka + Tarih +
+Tutar + Kaydet) test edecek.
+
+**URL kalıbı da not edildi**: Yeni pencerenin adresi
+`GeneralCard.aspx?CommandName=LTransportCollection.New&ObjectId=0&
+GoodsId={GOODS_ID}&WinId=01` -- `GoodsId` parametresi kaynak Yük'ün
+GOODS_ID'sini taşıyor (Sevk'i Yük'e bağlıyor). `LGoodsCollection.Analyze`
+ile aynı aile (`CommandName=L...Collection.{Eylem}`), tutarlı.
 
 Beklenen sıra [kullanıcı doğruladı]: önce Sevk Tarihi (Belge Tarihi), sonra
 Plaka (Çekici Seri/Plaka No), sonra Alış Fiyatı (Finans Bilgileri
-grid'inde satır ekleme).
+grid'inde satır ekleme) -- kod bu sırayla zaten çalışıyor.
 
 **✅ Yük fazı 3 satırlı gerçek senaryoda BAŞARILI [DOĞRULANMIŞ, canlı test]**:
 `Y-576188` (Navlun + 2 Ek_Navlun satırı, hepsi aynı faturaya `IZK2026000000076`
