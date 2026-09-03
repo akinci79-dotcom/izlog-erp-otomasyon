@@ -1117,6 +1117,25 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         if checkpoint_kaydet:
             checkpoint_kaydet(yeni_yuk_no)
 
+        # ⚠️ CANLI TESTTE GÖZLEMLENDİ [DOĞRULANMIŞ]: Ana Kaydet'e basıldıktan
+        # sonra referans no AJAX ile ANINDA güncelleniyor (yukarıdaki
+        # wait_for_function bunu yakalıyor), ama ERP kısa bir süre sonra
+        # AYRICA gerçek bir tarayıcı navigasyonu yapıp aynı pencereyi
+        # `GeneralCard.aspx?CommandName=LGoodsCollection.Analyze&ObjectId=...`
+        # (İncele modu) adresine götürüyor. Checkpoint'ten hemen sonra sağ
+        # tık denemek bu navigasyonla YARIŞ durumuna girip "element was
+        # detached from the DOM" / disabled hatalarına yol açabiliyor
+        # (canlı testte tam bu semptomla karşılaşıldı). Bu navigasyon
+        # olursa tamamlanmasını bekleyip, olmazsa (bazı senaryolarda hiç
+        # gerçekleşmeyebilir) sessizce devam ediyoruz.
+        try:
+            aktif_sayfa.wait_for_url(
+                re.compile(r"CommandName=LGoodsCollection\.Analyze"), timeout=15000
+            )
+        except Exception:
+            pass
+        _agsakinligini_bekle(aktif_sayfa)
+
     # --- FAZ 4: SEVK OLUŞTURMA ---
     # ✅ KESİN ÇÖZÜM BULUNDU [DOĞRULANMIŞ, kullanıcının paylaştığı sayfa
     # kaynağıyla (view-source) teyit edildi]: Sayfanın en altında

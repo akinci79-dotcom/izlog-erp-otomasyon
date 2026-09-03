@@ -610,6 +610,37 @@ Bu düzeltme, kod incelemesiyle (gerçek sayfa kaynağı) kanıtlanmış olsa da
 henüz canlı bir Sevk denemesiyle TEYİT EDİLMEDİ -- bir sonraki canlı testte
 kesinleşecek.
 
+**✅ Yük fazı 3 satırlı gerçek senaryoda BAŞARILI [DOĞRULANMIŞ, canlı test]**:
+`Y-576188` (Navlun + 2 Ek_Navlun satırı, hepsi aynı faturaya `IZK2026000000076`
+bağlı) sorunsuz oluşturuldu, yeni Yük No `Y-578367`. Bu, önceki testlerde
+sadece 1-2 satırla doğrulanmış olan fatura eşleştirme mantığının 3 satırlı
+bir senaryoda da çalıştığını gösteriyor.
+
+**✅ YENİ BULGU — Ana Kaydet sonrası ERP GERÇEK bir navigasyon yapıyor
+[DOĞRULANMIŞ, canlı testte gözlemlendi]**: `#btnSave_CD` tıklandıktan sonra
+referans no alanı AJAX ile ANINDA güncelleniyor (`wait_for_function` bunu
+yakalıyor), ama ERP kısa bir süre sonra AYRICA aynı pencerede gerçek bir
+tarayıcı navigasyonu yapıp `GeneralCard.aspx?CommandName=LGoodsCollection.
+Analyze&ObjectId=...` (İncele modu) adresine gidiyor. Checkpoint'ten hemen
+sonra sağ tık denenirse bu navigasyonla YARIŞ durumuna girip "element was
+detached from the DOM" / "element is not enabled" hatalarına yol açabiliyor
+-- canlı testte tam bu semptomla karşılaşıldı (ilginç şekilde bu test hâlâ
+ESKİ `#TabControl_txt_ReferenceNo_I` hedefini kullanıyordu, yeni `_lbl_
+lblReferenceNo` düzeltmesi henüz Windows'a çekilmemişti; ama navigasyon
+yarışı BAĞIMSIZ bir sorun ve yeni hedefle de tekrarlanabilirdi).
+**Düzeltme**: Checkpoint sonrası, sağ tık denemeden önce bu navigasyonun
+(olursa) tamamlanmasını bekleyen bir adım eklendi (`wait_for_url` ile
+`CommandName=LGoodsCollection.Analyze` kalıbı, 15sn; olmazsa sessizce
+devam) + `_agsakinligini_bekle`.
+
+**Önemli**: Log'daki `ObjectId=650644` DOĞRU şekilde YENİ oluşturulan
+Yük'e (`Y-578367`) ait çıktı (navigasyon sonrası ReferenceNo alanı
+`Y-578367` gösteriyordu) -- kaynak Yük'ün (`Y-576188`) ObjectId'si DEĞİL.
+Bu navigasyon ERP'nin KENDİ dahili davranışı, bizim GOODS_ID/doğrudan-URL
+kodumuzla (`_kayitli_yuk_detay_formunu_direkt_url_ile_ac`) ilgisi yok --
+o kod SADECE devam (resume) akışında çalışıyor, bu test taze oluşturma
+(`atla_faz_123=False`) senaryosuydu, o fonksiyon hiç çağrılmadı.
+
 ### ✅ BÜYÜK BULUŞ — İncele ekranı DOĞRUDAN URL ile açılabiliyor, buton tıklamaya hiç gerek yok [DOĞRULANMIŞ]
 Kullanıcının paylaştığı ikinci ekran görüntüsünün tarayıcı adres çubuğunda
 şu URL görüldü:
