@@ -1292,6 +1292,16 @@ salt-okunur (İncele) olduğu bilinen yollar kullanılmalı; "Düzelt" veya
 belirsiz davranışlı aksiyonlar (çift tıklama gibi) asla yedek olarak
 kullanılmamalı.
 
+**Not (2026-09-03 haftası testleri sonucu)**: Bu hafta oluşturulan ve
+"Mal Depoda mı?" işareti (bu bug nedeniyle) yanlış kalmış olabilecek
+Yük kayıtları, kullanıcı tarafından ERP otomasyonu ÜZERİNDEN değil,
+doğrudan SQL ile toplu olarak düzeltildi (manuel veritabanı güncellemesi).
+Yani bu geçmiş kayıtlar için otomasyonda ek bir "düzeltme" adımı
+gerekmiyor -- sorun sadece GEÇMİŞE dönük, kod düzeltmesi (checkbox
+toggle + riskli Düzelt/çift-tıklama yedeklerinin kaldırılması) BUNDAN
+SONRA oluşturulacak Yükler için sorunun tekrarlanmasını önlüyor. Sonraki
+test turu gerçek verilerle önümüzdeki hafta yapılacak.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
