@@ -72,8 +72,17 @@ güvenilmemeli.
    (fiyat + fatura bağlantısı) tek tek eklenir.
 4. Ana form `#btnSave_CD` ile kaydedilir → yeni Yük No (`Y-...`) üretilir.
    Bu noktada Excel'e checkpoint yazılır (durum: `YÜK OLUŞTU`).
-5. Yeni Yük üzerinde sağ tık → "Sevk Oluştur" menüsü ile Sevk formuna geçilir
-   (bu adım YENİ pencere açmaz, aynı sayfada devam eder).
+5. Yeni Yük üzerinde sağ tık → "Sevk Oluştur" menüsü ile Sevk formuna geçilir.
+   **✅ GÜNCELLENDİ [DOĞRULANMIŞ, kullanıcı canlı ERP'de gözlemleyerek
+   bildirdi]**: Bu menü, Yük penceresi **İncele modunda** açıkken çıkıyor
+   (Yük Listesi'ndeki "İncele" butonuyla açılan pencere), ve sağ tık
+   **Referans No alanının üzerine değil**, pencerenin **üst tarafındaki
+   boş bir alana** yapılmalı. Eski kod (ve bu maddenin önceki hali) hem
+   "Düzelt" butonunu hem `#TabControl_txt_ReferenceNo_I` alanı üzerine sağ
+   tıklamayı deniyordu -- ikisi de YANLIŞ çıktı, canlı testte 30sn timeout'a
+   düştü (bkz. aşağıdaki "Sevk Oluştur fazı" bölümündeki detaylı not).
+   Kesin bir seçici (selector) için kullanıcıdan F12 ile o boş alanın
+   id/class'ı bekleniyor -- şimdilik [VARSAYIM/TODO].
 6. Sevk formunda tarih, plaka ve sevk fiyatı girilir, kaydedilir → yeni Sevk
    No (`S-...`) üretilir. Durum: `BAŞARILI`.
 7. Hata olursa durum `HATA_YUK` (Yük aşamasında) veya `HATA_SEVK` (Sevk
@@ -526,9 +535,28 @@ seçip "Düzelt"e ELLE tıklamasını ve ne olduğunu (yeni pencere/aynı sayfa/
 hiç tepki) bildirmesini istiyor -- bu, ID'yi F12 ile kesinleştirmenin
 en hızlı yolu.
 
-Bu v2 düzeltmesi HENÜZ canlı ekranla teyit edilmedi -- ilk canlı Sevk
-denemesinde bir hata çıkarsa, önce buradaki yeni `RuntimeError` mesajlarına
-ve `debug_sevk_*` ekran görüntülerine bakılmalı.
+Bu v2 düzeltmesi de canlı testte YETERSİZ çıktı -- aşağıdaki nota bakın.
+
+**✅ KULLANICI CANLI ERP'DE KRİTİK BİLGİ PAYLAŞTI [DOĞRULANMIŞ]**: "Sevk
+Oluştur" menüsü, Yük penceresi **İncele modunda** açıkken çıkıyor (yani
+Yük Listesi'ndeki "İncele" butonuyla açılan pencere -- "Düzelt" ile açılan
+DEĞİL). Ayrıca sağ tık **Referans No alanının üzerine değil**, pencerenin
+**üst tarafındaki boş bir alana** yapılınca çıkıyor. Bu, v1 VE v2
+düzeltmelerinin ikisinin de neden başarısız olduğunu açıklıyor: hem "Düzelt"
+butonunu denemek hem `#TabControl_txt_ReferenceNo_I` alanına sağ tıklamak
+YANLIŞTI.
+
+**⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan F12 ile kesin bilgi bekleniyor,
+kod kasıtlı olarak HENÜZ değiştirilmedi]**: "İncele" butonunun gerçek
+DevExpress id'si bilinmiyor (körlemesine tahmin etmek yerine kullanıcıya
+soruldu). "Üst taraftaki boş alan"ın tam DOM konumu/id'si de bilinmiyor --
+koordinat bazlı ("KABA KUVVET") tıklama önceki turlarda (Fatura kutusu
+sorununda) güvenilmez çıktığı için burada da tercih edilmiyor. Kullanıcıya
+sorulan sorular: (1) "İncele" YENİ sekme mi açıyor yoksa aynı sekmede mi
+değişiyor (Kopya'nın yaptığı gibi)? (2) Sağ tıklanan "boş alan" tam olarak
+nerede (Referans No kutusunun yanı / sekme başlıklarının üstü / pencere
+başlık çubuğu)? (3) O alana F12 ile bakıp id/class paylaşılabilir mi?
+Cevaplar gelince kod kesin seçicilerle güncellenecek.
 
 ## Format Kuralları [DOĞRULANMIŞ]
 
