@@ -623,15 +623,41 @@ Bu, İş Akışı bölümündeki "Sevk Oluştur bu adım YENİ pencere açmaz" n
 [VARSAYIM, henüz doğrulanmamış] olduğunu hatırlatıyor -- gerçek davranış
 FARKLI olabilir.
 
-**Uygulanan düzeltme (önden, henüz canlı teyit yok)**: "Sevk Oluştur"
-tıklaması artık `expect_page(timeout=3000)` ile sarmalanıyor -- eğer
-GERÇEKTEN yeni bir pencere açılırsa `aktif_sayfa` o pencereye geçiyor,
-açılmazsa (muhtemel, eski varsayım doğruysa) davranış DEĞİŞMİYOR.
+**✅ TEYİT EDİLDİ [kullanıcı canlı ekran görüntüsüyle doğruladı]**: "Sevk
+Oluştur" GERÇEKTEN yeni bir pencere açıyor. Yeni pencerenin toolbar'ı
+tamamen farklı: **"Kaydet, Kaydet Kapat, Kaydet Yeni, Dosya"** + hamburger
++ "Vazgeç" + sağ üstte yeşil "Yeni" + kırmızı "Sevk" başlığı (Yük'ün
+İncele/Düzelt toolbar'ından TAMAMEN farklı). Sekmeler: "Sevk", "Sevk Yük
+Detayı", "Sevk Gözergah Hareketleri". Alanlar da farklı isimlerle:
+"Taşıyıcı Bilgileri" bölümü içinde "Çekici Seri/Plaka No", "Araç Ünite
+Tipi", "Sürücü Tel", "Sürücü Ad/Soyadı" (+ "Hızlı Araç" butonu), "Belge
+Numarası" (örn. `S-644110` -- pencere açılır açılmaz DOLU görünüyor,
+Kaydet'e basılmadan ÖNCE bile). "Finans Bilgileri" grid'i Yük'teki gibi
+bir "+"/EmptyRow_btnNew butonu değil, **"Yeni kayıt için tıklayınız"**
+yazılı bir satır ile yeni kayıt ekliyor gibi görünüyor -- FARKLI bir
+etkileşim deseni.
 
-Kullanıcıdan otomasyonun bu hatada aldığı ekran görüntüsü
-(`debug_sevk_form_acilmadi_{kaynak_yuk_no}.png`) bekleniyor -- kesin kök
-neden bu görüntüyle netleşecek (yeni pencere mi, onay diyaloğu mu, hiçbir
-şey mi olmadı).
+**İlk düzeltme denemesi YETERSİZ çıktı**: `expect_page(timeout=3000)` bu
+pencereyi YAKALAYAMADI -- muhtemelen pencerenin açılması 3 saniyeden uzun
+sürdü (Kaydet sonrası Analyze navigasyonunun da birkaç saniye sürdüğü
+zaten biliniyordu, benzer bir gecikme burada da olabilir). **Düzeltme**:
+zaman aşımı 15sn'ye çıkarıldı, ayrıca yeni pencerenin `load` state'ine
+ulaşması da bekleniyor.
+
+**⚠️ HÂLÂ AÇIK — Sevk formunun GERÇEK alan id'leri bilinmiyor
+[VARSAYIM/TODO]**: Bu form Yük'ten tamamen farklı bir ekran (muhtemelen
+"TabControl" önekini bile kullanmıyor, farklı bir kontrol kök adı olabilir)
+-- kodun şu anki `#TabControl_bte_TractorSerialNoPlateNo_I`,
+`#TabControl_grd_LTransOpDetailCollection_*`, `#TabControl_txt_
+TransportNo_I` seçicileri Yük tarafının isimlendirme kalıbından TAHMİN
+edilmişti ve bu ekran görüntüsüyle YANLIŞ olduğu netleşti. Kullanıcıdan bu
+Sevk formunun TAM sayfa kaynağı (view-source) bekleniyor -- kesin alan
+id'leri gelmeden bu kısım tahminle düzeltilmeyecek (Fatura kutusundaki
+"KABA KUVVET" deneyiminin tekrarlanmaması için).
+
+Beklenen sıra [kullanıcı doğruladı]: önce Sevk Tarihi (Belge Tarihi), sonra
+Plaka (Çekici Seri/Plaka No), sonra Alış Fiyatı (Finans Bilgileri
+grid'inde satır ekleme).
 
 **✅ Yük fazı 3 satırlı gerçek senaryoda BAŞARILI [DOĞRULANMIŞ, canlı test]**:
 `Y-576188` (Navlun + 2 Ek_Navlun satırı, hepsi aynı faturaya `IZK2026000000076`

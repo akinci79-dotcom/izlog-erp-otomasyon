@@ -1165,21 +1165,20 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     )
     sevk_olustur_menu.first.wait_for(state="visible", timeout=15000)
 
-    # ⚠️ CANLI TESTTE, "Sevk Oluştur" tıklandıktan sonra Plaka alanı 20sn
-    # içinde hiç görünmedi [henüz kesin neden bilinmiyor -- kullanıcıdan
-    # o anki ekran görüntüsü bekleniyor]. Bir güçlü olasılık: "Kopya"
-    # butonu (Faz 1) YENİ bir pencere açıyor -- "Sevk Oluştur" da AYNI
-    # şekilde davranıp yeni pencere açabilir, biz ise eski pencerede
-    # beklemeye devam ediyor olabiliriz. Bu ihtimali (varsa) yakalamak
-    # için tıklama artık `expect_page()` ile KISA bir zaman aşımıyla
-    # (3sn) sarmalanıyor -- yeni pencere açılmazsa (muhtemel, çünkü bu
-    # zaten "aynı sayfada devam eder" şeklinde varsayılıyordu) davranış
-    # DEĞİŞMİYOR, eskisi gibi aynı sayfada devam edilir.
+    # ✅ DOĞRULANMIŞ [kullanıcı canlı ekran görüntüsüyle teyit etti]:
+    # "Sevk Oluştur" GERÇEKTEN yeni bir pencere açıyor -- Sevk formu
+    # (toolbar: "Kaydet, Kaydet Kapat, Kaydet Yeni" + "Sevk" başlığı,
+    # tamamen farklı alan adları/yerleşimi) Yük'ün İncele penceresinden
+    # BAMBAŞKA bir ekran. İlk denemede `expect_page(timeout=3000)` bu
+    # pencereyi YAKALAYAMADI -- muhtemelen pencerenin açılması 3sn'den
+    # uzun sürdü (Kaydet sonrası Analyze navigasyonunun da birkaç saniye
+    # sürdüğü zaten gözlemlenmişti). Zaman aşımı 15sn'ye çıkarıldı.
     yeni_pencere = None
     try:
-        with aktif_sayfa.context.expect_page(timeout=3000) as pencere_bilgisi:
+        with aktif_sayfa.context.expect_page(timeout=15000) as pencere_bilgisi:
             sevk_olustur_menu.first.click()
         yeni_pencere = pencere_bilgisi.value
+        yeni_pencere.wait_for_load_state("load", timeout=15000)
     except Exception:
         yeni_pencere = None
 
