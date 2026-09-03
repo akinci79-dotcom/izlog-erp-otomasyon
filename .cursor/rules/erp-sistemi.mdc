@@ -683,12 +683,16 @@ kontrol edince Sevk'in **GERÇEKTEN oluşmadığını** gördü.
 (`#TabControl_txt_TransportNo_I`), pencere AÇILIR AÇILMAZ -- Kaydet'e HİÇ
 basılmadan, Plaka/Tarih hâlâ boşken -- ZATEN dolu geliyor (bkz. yukarıdaki
 ekran görüntüsü notu: "Belge Numarası: S-644110" pencere ilk açıldığında
-görünüyordu). Bu numara **kayıt anında değil, form açılırken rezerve**
-ediliyor (muhtemelen bir sıra/sequence numarası). Eski kontrol (`aktif_
-sayfa.wait_for_function(...val.startsWith("S-")...)`) SADECE "alan S- ile
-başlıyor mu" diye bakıyordu -- bu koşul Kaydet'e hiç basılmasa (veya
-basılıp başarısız olsa) bile EN BAŞTAN True dönerdi. Yani bu kontrol
-HİÇBİR ZAMAN gerçek bir kayıt doğrulaması yapmıyordu.
+görünüyordu). **✅ Kullanıcı düzeltti [DOĞRULANMIŞ]**: Bu numara
+"rezerve edilmiş" DEĞİL -- o an BOŞTA olan sıradaki numara gösteriliyor;
+işlem tamamlanmadan başka bir işlem o numarayı kullanırsa, GERÇEK Kaydet
+anında ERP otomatik olarak bir SONRAKİ müsait numarayı atayabilir. Yani
+form açılışında görünen numara ile Kaydet SONRASI gerçekte atanan numara
+FARKLI olabilir -- bu yüzden numara Kaydet TAMAMLANDIKTAN SONRA okunmalı.
+Eski kontrol (`aktif_sayfa.wait_for_function(...val.startsWith("S-")...)`)
+SADECE "alan S- ile başlıyor mu" diye bakıyordu -- bu koşul Kaydet'e hiç
+basılmasa (veya basılıp başarısız olsa) bile EN BAŞTAN True dönerdi. Yani
+bu kontrol HİÇBİR ZAMAN gerçek bir kayıt doğrulaması yapmıyordu.
 
 **Düzeltme**: Yük tarafında zaten doğrulanmış "Kaydet sonrası ERP gerçek
 navigasyon yapıyor" deseniyle (`CommandName=L...Collection.New&ObjectId=0`
@@ -699,7 +703,11 @@ fonksiyonu) -- bu, gerçek bir veritabanı kaydının oluştuğunun tek
 güvenilir kanıtı (alan değeri tek başına güvenilir DEĞİL). Navigasyon
 gerçekleşmezse net bir `RuntimeError` ile durur (Excel'e sahte
 "BAŞARILI" yazılmaz). Navigasyon olsa bile Transport No alanı hâlâ
-`S-...` formatında değilse ek bir kontrolle yine hata verilir.
+`S-...` formatında değilse ek bir kontrolle yine hata verilir. **Önemli**:
+`yeni_sevk_no` değeri bu navigasyon DOĞRULANDIKTAN SONRA okunuyor -- bu
+sayede form açılışında görünen (ve başkası tarafından "kapılmış" olabilecek)
+provizyonel numara değil, Kaydet'in GERÇEKTEN atadığı final numara
+Excel'e yazılıyor.
 
 **[VARSAYIM/TODO, henüz F12 ile teyit edilmedi]**: Kaydet sonrası
 Sevk'in de tam olarak `LTransportCollection.Analyze` komutuna geçtiği

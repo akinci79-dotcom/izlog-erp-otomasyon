@@ -1285,12 +1285,17 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     # ⚠️ KRİTİK BUG BULUNDU [DOĞRULANMIŞ, kullanıcı canlı testte teyit etti]:
     # Sevk formunun "Belge Numarası" (`#TabControl_txt_TransportNo_I`) alanı
     # pencere AÇILIR AÇILMAZ (Kaydet'e hiç basılmadan, Plaka/Tarih hâlâ
-    # boşken) ZATEN dolu geliyor (örn. "S-644110") -- bu numara kayıt
-    # anında değil, form AÇILIRKEN rezerve ediliyor. Eski kontrol sadece
-    # "alan S- ile başlıyor mu" diye bakıyordu -- bu, Kaydet HİÇ
-    # başarılı olmasa (veya hiç tıklanmasa) bile baştan True dönerdi.
-    # Canlı testte tam bu oldu: Excel'e "S-644110 / BAŞARILI" yazıldı ama
-    # Sevk sistemde GERÇEKTEN oluşmadı.
+    # boşken) ZATEN dolu geliyor (örn. "S-644110"). NOT: Bu numara
+    # "rezerve edilmiş" değil -- kullanıcı düzeltti: o an BOŞTA olan
+    # sıradaki numara gösteriliyor; işlem tamamlanmadan başka biri (veya
+    # başka bir işlem) o numarayı kullanırsa, GERÇEK Kaydet anında ERP
+    # otomatik olarak bir SONRAKİ müsait numarayı atayabilir -- yani
+    # form açılışında görünen numara ile Kaydet SONRASI gerçekte atanan
+    # numara FARKLI olabilir. Eski kontrol sadece "alan S- ile başlıyor
+    # mu" diye bakıyordu -- bu, Kaydet HİÇ başarılı olmasa (veya hiç
+    # tıklanmasa) bile baştan True dönerdi. Canlı testte tam bu oldu:
+    # Excel'e "S-644110 / BAŞARILI" yazıldı ama Sevk sistemde GERÇEKTEN
+    # oluşmadı.
     #
     # ✅ DÜZELTME: Yük tarafında zaten doğrulanmış "Kaydet sonrası ERP
     # gerçek navigasyon yapıyor" deseniyle (New&ObjectId=0 -> Analyze&
@@ -1322,8 +1327,8 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             f"[{kaynak_yuk_no}] HATA: Sevk ana Kaydet sonrası ERP'nin GERÇEKTEN "
             f"kaydettiğini gösteren navigasyon (New&ObjectId=0 -> Analyze&ObjectId=...) "
             f"20sn içinde gerçekleşmedi -- yani Sevk sisteme GERÇEKTEN kaydedilmemiş "
-            f"olabilir (Belge Numarası alanı zaten form açılırken önceden dolu "
-            f"geldiği için tek başına güvenilir değil). {ek} "
+            f"olabilir (Belge Numarası alanı Kaydet'ten ÖNCE de o an boşta olan bir "
+            f"numarayı gösterebildiği için tek başına güvenilir değil). {ek} "
             f"Ekran görüntüsü: {teshis_dosyasi}. (Orijinal hata: {orijinal_hata})"
         ) from orijinal_hata
 
