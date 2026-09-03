@@ -641,6 +641,19 @@ kodumuzla (`_kayitli_yuk_detay_formunu_direkt_url_ile_ac`) ilgisi yok --
 o kod SADECE devam (resume) akışında çalışıyor, bu test taze oluşturma
 (`atla_faz_123=False`) senaryosuydu, o fonksiyon hiç çağrılmadı.
 
+**✅ GÜVENLİK KİLİDİ SAĞLAMLAŞTIRILDI [kullanıcı isteği: yeniden
+denemelerde mükerrer Yük oluşmasın]**: `atla_faz_123` (Faz 1-3'ün, yani
+Kopya + veri girişinin, atlanıp atlanmayacağı) kararı eskiden `mevcut_durum
+in ["YÜK OLUŞTU", "HATA_SEVK"] AND onceki_yeni_yuk_no` şartına bağlıydı --
+DURUM metni beklenmedik bir değerde olursa (örn. elle bozulma,
+`HATA_BİLİNMEYEN`, ya da gelecekte eklenecek yeni bir durum) bu koruma
+atlanıp AYNI Yük tekrar Kopyalanabilirdi. Artık kural basitleştirildi:
+**Excel'in H kolonunda (YENI_YUK_NO) HERHANGİ bir değer varsa**, DURUM
+metni ne olursa olsun Yük zaten oluşturulmuş kabul edilir ve Faz 1-3 ASLA
+tekrar çalıştırılmaz -- sadece Sevk'ten devam edilir. Hata yakalama
+bloğundaki karşılık gelen kontrol (`yuk_zaten_olusmus`) zaten bu H-kolonu
+kontrolünü içeriyordu (tutarlı).
+
 ### ✅ BÜYÜK BULUŞ — İncele ekranı DOĞRUDAN URL ile açılabiliyor, buton tıklamaya hiç gerek yok [DOĞRULANMIŞ]
 Kullanıcının paylaştığı ikinci ekran görüntüsünün tarayıcı adres çubuğunda
 şu URL görüldü:

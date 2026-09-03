@@ -563,7 +563,13 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
     islem_yuk_no = kaynak_yuk_no
     aktif_sayfa = page
 
-    if mevcut_durum in ["YÜK OLUŞTU", "HATA_SEVK"] and onceki_yeni_yuk_no:
+    # GÜVENLİK KİLİDİ [kullanıcı isteği: yeniden denemelerde mükerrer Yük
+    # oluşmasın]: DURUM metnine ("YÜK OLUŞTU"/"HATA_SEVK") bakmak yerine,
+    # Excel'in H kolonunda (YENI_YUK_NO) HERHANGİ bir değer varsa Yük'ün
+    # zaten oluşturulduğu kabul edilip Faz 1-3 (Kopya + veri girişi) ASLA
+    # tekrar çalıştırılmaz -- DURUM beklenmedik/elle bozulmuş bir değerde
+    # olsa bile (örn. "HATA_BİLİNMEYEN" ya da boş) bu koruma devrede kalır.
+    if onceki_yeni_yuk_no:
         atla_faz_123 = True
         islem_yuk_no = onceki_yeni_yuk_no
 
