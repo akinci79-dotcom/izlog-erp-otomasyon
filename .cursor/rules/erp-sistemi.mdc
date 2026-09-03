@@ -455,13 +455,17 @@ Oluştur adımı **hiçbir şekilde** (ne DRY_RUN ne DERİN_TEST) test edilmedi;
 ilk gerçek deneme canlı veriyle olacak.
 
 Bu riski azaltmak için, Yük tarafında defalarca sorun çıkardığı DOĞRULANMIŞ
-iki desen ÖNCEDEN (canlı test beklenmeden) Sevk koduna da uygulandı:
+desenler ÖNCEDEN (canlı test beklenmeden) Sevk koduna da uygulandı:
 - **Plaka (`#TabControl_bte_TractorSerialNoPlateNo_I`) ve Sevk Fiyatı
   (`#TabControl_grd_LTransOpDetailCollection_DXEditor4_I`) alanlarında
   `.fill()` KALDIRILDI**, yerine Yük'ün Tarih/Tutar alanlarında kanıtlanmış
   güvenli desen kullanılıyor: tıkla → `Ctrl+A` + `Delete` → karakter karakter
   `type()` → yazılan değerin GERÇEKTEN tutup tutmadığı `input_value()` ile
   doğrulanıyor (tutmazsa ekran görüntüsüyle birlikte net bir `RuntimeError`).
+  Plaka'da Enter yerine Tab kullanılıyor (Yük grid'inde Enter satırı erken
+  kaydetmeye çalışabiliyordu). Plaka eşleşmesi boşluk/tire duyarsız
+  (`_plaka_normalize`); tutar eşleşmesi `Decimal` + 0,01 tolerans
+  (`_input_tutarini_coz`).
 - **`_emptyrow_bekle_teshisli` fonksiyonu genelleştirildi** (`grid_onek`
   parametresi eklendi, varsayılan Yük'ün `LGoodsOpDetailCollection` grid'i).
   Sevk fiyat satırının Kaydet'ine basıldıktan SONRA, ana Kaydet'e
@@ -470,9 +474,33 @@ iki desen ÖNCEDEN (canlı test beklenmeden) Sevk koduna da uygulandı:
   kullanılıyor -- Yük tarafında satır bazlı Kaydet sonrası grid'in "hazır"
   duruma dönmesinin bazen uzun sürdüğü (30-90sn) gözlemlendiği için, aynı
   riskin Sevk'te de olabileceği varsayılıyor.
+- **Sevk fiyat satırı da Yük gibi "zaten açık mı?" diye bakıyor**
+  (`_fiyat_satirini_duzenlemeye_ac`): `DXEditor4_I` görünürse
+  `EmptyRow_btnNew`'e basılmıyor.
+- **"Sevk Oluştur" sonrası form beklemesi**: plaka alanı 20sn içinde
+  görünmezse popup metni + `debug_sevk_form_acilmadi_*.png` ile net hata.
+  Ana Kaydet sonrası `S-...` oluşmazsa aynı şekilde
+  `debug_sevk_kaydet_timeout_*.png`.
 
-Bu düzeltmeler HENÜZ canlı ekranla teyit edilmedi (sadece Yük tarafındaki
-benzer sorunlardan çıkarılan öngörüyle önden uygulandı) -- ilk canlı Sevk
+**✅ Kod incelemesiyle bulunan iki Sevk devam hatası (henüz canlı teyit yok)**:
+1. **`YÜK OLUŞTU` / `HATA_SEVK` devamında detay formu açılmıyordu**
+   [kod incelemesi]: Liste satırı seçilip hemen `#TabControl_txt_ReferenceNo_I`
+   üzerine sağ tıklanıyordu. O alan listede yok — Sevk menüsü hiç çıkmazdı.
+   Düzeltme: `_kayitli_yuk_detay_formunu_ac()` önce satıra çift tıklar
+   (yeni pencere veya aynı sayfa), olmazsa `#btnUpdate_CD` / `#btnEdit_CD`
+   / `#btnOpen_CD` dener. Açılan referans no beklenen Yük no ile
+   eşleşmezse durur. [VARSAYIM/TODO]: çift tıklamanın gerçekten formu
+   açtığı canlı ERP'de henüz teyit edilmedi.
+2. **Aynı turda Yük oluşup Sevk patlarsa checkpoint siliniyordu**
+   [kod incelemesi]: `except` bloğu döngü başındaki eski `mevcut_durum`'a
+   bakıyordu. Checkpoint `YÜK OLUŞTU` yazmış olsa bile durum `HATA_YUK`
+   oluyor, kolon H (yeni Yük no) `None` yapılıyordu — sonraki çalıştırma
+   AYNI Yük'ü tekrar kopyalıyordu. Düzeltme: Excel'deki GÜNCEL durum /
+   H kolonu okunuyor; Yük no varsa `HATA_SEVK` yazılır, H kolonu korunur.
+   Ekran görüntüsü alınamazsa bile durum artık `HATA_BİLİNMEYEN`'e
+   düşürülmüyor.
+
+Bu düzeltmeler HENÜZ canlı ekranla teyit edilmedi -- ilk canlı Sevk
 denemesinde bir hata çıkarsa, önce buradaki yeni `RuntimeError` mesajlarına
 ve `debug_sevk_*` ekran görüntülerine bakılmalı.
 
@@ -515,7 +543,10 @@ ve `debug_sevk_*` ekran görüntülerine bakılmalı.
 
 `BAŞARILI` ve `DRY_RUN BAŞARILI` durumundaki satırlar bir sonraki çalıştırmada
 atlanır. `YÜK OLUŞTU`/`HATA_SEVK` durumundaki satırlar, Yük tekrar
-oluşturulmadan doğrudan Sevk fazından devam eder.
+oluşturulmadan doğrudan Sevk fazından devam eder: önce kayıtlı Yük detay
+formu açılır (liste satırına çift tık / Düzelt butonu), sonra "Sevk Oluştur".
+Aynı turda Yük kaydedilip Sevk patlarsa durum `HATA_SEVK` olur ve H kolonundaki
+yeni Yük no silinmez.
 
 ## Oracle Veri Katmanı [DOĞRULANMIŞ]
 
