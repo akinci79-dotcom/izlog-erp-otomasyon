@@ -36,6 +36,23 @@ playwright install chromium
 Oracle Instant Client'ın `ayarlar.py`/`oracle_okuyucu.py` içinde belirtilen yolda
 (`C:\instantclient\instantclient_19_32`) kurulu olması gerekir.
 
+## Geliştirme Ortamı (Cloud Agent / Linux)
+
+Cloud Agent (Linux) ortamı `.cursor/environment.json` ile otomatik kurulur;
+kurulum adımları `.cursor/install.sh` içindedir (venv oluşturma, bağımlılıklar,
+Playwright Chromium + Chrome, `ayarlar.py` şablonundan seed). Kurulum sonrası:
+
+```bash
+./venv/bin/python excel_olustur.py     # islem_listesi.xlsx şablonunu üretir
+```
+
+> ⚠️ Linux/Cloud ortamında **tam otomasyon çalıştırılamaz**: `oracle_okuyucu.py`
+> içe aktarılırken Windows'a özel Oracle Instant Client yolunu
+> (`C:\instantclient\...`) yükler ve iç ağdaki Oracle (`172.17.8.11`) ile ERP
+> (`erp.izlog.com.tr`) sunucularına erişim gerektirir. Cloud ortamı yalnızca
+> geliştirme/derleme (bağımlılıklar, Playwright, Excel şablonu, sözdizimi
+> kontrolü) içindir; uçtan uca çalıştırma İzlog'un Windows sunucusunda yapılır.
+
 `ayarlar.py` artık depoya dahil değil (`.gitignore`'da), böylece gerçek
 şifreleriniz asla git'e commit edilmez ve `git pull` bu dosyaya hiç dokunmaz.
 İlk kurulumda şablon dosyayı kopyalayıp kendi bilgilerinizi girin:
