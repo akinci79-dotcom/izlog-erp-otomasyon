@@ -114,6 +114,58 @@ def devexpress_tarih_yaz(sayfa, selector, tarih_metni):
     sayfa.wait_for_timeout(500)
 
 
+def _checkbox_isaretli_mi(sayfa, span_selector):
+    """
+    DevExpress checkbox'ının (ASPxCheckBox) GÖRÜNÜR span'inin `class`
+    özniteliğine bakarak o an İŞARETLİ mi olduğunu döndürür.
+
+    NEDEN BÖYLE: DevExpress bu bilgiyi CSS SINIF ADINDA taşıyor -- işaretli
+    durumda `dxWeb_edtCheckBoxChecked...`, işaretsiz durumda `dxWeb_
+    edtCheckBoxUnchecked...` sınıfı kullanılıyor (sayfa kaynağındaki
+    `imageProperties` JS meta verisiyle teyitli). "Unchecked" alt dizesi
+    "Checked"i de İÇERDİĞİ için (Un-Checked), doğru kontrol SADECE
+    "Unchecked" varlığına bakıp SONUCU TERSİNE çevirmek -- "Checked"
+    aramak yanlış pozitif verir (her zaman True döner).
+    """
+    try:
+        class_adi = sayfa.get_attribute(span_selector, "class") or ""
+    except Exception:
+        class_adi = ""
+    return "Unchecked" not in class_adi
+
+
+def _checkbox_isaretle(sayfa, span_selector, kaynak_yuk_no="", alan_adi=""):
+    """
+    Bir DevExpress checkbox'ını İŞARETLİ hale getirir.
+
+    ⚠️ KRİTİK BUG BULUNDU [kullanıcının canlı ERP raporunda fark ettiği
+    bir tutarsızlıkla ortaya çıktı]: Eski kod bu checkbox'a HER ZAMAN
+    KÖRLEMESİNE tıklıyordu (`aktif_sayfa.click(...)`), mevcut durumunu
+    hiç kontrol etmeden. DevExpress checkbox'ları tıklamayla TOGGLE olur
+    (aç/kapa) -- eğer "Kopya" ile açılan yeni pencerede bu kutu kaynak
+    Yük'ten kalıtımla ZATEN işaretli geliyorsa, körlemesine tıklama onu
+    İŞARETSİZ hale getirirdi (yanlışlıkla kapatırdı)! Kullanıcı, "Door to
+    Door" raporunda hiçbir kaydın görünmediğini fark edip bu ihtimali
+    sordu -- rapor büyük olasılıkla bu checkbox'a (ya da ilişkili bir
+    alana) göre filtreleniyor.
+
+    Düzeltme: önce mevcut durum okunuyor, SADECE işaretli DEĞİLSE
+    tıklanıyor (zaten işaretliyse HİÇ dokunulmuyor, gereksiz toggle
+    riski ortadan kalkıyor). Tıklama sonrası da GERÇEKTEN işaretli
+    olduğu doğrulanıyor -- değilse net bir hata verilir.
+    """
+    if not _checkbox_isaretli_mi(sayfa, span_selector):
+        sayfa.click(span_selector)
+        sayfa.wait_for_timeout(300)
+
+    if not _checkbox_isaretli_mi(sayfa, span_selector):
+        raise RuntimeError(
+            f"[{kaynak_yuk_no}] HATA: '{alan_adi}' checkbox'ı ({span_selector}) "
+            f"işaretlenmeye çalışıldı ama tıklama sonrası HÂLÂ işaretsiz "
+            f"görünüyor. Bu satırın işlenmesi durduruldu."
+        )
+
+
 def _agsakinligini_bekle(sayfa, timeout=10000, yedek_bekleme=1500):
     """
     wait_for_load_state("networkidle") DevExpress'in arka planda sürekli
@@ -712,7 +764,10 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         # dayanıklı.
         aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Y.k Di.er Bilgiler")).first.click()
         aktif_sayfa.wait_for_selector("#TabControl_chk_IsGoodsInWhouse_S_D", state="visible", timeout=5000)
-        aktif_sayfa.click("#TabControl_chk_IsGoodsInWhouse_S_D")
+        _checkbox_isaretle(
+            aktif_sayfa, "#TabControl_chk_IsGoodsInWhouse_S_D",
+            kaynak_yuk_no, "Mal Depoda mı?"
+        )
 
         aktif_sayfa.wait_for_timeout(500)
         aktif_sayfa.locator("span.dx-vam").filter(has_text=re.compile(r"Yurti.i Y.k Tan.m.")).first.click()

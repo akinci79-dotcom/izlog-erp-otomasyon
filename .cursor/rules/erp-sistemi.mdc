@@ -1220,6 +1220,36 @@ burada da kullanılıyor, ama bu kontrolün YANLIŞ POZİTİF verip verme
 ihtimali henüz test edilmedi). Pencere sızıntısı düzeltmesi ve odak
 düzeltmesi sonrası bu hata tekrar görülürse, ayrıca incelenmesi gerekecek.
 
+### ⚠️⚠️ KRİTİK BUG BULUNDU VE DÜZELTİLDİ — "Mal Depoda mı?" checkbox'ı körlemesine tıklanıyordu, toggle riski vardı [DOĞRULANMIŞ, kullanıcı canlı ERP raporunda fark etti]
+Kullanıcı, ERP'de "Door to Door" (kapıdan kapıya) sevkiyatları getiren bir
+raporda hiçbir kaydın görünmediğini fark etti ve "Mal Depoda mı?"
+checkbox'ının GERÇEKTEN işaretlendiğinden şüphelendi -- doğru çıktı.
+
+**Kök neden**: `izlog_yuk_otomasyon.py`, "Yük Diğer Bilgiler" sekmesindeki
+"Mal Depoda mı?" checkbox'ına HER ZAMAN körlemesine tıklıyordu
+(`aktif_sayfa.click("#TabControl_chk_IsGoodsInWhouse_S_D")`), mevcut
+durumunu HİÇ kontrol etmeden. DevExpress checkbox'ları tıklamayla TOGGLE
+olur (işaretliyse işaretsiz yapar, işaretsizse işaretler). Eğer "Kopya"
+ile açılan yeni pencerede bu kutu kaynak Yük'ten kalıtımla ZATEN işaretli
+geliyorsa, körlemesine tıklama onu YANLIŞLIKLA İŞARETSİZ hale
+getiriyordu.
+
+**Düzeltme**: Yeni `_checkbox_isaretli_mi()` yardımcısı, DevExpress'in bu
+bilgiyi tuttuğu CSS SINIF ADINA bakıyor (`dxWeb_edtCheckBoxChecked...`
+vs `dxWeb_edtCheckBoxUnchecked...` -- sayfa kaynağındaki JS meta
+verisiyle teyitli). `_checkbox_isaretle()` artık ÖNCE mevcut durumu
+okuyor, SADECE işaretli DEĞİLSE tıklıyor (zaten işaretliyse hiç
+dokunmuyor), tıklama sonrası da GERÇEKTEN işaretli olduğunu doğruluyor --
+değilse net bir hata veriyor.
+
+**[VARSAYIM/TODO, henüz kesin teyit edilmedi]**: "Door to Door" raporunun
+TAM OLARAK bu checkbox'a mı yoksa ilişkili başka bir alana mı baktığı
+kesin değil -- ama bu, kod incelemesiyle bulunan GERÇEK bir bug olduğu
+için (kör toggle, mevcut durumdan bağımsız), düzeltilmesi her hâlükârda
+doğru. Bir sonraki canlı testte "Mal Depoda mı?" kutusunun GERÇEKTEN
+işaretli kaldığı ve "Door to Door" raporunda kayıtların göründüğü
+doğrulanmalı.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
