@@ -323,10 +323,14 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
     `#btnSave_CD`'nin de görünür olması isteniyor (ikisi de sadece GERÇEK
     detay formunda olur).
 
-    Deneme sırası: önce Yük Listesi araç çubuğundaki "Düzelt" butonu
-    (muhtemel id `#btnEdit_CD` -- "Kopya"→`#btnCopy_CD`, "Kaydet"→
-    `#btnSave_CD` kalıbıyla aynı isimlendirme varsayımı [VARSAYIM/TODO]),
-    ardından diğer olası id'ler, son çare olarak çift tıklama. Her adım
+    ✅ GÜNCEL BİLGİ [DOĞRULANMIŞ, kullanıcı canlı ERP ekran görüntüsüyle
+    teyit etti]: "Sevk Oluştur" menüsü SADECE Yük penceresi **İncele
+    modunda** açıkken çıkıyor (bu, "Düzelt" DEĞİL "İncele" butonuyla açılan
+    pencere -- toolbar'da "Yeni, Düzelt, Sil, İncele, Kopya, Filtre, Ara"
+    olarak görünüyor). Bu yüzden deneme sırası artık önce "İncele" butonu
+    (görünür METİN ile bulunuyor, id tahmini YAPILMIYOR -- Türkçe "İ"
+    karakteri bozulma riskine karşı regex joker kullanılıyor), sonra eski
+    id tahminleri (`#btnEdit_CD` vb.) son çare olarak kalıyor. Her adım
     `expect_page()` ile YENİ pencere açılışını yarış durumu olmadan bekler
     (eskiden sabit 800ms sonra pencere sayısı kontrol ediliyordu -- pencere
     800ms'den yavaş açılırsa bu kaçırılabiliyordu).
@@ -369,10 +373,30 @@ def _kayitli_yuk_detay_formunu_ac(page, islem_yuk_no, kaynak_yuk_no):
 
         return None
 
+    # ÖNCELİK: "İncele" butonu -- kullanıcı canlı ERP'de "Sevk Oluştur"
+    # menüsünün SADECE İncele modunda açılan pencerede çıktığını teyit etti.
+    # Metin ile bulunuyor (id tahmini YOK); "İ" harfi joker (".") ile
+    # eşleştiriliyor (dosya encoding bozulma riski, bkz. diğer Türkçe
+    # karakterli seçicilerdeki aynı savunma).
+    try:
+        incele_adayi = page.locator("a, span, div").filter(
+            has_text=re.compile(r"^\s*.ncele\s*$")
+        ).first
+        if incele_adayi.count() > 0:
+            sonuc = _eylemden_sonra_formu_bul(
+                lambda: incele_adayi.click(force=True, timeout=3000), "İncele butonu (metin ile)"
+            )
+            if sonuc is not None:
+                return sonuc
+    except Exception:
+        pass
+
     for btn_id, etiket in (
         ("#btnEdit_CD", "Düzelt butonu #btnEdit_CD"),
         ("#btnUpdate_CD", "Düzelt butonu #btnUpdate_CD"),
         ("#btnOpen_CD", "Aç butonu #btnOpen_CD"),
+        ("#btnView_CD", "İncele butonu #btnView_CD"),
+        ("#btnExamine_CD", "İncele butonu #btnExamine_CD"),
     ):
         try:
             btn = page.locator(btn_id)
@@ -1008,9 +1032,16 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
             checkpoint_kaydet(yeni_yuk_no)
 
     # --- FAZ 4: SEVK OLUŞTURMA ---
-    # ⚠️ HENÜZ CANLI/DERİN TESTTE HİÇ DENENMEDİ [VARSAYIM/TODO]: DERİN_TEST_MODU
-    # Sevk fazını hiç çalıştırmıyor. Aşağıdaki adımlar Yük tarafında kanıtlanmış
-    # desenlerle önden sertleştirildi; ilk canlı deneme bunları teyit edecek.
+    # ✅ DOĞRULANMIŞ [kullanıcı canlı ERP ekran görüntüsüyle teyit etti]:
+    # "Sevk Oluştur" menüsü, Yük penceresi İncele modundayken ve sağ tık
+    # ReferenceNo alanı DEĞİL, pencerenin üst tarafındaki BOŞ bir alana
+    # yapıldığında çıkıyor (küçük, tek satırlık bir popup olarak görünüyor).
+    # ⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan kesin seçici bekleniyor]:
+    # Bu "boş alan"ın tam DOM konumu/id'si henüz bilinmiyor -- koordinat
+    # tahmini yapmak yerine kullanıcıya soruldu (Fatura kutusundaki eski
+    # "KABA KUVVET" coord tıklama deneyiminin tekrarlanmaması için). Aşağıdaki
+    # satır HENÜZ eski (bilinen YANLIŞ) hedefi kullanıyor -- kesin bilgi
+    # gelince güncellenecek.
     aktif_sayfa.click("#TabControl_txt_ReferenceNo_I", button="right")
     # NOT: "ş" karakteri regex joker (".") ile eşleştiriliyor -- yukarıdaki
     # sekme başlıklarındaki encoding bozulma sorununa karşı aynı savunma.

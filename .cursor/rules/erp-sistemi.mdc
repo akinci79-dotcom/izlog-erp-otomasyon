@@ -546,17 +546,49 @@ düzeltmelerinin ikisinin de neden başarısız olduğunu açıklıyor: hem "Dü
 butonunu denemek hem `#TabControl_txt_ReferenceNo_I` alanına sağ tıklamak
 YANLIŞTI.
 
-**⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan F12 ile kesin bilgi bekleniyor,
-kod kasıtlı olarak HENÜZ değiştirilmedi]**: "İncele" butonunun gerçek
-DevExpress id'si bilinmiyor (körlemesine tahmin etmek yerine kullanıcıya
-soruldu). "Üst taraftaki boş alan"ın tam DOM konumu/id'si de bilinmiyor --
-koordinat bazlı ("KABA KUVVET") tıklama önceki turlarda (Fatura kutusu
-sorununda) güvenilmez çıktığı için burada da tercih edilmiyor. Kullanıcıya
-sorulan sorular: (1) "İncele" YENİ sekme mi açıyor yoksa aynı sekmede mi
-değişiyor (Kopya'nın yaptığı gibi)? (2) Sağ tıklanan "boş alan" tam olarak
-nerede (Referans No kutusunun yanı / sekme başlıklarının üstü / pencere
-başlık çubuğu)? (3) O alana F12 ile bakıp id/class paylaşılabilir mi?
-Cevaplar gelince kod kesin seçicilerle güncellenecek.
+**✅ KULLANICI İKİNCİ EKRAN GÖRÜNTÜSÜYLE DAHA FAZLA DETAY VERDİ [DOĞRULANMIŞ]**:
+- Sağ tık sonrası çıkan popup gerçekten SADECE tek bir satır/buton:
+  "Sevk Oluştur" (ikonlu, sarı vurgulu küçük kutu) -- tıklanan noktaya
+  yakın, herhangi bir konumda beliriyor (koordinat bazlı bir menü, ekranın
+  sabit bir yerinde değil).
+- **KRİTİK AKIŞ DÜZELTMESİ**: Yeni bir Yük'ü Kaydet'e bastıktan SONRA,
+  ERP zaten aynı pencerede kalıyor ve bu pencere OTOMATİK olarak İncele
+  moduna geçiyor (toolbar "Kaydet/Vazgeç"ten "Yeni, Düzelt, Sil, Kopya,
+  Dosya, Takip, Yorum, Etiket, ..., Vazgeç"e dönüşüyor). Yani TAZE
+  oluşturulan bir Yük için **tekrar Yük Listesi'ne dönüp arama yapmaya
+  hiç gerek yok** -- kod zaten doğru pencerede (`aktif_sayfa`) kalıyor,
+  sadece boş alana sağ tıklaması yeterli. Kullanıcı, kodun (eski hali)
+  Kaydet sonrası tekrar "kaynak no yazıp" Yük Listesi'ne (Kopya butonunun
+  olduğu ekrana) gittiğini ve ORADA patladığını gözlemledi -- bu, kod
+  incelemesiyle DOĞRULANDI: `uyumsoft_islemlerini_yap()`'ın EN BAŞINDA
+  HER ZAMAN `page.goto(ERP_YUK_LISTESI_URL)` + arama yapılıyor, ama bu
+  SADECE kaynak Yük'ü/devam Yük'ünü seçmek için gerekli olan başlangıç
+  adımı -- taze oluşturma akışında (`atla_faz_123=False`) bu arama kaynak
+  Yük için (Kopya'dan ÖNCE) yapılıyor, Kaydet SONRASI tekrar YAPILMIYOR;
+  kod zaten `aktif_sayfa`'da kalıyor. Kullanıcının gözlemlediği "tekrar
+  arama ekranına gidip patlama" durumu, sağ tık hedefinin YANLIŞ olması
+  (`#TabControl_txt_ReferenceNo_I`) yüzünden oluşan 30sn timeout'un kendisi
+  olabilir -- ekran görüntüsü hata anında hâlâ o pencerede kalmış
+  görünüyordu, "listeye dönmüş" değil. [VARSAYIM/TODO, kesinleşmedi]: Bu
+  yüzden kod DEĞİŞTİRİLMEDİ (zaten doğru davranıyordu), sadece sağ tık
+  hedefi düzeltilmesi gerekiyor.
+- **UYGULANAN DÜZELTME**: `_kayitli_yuk_detay_formunu_ac()` artık ÖNCE
+  "İncele" butonunu METİN ile arıyor (id tahmini yok, "İ" harfi joker
+  ile eşleştiriliyor -- Türkçe karakter encoding riski), sonra eski id
+  tahminlerine (`#btnEdit_CD` vb.) düşüyor.
+
+**⚠️ AÇIK SORU [VARSAYIM/TODO, kullanıcıdan kesin bilgi bekleniyor, sağ tık
+HEDEFİ kasıtlı olarak HENÜZ değiştirilmedi]**: "Üst taraftaki boş alan"ın
+tam DOM konumu/id'si bilinmiyor -- koordinat bazlı ("KABA KUVVET") tıklama
+önceki turlarda (Fatura kutusu sorununda) güvenilmez çıktığı için tercih
+edilmiyor, ama o durumda hedef GRID SATIRINA göre değişiyordu (dinamik);
+burada tek kayıtlı, sabit görünümlü bir detay sayfası olduğu için koordinat
+biraz daha güvenilir olabilir. Kullanıcıya soruldu: (1) o boş alana F12 ile
+bakıp id/class paylaşabilir mi, YA DA (2) o BÜYÜK boş alanın (alanların
+sağındaki beyaz boşluk) HERHANGİ bir noktasına sağ tıklamak da işe yarıyor
+mu (sadece tıklanan tam nokta değil)? Cevap gelince kod (satır: `aktif_sayfa.
+click("#TabControl_txt_ReferenceNo_I", button="right")`) kesin seçici veya
+sabit viewport koordinatıyla güncellenecek.
 
 ## Format Kuralları [DOĞRULANMIŞ]
 
