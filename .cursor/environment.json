@@ -1,0 +1,5 @@
+{
+  "name": "İzlog ERP Yük/Sevk Otomasyonu",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh"
+}
