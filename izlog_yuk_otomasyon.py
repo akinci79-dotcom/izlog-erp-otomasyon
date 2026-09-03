@@ -1464,6 +1464,17 @@ def main():
 
             print(f"\n--- İŞLEM BAŞLIYOR: {kaynak_yuk_no} ---")
 
+            # Güvenlik önlemi: önceki satırdan (beklenmedik şekilde) kalmış
+            # olabilecek ekstra pencereler varsa, bu satıra GERÇEKTEN temiz
+            # başlamak için kapatılıyor (bkz. aşağıdaki hata bloğundaki
+            # "sızıntı" notu -- bu, o düzeltmenin ikinci bir güvencesi).
+            for ekstra_sayfa in list(context.pages):
+                if ekstra_sayfa is not page:
+                    try:
+                        ekstra_sayfa.close()
+                    except Exception:
+                        pass
+
             hata_sayfasi = page
             try:
                 oracle_data = kaynak_yuk_verilerini_getir(kaynak_yuk_no)
@@ -1521,11 +1532,34 @@ def main():
 
                     hata_sayfasi.screenshot(path=hata_foto)
                     hata_sayfasi.keyboard.press("Escape")
-
-                    if len(context.pages) > 1:
-                        hata_sayfasi.close()
                 except Exception:
-                    print(f"[{kaynak_yuk_no}] Uyarı: hata ekran görüntüsü/pencere kapatma başarısız; durum yine de kaydedildi.")
+                    print(f"[{kaynak_yuk_no}] Uyarı: hata ekran görüntüsü alınamadı; durum yine de kaydedildi.")
+
+                # ⚠️ SIZINTI BULUNDU [DOĞRULANMIŞ, kullanıcının 15 satırlık
+                # canlı test logunda dolaylı olarak görüldü]: Bir satır hata
+                # verdiğinde, Kopya/Sevk Oluştur ile açılmış YENİ pencere(ler)
+                # normalde fonksiyonun EN SONUNDAKİ `aktif_sayfa.close()`
+                # çağrısıyla kapanıyordu -- ama hata bu satırdan ÖNCE
+                # fırlatıldığı için o kapatma HİÇ ÇALIŞMIYORDU. Eski kod da
+                # SADECE `context.pages[-1]` (son pencere) kapatıyordu --
+                # eğer bir satırda BİRDEN FAZLA pencere açık kalmışsa (örn.
+                # başarısız bir Sevk denemesi + hemen ardından yeni bir Yük
+                # için açılan Kopya penceresi), diğerleri AÇIK KALIYORDU.
+                # Bu, arka arkaya çok satır işlenirken tarayıcıda giderek
+                # artan sayıda "hayalet" sekme birikmesine yol açıyordu --
+                # her biri DevExpress'in arka plan keep-alive isteklerini
+                # atmaya devam ederek sunucu tarafında ekstra yük
+                # oluşturabilir, bu da sonraki satırlarda ARA SIRA görülen
+                # açıklanamayan timeout'ları (örn. "navigasyon gerçekleşmedi",
+                # "locator bulunamadı") kısmen açıklayabilir. Düzeltme: artık
+                # ana `page` HARİÇ TÜM açık pencereler kapatılıyor, böylece
+                # her satır GERÇEKTEN temiz bir durumdan başlıyor.
+                for ekstra_sayfa in list(context.pages):
+                    if ekstra_sayfa is not page:
+                        try:
+                            ekstra_sayfa.close()
+                        except Exception:
+                            pass
 
                 wb.save(excel_dosyasi)
                 print(f"Hata detayı kaydedildi. Ekran Görüntüsü: {hata_foto}")

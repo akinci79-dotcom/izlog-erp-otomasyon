@@ -1176,6 +1176,50 @@ gönderilmiyor -- yanlış bir alanı sessizce silmek yerine net bir
 alan yardımcısı, Ücret Tipi, Operasyon Kodu, Yük'ün satır Tutar alanı) bu
 yeni fonksiyonu kullanacak şekilde güncellendi.
 
+### ⚠️ YENİ SIZINTI BULUNDU VE DÜZELTİLDİ — Başarısız satırlardan kalan pencereler kapanmıyordu [DOĞRULANMIŞ, 15 satırlık canlı test logunda dolaylı olarak görüldü]
+Kullanıcının paylaştığı 15 satırlık canlı test logunda (henüz `fed6ffa`
+odak düzeltmesi çekilmemiş bir kod sürümüyle) birbirinden farklı GÖRÜNEN
+birkaç hata türü vardı: "Sevk Fiyatı alanı doğru yazılamadı (... görülen:
+'')" (birkaç kez), "Sevk ana Kaydet sonrası ... navigasyon ... 20sn
+içinde gerçekleşmedi" (birkaç kez), ve "Page.press: Timeout 30000ms
+exceeded ... waiting for locator DXEditor4_I" (2 kez).
+
+**Analiz**: "Görülen: ''" (alan boş kaldı) ve "navigasyon gerçekleşmedi"
+hatalarının BÜYÜK ÇOĞUNLUĞU, `fed6ffa`'da zaten düzeltilmiş "odak
+yarışı" bugıyla açıklanıyor (Sevk Tutar alanı da AYNI riskli
+`_devexpress_alana_yaz` yardımcısını kullanıyordu) -- bu kod sürümü henüz
+o düzeltmeyi içermiyordu.
+
+**Ayrıca YENİ, bağımsız bir sızıntı bulundu**: Bir satır hata verdiğinde
+(Kopya/Sevk Oluştur ile açılmış YENİ pencere hâlâ açıkken), fonksiyonun
+EN SONUNDAKİ `aktif_sayfa.close()` çağrısı hataya kadar hiç çalışmıyordu
+(hata o satırdan ÖNCE fırlatıldığı için). Eski hata yakalama kodu da
+SADECE `context.pages[-1]` (en son açılan pencere) kapatıyordu -- eğer
+bir satırda birden fazla pencere açık kalmışsa (örn. başarısız bir Sevk
+denemesi sırasında hem Yük'ün Kopya penceresi hem de Sevk'in kendi
+penceresi), diğerleri AÇIK KALIYORDU. 15 satır arka arkaya işlenirken bu,
+tarayıcıda giderek artan sayıda "hayalet" sekme birikmesine yol
+açıyordu -- her biri DevExpress'in arka plan keep-alive isteklerini
+atmaya devam ederek sunucu tarafında ekstra yük oluşturabilir, bu da
+ilerleyen satırlarda görülen açıklanamayan timeout'ları (özellikle
+"Page.press ... DXEditor4_I" gibi, tek başına odak bugıyla tam
+açıklanamayan 2 vakayı) KISMEN açıklayabilir [VARSAYIM/TODO, kesin
+kanıtlanmadı ama güçlü bir olasılık].
+
+**Düzeltme**: Hem her satırın BAŞINDA (önceki satırdan kalmış olabilecek
+pencereler için bir güvenlik önlemi) hem de hata bloğunda, ana `page`
+HARİÇ TÜM açık pencereler kapatılıyor -- artık her satır GERÇEKTEN temiz
+bir tarayıcı durumundan başlıyor.
+
+**Hâlâ açık [VARSAYIM/TODO]**: "Page.press timeout ... DXEditor4_I"
+hatasının (2 vaka) tam kök nedeni kesin değil -- pencere sızıntısının
+dolaylı bir etkisi mi, yoksa "Yeni kayıt için tıklayınız" sonrası satırın
+GERÇEKTEN açılıp açılmadığına dair ayrı bir kontrol eksikliği mi (Yük
+tarafındaki `_fiyat_satirini_duzenlemeye_ac`'ın "zaten açık mı" kontrolü
+burada da kullanılıyor, ama bu kontrolün YANLIŞ POZİTİF verip verme
+ihtimali henüz test edilmedi). Pencere sızıntısı düzeltmesi ve odak
+düzeltmesi sonrası bu hata tekrar görülürse, ayrıca incelenmesi gerekecek.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
