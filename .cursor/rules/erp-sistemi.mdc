@@ -606,9 +606,32 @@ bulunan, hiçbir zaman disabled olmayan bir element (etiketler asla
 disable edilmez). Kod: `aktif_sayfa.click("#TabControl_lbl_lblReferenceNo",
 button="right")`.
 
-Bu düzeltme, kod incelemesiyle (gerçek sayfa kaynağı) kanıtlanmış olsa da
-henüz canlı bir Sevk denemesiyle TEYİT EDİLMEDİ -- bir sonraki canlı testte
-kesinleşecek.
+**✅ CANLI TESTTE TEYİT EDİLDİ**: Bu düzeltme (etiket üzerine sağ tık)
+çalıştı -- "Sevk Oluştur" menüsü göründü ve tıklanabildi (sonraki adımda
+farklı bir hata çıktı, aşağıya bakın).
+
+### ⚠️ AÇIK SORU — "Sevk Oluştur" tıklandı ama Plaka alanı hiç görünmedi [henüz canlı ekran görüntüsüyle teyit edilmedi]
+Canlı testte (`Y-576188` → devam Yük'ü `Y-578367`, GOODS_ID direkt URL ile
+İncele formu başarıyla açıldı, "Sevk Oluştur" menüsü göründü ve tıklandı)
+bir SONRAKİ hata oluştu: Plaka alanı (`#TabControl_bte_
+TractorSerialNoPlateNo_I`) 20sn içinde hiç görünmedi.
+
+**Olası açıklama [VARSAYIM/TODO]**: "Kopya" butonu (Faz 1) YENİ bir
+pencere açıyor -- "Sevk Oluştur" da AYNI şekilde davranıp yeni pencere
+açabilir, kod ise eski (İncele) pencerede beklemeye devam ediyor olabilir.
+Bu, İş Akışı bölümündeki "Sevk Oluştur bu adım YENİ pencere açmaz" notunun
+[VARSAYIM, henüz doğrulanmamış] olduğunu hatırlatıyor -- gerçek davranış
+FARKLI olabilir.
+
+**Uygulanan düzeltme (önden, henüz canlı teyit yok)**: "Sevk Oluştur"
+tıklaması artık `expect_page(timeout=3000)` ile sarmalanıyor -- eğer
+GERÇEKTEN yeni bir pencere açılırsa `aktif_sayfa` o pencereye geçiyor,
+açılmazsa (muhtemel, eski varsayım doğruysa) davranış DEĞİŞMİYOR.
+
+Kullanıcıdan otomasyonun bu hatada aldığı ekran görüntüsü
+(`debug_sevk_form_acilmadi_{kaynak_yuk_no}.png`) bekleniyor -- kesin kök
+neden bu görüntüyle netleşecek (yeni pencere mi, onay diyaloğu mu, hiçbir
+şey mi olmadı).
 
 **✅ Yük fazı 3 satırlı gerçek senaryoda BAŞARILI [DOĞRULANMIŞ, canlı test]**:
 `Y-576188` (Navlun + 2 Ek_Navlun satırı, hepsi aynı faturaya `IZK2026000000076`

@@ -1164,7 +1164,31 @@ def uyumsoft_islemlerini_yap(page, kaynak_yuk_no, plaka, sevk_alis_fiyati, oracl
         has_text=re.compile(r"^Sevk Olu.tur$")
     )
     sevk_olustur_menu.first.wait_for(state="visible", timeout=15000)
-    sevk_olustur_menu.first.click()
+
+    # ⚠️ CANLI TESTTE, "Sevk Oluştur" tıklandıktan sonra Plaka alanı 20sn
+    # içinde hiç görünmedi [henüz kesin neden bilinmiyor -- kullanıcıdan
+    # o anki ekran görüntüsü bekleniyor]. Bir güçlü olasılık: "Kopya"
+    # butonu (Faz 1) YENİ bir pencere açıyor -- "Sevk Oluştur" da AYNI
+    # şekilde davranıp yeni pencere açabilir, biz ise eski pencerede
+    # beklemeye devam ediyor olabiliriz. Bu ihtimali (varsa) yakalamak
+    # için tıklama artık `expect_page()` ile KISA bir zaman aşımıyla
+    # (3sn) sarmalanıyor -- yeni pencere açılmazsa (muhtemel, çünkü bu
+    # zaten "aynı sayfada devam eder" şeklinde varsayılıyordu) davranış
+    # DEĞİŞMİYOR, eskisi gibi aynı sayfada devam edilir.
+    yeni_pencere = None
+    try:
+        with aktif_sayfa.context.expect_page(timeout=3000) as pencere_bilgisi:
+            sevk_olustur_menu.first.click()
+        yeni_pencere = pencere_bilgisi.value
+    except Exception:
+        yeni_pencere = None
+
+    if yeni_pencere is not None:
+        print(
+            f"[{kaynak_yuk_no}] Bilgi: 'Sevk Oluştur' sonrası YENİ pencere açıldı "
+            f"-- Sevk formu bu pencerede aranacak."
+        )
+        aktif_sayfa = yeni_pencere
 
     _sevk_formunun_acilmasini_bekle(aktif_sayfa, kaynak_yuk_no)
     _agsakinligini_bekle(aktif_sayfa)
