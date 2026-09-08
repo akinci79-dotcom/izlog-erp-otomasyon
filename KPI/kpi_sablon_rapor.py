@@ -10,6 +10,7 @@ Kullanım:
 """
 from __future__ import annotations
 
+import calendar
 import re
 import shutil
 import unicodedata
@@ -912,6 +913,26 @@ def _bind_olustur(bas: str, bit: str) -> dict:
 
 
 def _tarih_araligi() -> tuple[str, str]:
+    """Rapor dönemi — KPI_DONEM ("AA.YYYY") varsa ayın ilk/son günü otomatik
+    hesaplanır (kaç gün çektiğine bakmaya gerek kalmaz). Yoksa eski
+    KPI_BASLANGIC_TARIHI / KPI_BITIS_TARIHI kullanılır (geriye dönük uyumluluk)."""
+    donem = getattr(ayarlar, "KPI_DONEM", None)
+    if donem:
+        donem = str(donem).strip()
+        try:
+            ay_str, yil_str = donem.split(".")
+            ay, yil = int(ay_str), int(yil_str)
+            if not 1 <= ay <= 12:
+                raise ValueError
+        except (ValueError, AttributeError) as exc:
+            raise ValueError(
+                f"KPI_DONEM formatı hatalı: '{donem}'. Beklenen: 'AA.YYYY' (örn. '08.2026')."
+            ) from exc
+        son_gun = calendar.monthrange(yil, ay)[1]
+        bas = date(yil, ay, 1).strftime("%d.%m.%Y")
+        bit = date(yil, ay, son_gun).strftime("%d.%m.%Y")
+        return bas, bit
+
     bugun = datetime.now().date()
     bas = getattr(ayarlar, "KPI_BASLANGIC_TARIHI", bugun.replace(day=1).strftime("%d.%m.%Y"))
     bit = getattr(ayarlar, "KPI_BITIS_TARIHI", bugun.strftime("%d.%m.%Y"))

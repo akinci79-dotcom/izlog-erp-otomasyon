@@ -69,12 +69,13 @@ Uyumsoft VERİ raporu SQL'i repoda `referans/kpi_veri_rapor.sql` olarak kayıtl�
 ## ayarlar.py
 
 ```python
-KPI_BASLANGIC_TARIHI = "01.07.2026"
-KPI_BITIS_TARIHI = "31.07.2026"
+KPI_DONEM = "07.2026"   # AA.YYYY — ayın kaç gün çektiğini sistem hesaplar
 CO_CODE = "IZLOG"
 BRANCH_CODE = "MERKEZ"
 DB_SIFRE = "..."
 ```
+
+Her ay tek yapmanız gereken: `KPI_DONEM` değerini güncellemek (örn. `"08.2026"`). Farklı bir tarih aralığı gerekiyorsa (`KPI_DONEM` yerine) `KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI` kullanılabilir.
 
 ## Çalıştırma
 

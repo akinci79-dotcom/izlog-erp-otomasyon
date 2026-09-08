@@ -13,9 +13,14 @@ DB_SIFRE = "DEĞİŞTİRİNİZ"
 DB_DSN = "172.17.8.11:1521/UYUMSOFT"
 ORACLE_CLIENT_LIB_DIR = r"C:\instantclient\instantclient_19_32"
 
-# KPI rapor dönemi (DD.MM.YYYY)
-KPI_BASLANGIC_TARIHI = "01.01.2026"
-KPI_BITIS_TARIHI = "31.01.2026"
+# KPI rapor dönemi — sadece AY.YIL yazın, ayın kaç gün çektiğini
+# (28/29/30/31) sistem otomatik hesaplar. Her ay güncellemeniz gereken TEK satır budur.
+KPI_DONEM = "01.2026"
+
+# Farklı bir tarih aralığı gerekiyorsa (örn. ay ortası kesim) KPI_DONEM yerine
+# bu ikisini kullanın — ikisi de tanımlıysa KPI_DONEM önceliklidir:
+# KPI_BASLANGIC_TARIHI = "01.01.2026"
+# KPI_BITIS_TARIHI = "31.01.2026"
 
 # Referans KPI şablonu (Temmuz raporunuzun kopyası)
 KPI_SABLON_DOSYASI = "kpi_sablon.xlsx"
