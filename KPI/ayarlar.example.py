@@ -51,6 +51,13 @@ KPI_ALIS_SUTUN_GENISLIK = 28
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}
 
+# Belirli sayfalarda sütun genişliklerini SABİT tutun (AutoFit tamamen atlanır).
+# Excel'de elle ayarladığınız genişlikleri buraya yazarsanız her ay aynı kalır.
+# Sayfa adı: {Sütun Harfi: Genişlik}
+# KPI_SABIT_SUTUN_GENISLIKLERI = {
+#     "Özet": {"A": 14, "B": 32, "C": 28, "D": 18},
+# }
+
 # Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
 CO_CODE = "IZLOG"
 BRANCH_CODE = "MERKEZ"

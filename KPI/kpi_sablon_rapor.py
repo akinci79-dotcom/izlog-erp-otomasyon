@@ -561,6 +561,31 @@ def _com_sutun_genisligi_ayarla(sheet, col: int | str, genislik: float, max_w: f
         pass
 
 
+def _sabit_genislik_eslemeleri() -> dict[str, dict[str, float]]:
+    """Sayfa adı (normalize) -> {sütun harfi: sabit genişlik}. ayarlar.KPI_SABIT_SUTUN_GENISLIKLERI."""
+    ham = getattr(ayarlar, "KPI_SABIT_SUTUN_GENISLIKLERI", None) or {}
+    if not isinstance(ham, dict):
+        return {}
+    sonuc: dict[str, dict[str, float]] = {}
+    for sayfa_adi, sutunlar in ham.items():
+        if not isinstance(sutunlar, dict):
+            continue
+        sonuc[_normalize_kolon(str(sayfa_adi))] = {
+            str(harf).upper(): float(genislik) for harf, genislik in sutunlar.items()
+        }
+    return sonuc
+
+
+def _com_sabit_genislik_uygula(sheet, esleme: dict[str, float]) -> None:
+    """Verilen sütun genişliklerini AYNEN uygular — AutoFit/heuristik atlanır (kullanıcının
+    elle ayarladığı genişlikler her ay kalıcı olsun diye)."""
+    for harf, genislik in esleme.items():
+        try:
+            sheet.Columns(harf).ColumnWidth = genislik
+        except Exception:
+            pass
+
+
 def _com_sutunlari_genislet(sheet, satir_limit: int | None = None) -> None:
     """UsedRange AutoFit + #### tespiti — pivot tutar sütunları (Alış/Satış) için."""
     min_w, para_w, max_w, varsayilan_satir_limit, ozel_genislik = _autofit_ayarlari()
@@ -714,12 +739,22 @@ def _excel_sablon_doldur(
             except Exception as exc:
                 uyarilar.append(f"hesaplama: {exc}")
 
-        if sutun_autofit:
+        sabit_genislikler = _sabit_genislik_eslemeleri()
+        if sutun_autofit or sabit_genislikler:
             _progress("  [Excel] Özet sayfaları genişletiliyor...")
             for sheet in wb.Worksheets:
                 if int(sheet.Visible) != -1:
                     continue
                 if sheet.Name in (ws_veri.Name, ws_filo.Name):
+                    continue
+                sabit = sabit_genislikler.get(_normalize_kolon(sheet.Name))
+                if sabit:
+                    try:
+                        _com_sabit_genislik_uygula(sheet, sabit)
+                    except Exception as exc:
+                        uyarilar.append(f"{sheet.Name} sabit genişlik: {exc}")
+                    continue
+                if not sutun_autofit:
                     continue
                 try:
                     _com_sutunlari_genislet(sheet)
@@ -781,9 +816,18 @@ def _excel_islemleri(dosya_yolu: Path, pivot_yenile: bool = True) -> tuple[bool,
             except Exception as exc:
                 uyarilar.append(f"hesaplama: {exc}")
 
+        sabit_genislikler = _sabit_genislik_eslemeleri()
         autofit_sayisi = 0
         for sheet in wb.Worksheets:
             if int(sheet.Visible) != -1:
+                continue
+            sabit = sabit_genislikler.get(_normalize_kolon(sheet.Name))
+            if sabit:
+                try:
+                    _com_sabit_genislik_uygula(sheet, sabit)
+                    autofit_sayisi += 1
+                except Exception as exc:
+                    uyarilar.append(f"{sheet.Name} sabit genişlik: {exc}")
                 continue
             try:
                 _com_sutunlari_genislet(sheet)

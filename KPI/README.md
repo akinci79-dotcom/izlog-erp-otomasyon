@@ -108,6 +108,26 @@ Otomatik pivot yenileme ve sütun AutoFit için `pip install pywin32` ve yüklü
 VERİ ve Filo Detay sayfaları Excel olmasa bile openpyxl ile önceden genişletilir.
 Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 
+### Sütun genişliğini kalıcı sabitle (her ay elle düzeltmeyin)
+
+Bir sayfada (örn. **Özet**) genişlikleri elle mükemmel hale getirdiyseniz, bir daha
+hiç değişmesin diye kalıcı yapabilirsiniz:
+
+1. Ayarladığınız `kpi_rapor.xlsx`'i KPI klasörüne kopyalayın (veya `raporlar\` altındaysa oradan kullanın).
+2. Genişlikleri okuyun:
+   ```powershell
+   python kpi_sutun_genislik_oku.py "raporlar\kpi_rapor.xlsx" "Özet"
+   ```
+3. Çıktıyı olduğu gibi `ayarlar.py`'ye yapıştırın:
+   ```python
+   KPI_SABIT_SUTUN_GENISLIKLERI = {
+       "Özet": {"A": 14.0, "B": 32.5, "C": 28.0, ...},
+   }
+   ```
+
+Bu ayar tanımlıysa o sayfada AutoFit tamamen devre dışı kalır, sütunlar her raporda
+birebir bu genişliklerle açılır. Birden fazla sayfa için sözlüğe ek sayfa girebilirsiniz.
+
 ## Sorun giderme
 
 **Copy-Item: izlog-kpi-temp\KPI bulunamadı:** `$Base`, `$KpiDir`, `$Temp` tanımlanmadan sadece alt satırlar çalıştırılmış demektir. Yukarıdaki bloğu **baştan sona tek parça** yapıştırın veya `kpi_guncelle.ps1` kullanın.
