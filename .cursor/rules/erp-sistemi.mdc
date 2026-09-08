@@ -812,6 +812,319 @@ görünür bir popup/uyarı varsa metni doğrudan hata mesajında görünecek. (
 yazılmayacak, bu yüzden 1. ve 2. satırın TAM veri akışı ayrı ayrı
 incelenebilecek.
 
+## ⚠️ ÇELİŞKİ — OPERATION_ID ↔ Operasyon Kodu eşlemesi [ÇÖZÜLMEMİŞ, kullanıcıya
+sorulmalı]
+
+Kullanıcının paylaştığı 4 Excel dosyası (`fiyat satırı olmayan sevklere toplu
+fiyat girişi.xlsx`, `Pasifik-Horizon toplu fiyat giriş.xls`, `SQL.xlsx`,
+`Toplu Sevk Varış Km SQL.xlsx` — gerçek production'a karşı çalıştırılmış SQL
+sorguları ve sonuçları içeriyorlar) taranırken, `oracle_okuyucu.py`'de
+şu anda [DOĞRULANMIŞ] olarak işaretli "Operasyon Kodu → `INVD_EXPENSE.
+EXPENSE_CODE`, join `INVD_EXPENSE.EXPENSE_ID = LMST_L_GOODS_OP_DET.
+OPERATION_ID`" kuralıyla **doğrudan çelişen** güçlü bir kanıt bulundu:
+
+- `SQL.xlsx` / `Sayfa1` (satır ~312-319), gerçek ve İzlog'un kendi kullandığı
+ bir sorgu:
+ ```sql
+ select a.goods_op_id,b.reference_no,c.operation_code,a.zz_description
+   from lmst_l_goods_op_det a
+   left join lmst_l_goods b on b.goods_id = a.goods_id
+   left join lmsd_l_op_definition c on c.operation_id = a.operation_id
+  where b.reference_no like '000%'
+  and a.operation_id not in (3,11)
+ ```
+ Kullanıcının SQL'in yanına yazdığı açıklama notu (birebir alıntı): **"bu sql
+ ile navlun ve uğrama dışındaki boş olanları çekiyoruz."** — yani şirketin
+ kendisi `operation_id = 3`'ü **NAVLUN**, `operation_id = 11`'i **UĞRAMA**
+ olarak tanımlıyor, ve bunun için `LMSD_L_OP_DEFINITION.OPERATION_CODE`
+ kolonunu kullanıyor (aynı sorgunun altında, satır ~332, bir örnek kayıtta
+ `OPERATION_CODE = 'BEKLEME'` görünüyor — yani bu kolon dolu ve çalışıyor).
+- `Pasifik-Horizon toplu fiyat giriş.xls` (`Select lmst_l_goods_op_det`
+ sayfası, 67 gerçek satır) ve `fiyat satırı olmayan sevklere toplu fiyat
+ girişi.xlsx` (`Select lmst_l_trans_op_detail` sayfası, 838 gerçek satır) —
+ ikisi de "toplu **Navlun** fiyatı girişi" amaçlı, ve HER İKİSİNDE de TÜM
+ satırlarda `OPERATION_ID = 3` VE `OPERATION_PRICE_TYPE = 1` (Ücret Tipi
+ enum'unda 1 = Navlun) birlikte görülüyor — bu da `OPERATION_ID = 3`'ün
+ NAVLUN olduğunu bağımsız olarak doğruluyor.
+
+Bu, `erp-sistemi.mdc`'nin daha önceki [DOĞRULANMIŞ] notuyla (NAVLUN'un
+`INVD_EXPENSE.EXPENSE_ID = 732`, UĞRAMA'nın `= 745` olduğu, ve
+`LMSD_L_OP_DEFINITION`'ın "TAMAMEN YANLIŞ" olup artık hiç kullanılmadığı)
+**doğrudan çelişiyor**. İki olasılık var:
+1. `LMST_L_GOODS_OP_DET.OPERATION_ID` / `LMST_L_TRANS_OP_DETAIL.OPERATION_ID`
+ aslında `LMSD_L_OP_DEFINITION.OPERATION_ID`'ye join oluyor (yukarıdaki
+ gerçek şirket sorgusunun gösterdiği gibi), `INVD_EXPENSE.EXPENSE_ID`'ye
+ DEĞİL — yani önceki "kesin çözüm" (`ucret_tipi_kesif.py` / rapor SQL'i ile
+ teyit edilen) YANLIŞ bir tabloya bakıyor olabilir.
+2. Ya da iki farklı bağlamda gerçekten iki farklı ID alanı var (örn.
+ raporun kullandığı özel bir view/senaryo farklı bir ID uzayı kullanıyor
+ olabilir) ve rastlantısal olarak aynı sayılar (3, 11 vs 732, 745) çıkmadı
+ ama farklı anlam taşıyorlar — bu ihtimal düşük görünüyor çünkü OPERATION_
+ PRICE_TYPE=1 (Navlun) ile OPERATION_ID=3 birlikteliği 900+ gerçek satırda
+ tutarlı.
+
+**Kullanıcıya (hüseyin) SORULMALI**: `oracle_okuyucu.py`'deki
+`kaynak_yuk_verilerini_getir()` şu an `INVD_EXPENSE`/`INVD_BRANCH_EXPENSE`
+join'iyle Operasyon Kodu ve Ücret Tipi'ni çekiyor — eğer gerçek doğru join
+`LMSD_L_OP_DEFINITION.OPERATION_ID = LMST_L_GOODS_OP_DET.OPERATION_ID` ise,
+otomasyon HENÜZ CANLI ORTAMDA TESPİT EDİLMEMİŞ yanlış Operasyon Kodu/Ücret
+Tipi değerleri üretiyor olabilir (ya da tesadüfen aynı sonucu veriyor
+olabilir, çünkü `INVD_EXPENSE`/`INVD_BRANCH_EXPENSE` sonuçta gerçek canlı
+UĞRAMA/NAVLUN testlerinde doğru değer üretmişti — bu yüzden acil bir hata
+olmayabilir, ama kesinlik için doğrulanmalı). Bu bölüm kullanıcı teyidi
+alınana kadar [ÇÖZÜLMEMİŞ] kalacak, otomasyon koduna DOKUNULMADI.
+
+## SQL Referans Bilgisi — Kullanıcının Excel/SQL Arşivinden [DOĞRULANMIŞ, gerçek production sorguları]
+
+Kullanıcının paylaştığı 4 Excel dosyası, İzlog'un yıllar içinde Oracle'a
+karşı elle çalıştırdığı gerçek düzeltme/rapor SQL'lerinin bir arşivi.
+Otomasyonun bugünkü kapsamı dışında olsa da, ileride yeni bir otomasyon/
+rapor istenirse doğrudan kullanılabilecek tablo/kolon/enum bilgisi burada
+toplanıyor.
+
+### `LMST_L_TRANS_OP_DETAIL` (Sevk fiyat/operasyon detay satırı) — TAM kolon listesi
+`fiyat satırı olmayan sevklere toplu fiyat girişi.xlsx` (838 gerçek satır)
+ve `SQL.xlsx`'teki "SEVK FİYAT GİRİŞ" sorgusundan tam kolon listesi:
+`TRANSPORT_OP_ID` (PK), `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`,
+`UPDATE_DATE`, `TRANSPORT_ID` (FK → `LMST_L_TRANSPORT`), `OPERATION_ID`,
+`UNIT_ID` (gözlenen sabit değer: `164`), `UNIT_PRICE_TRA`, `AMT_TRA`,
+`CUR_TRA_ID` (gözlenen: `114` = TL), `CUR_RATE_TRA` (kur, TL için `1`),
+`AMT`, `VAT_ID` (gözlenen sabit: `132` = KDV), `VAT_RATE`, `VAT_AMT`,
+`ISPRORATED_TO_GOODS`, `CHARGED_L_ENTITY_ID` (faturanın yansıtılacağı cari),
+`OPERATION_PRICE_TYPE` (bkz. `UCRET_TIPI_ENUM_ESLEME`), `BEFORE_DISC_AMT_TRA`,
+`DISC_RATE`, `PURCHASE_SALES_TYPE`, `SUP_PAYOFF_ID`, `INVOICE_M_ID`,
+`INVOICE_D_ID`, `EVALUTION_FORMULA`, `CALCULATION_FOMULA` (yazım hatası
+tabloda da böyle, sic), `SUP_PAYOFF_OPDET_ID`, `SUP_PAYOFF_T_ID`,
+`SUP_PAYOFF_TOP_ID`, `IS_AUTO_INTEGRATION`, `VAT_STATUS`,
+`CUR_RATE_TYPE_ID`, `FIN_M_ID`, `FIN_D_ID`, `TRA_TYPE_ID`, `CARD_TYPE`
+(gözlenen: `0`), `FIN_DCARD_ID`, `BRNCH_ENTG_ID`, `CALC_TARIFF_D_ID`, `QTY`.
+
+**Bulk fiyat girişi formülleri [DOĞRULANMIŞ, dosyadaki gerçek Excel
+formüllerinden]**: `AMT_TRA = UNIT_PRICE_TRA` (QTY=1 iken), `AMT = AMT_TRA`
+(TL/TL, kur=1 iken), `VAT_AMT = UNIT_PRICE_TRA * 0.18` (o dönemki %18 KDV
+oranıyla — güncel oran farklı olabilir, kullanılmadan önce teyit edilmeli).
+
+**`PURCHASE_SALES_TYPE` enum'u — Sevk tarafı [DOĞRULANMIŞ, `Personel Yük
+Raporu Komple` sorgusundaki `SEVK_TOPLAM_ALIS`/`SEVK_TOPLAM_ALIS_IADE` alt
+sorgularından]**: Sevk (`LMST_L_TRANS_OP_DETAIL`) tarafında `1` = Alış,
+`4` = Alış İade. Yük (`LMST_L_GOODS_OP_DET`) tarafında (daha önce
+doğrulanmış) `2` = Satış, `3` = Satış İade. Yani aynı kolonun anlamı
+tabloya (Yük/Sevk) göre değişiyor, dörtlü tam enum: `1`=Sevk Alış,
+`2`=Yük Satış, `3`=Yük Satış İade, `4`=Sevk Alış İade.
+
+**"Belirsiz 1 TL" temizlik deseni [DOĞRULANMIŞ]**: `CHARGED_L_ENTITY_ID =
+8676` (özel/"belirsiz cari" gibi kullanılan sabit bir cari id) VE
+`UNIT_PRICE_TRA = 1` olan `LMST_L_TRANS_OP_DETAIL` satırları, yanlışlıkla
+oluşmuş "belirsiz 1 TL" satırları olarak kabul ediliyor ve `SELECT`'i
+`DELETE`'e çevirerek temizleniyor (`SQL.xlsx`, "BELİRSİZ 1 TL OLANLARI
+SİLME"). Not: `8676` değeri daha önce (bu dosyadan bağımsız olarak)
+otomasyon kodunda da `CHARGED_L_ENTITY_ID` örnek değeri olarak görülmüştü
+(bkz. `Select lmst_l_trans_op_detail` sayfası satır örnekleri).
+
+### `LMST_L_GOODS_OP_DET` (Yük fiyat/operasyon detay satırı) — TAM kolon listesi
+`Pasifik-Horizon toplu fiyat giriş.xls` (67 gerçek satır) ve `SQL.xlsx`'teki
+"YÜK FİYAT GİRİŞ" sorgusundan tam kolon listesi: `GOODS_OP_ID` (PK),
+`CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`, `UPDATE_DATE`,
+`GOODS_ID` (FK → `LMST_L_GOODS`), `OPERATION_ID`, `UNIT_ID` (gözlenen: `164`),
+`QTY`, `AMT_TRA`, `CUR_TRA_ID` (`114`=TL), `CUR_RATE_TRA`, `AMT`, `VAT_ID`
+(`132`=KDV), `VAT_AMT`, `DOC_DATE`, `DOC_NO`, `CUR_RATE_TYPE_ID`,
+`VAT_STATUS`, `CHARGED_L_ENTITY_ID`, `OPERATION_PRICE_TYPE`, `CUST_PAYOFF_ID`,
+`INVOICE_M_ID`, `INVOICE_D_ID`, `BEFORE_DISC_AMT_TRA`, `DISC_RATE`,
+`EVALUTION_FORMULA`, `CALCULATION_FOMULA`, `CUST_PAYOFF_OPDET_ID`,
+`GOODS_TRANSPLAN_ID`, `CUST_PAYOFF_G_ID`, `CUST_PAYOFF_GOP_ID`,
+`PURCHASE_SALES_TYPE`, `IS_AUTO_INTEGRATION`, `VAT_RATE`, `FIN_M_ID`,
+`FIN_D_ID`, `TRA_TYPE_ID`, `CARD_TYPE`, `FIN_DCARD_ID`, `BRNCH_ENTG_ID`,
+**`UNIT_PRICE`** (Sevk tarafındaki `UNIT_PRICE_TRA` yerine burada sade
+`UNIT_PRICE` adıyla geçiyor — otomasyon/rapor kodu yazarken bu isim farkına
+dikkat edilmeli), `CALC_TARIFF_D_ID`, `ZZ_DESCRIPTION` (bkz. aşağıda —
+teslimat/irsaliye no gibi serbest metin notu saklamak için kullanılıyor),
+`ZZ_VEHICLE_CODE`.
+
+**"Müşteri hesaplaşma kilidi" [DOĞRULANMIŞ]**: `CUST_PAYOFF_ID`/
+`CUST_PAYOFF_G_ID`/`CUST_PAYOFF_OPDET_ID`/`CUST_PAYOFF_GOP_ID` alanları
+sıfırlanınca (`update ... set cust_payoff_id=0, ...`) o fiyat satırının
+müşteri hesaplaşma (tahsilat mutabakatı) kilidi açılıyor ve satır tekrar
+düzenlenebilir/silinebilir hale geliyor (`SQL.xlsx`, "CUST OLANLARI SIFIR
+YAPTIĞIMIZDA MÜŞTERİ HESAPLAŞMANIN KİLİDİ AÇILIYOR").
+
+**`ZZ_DESCRIPTION` — teslimat/irsaliye no notu [DOĞRULANMIŞ]**:
+`LMST_L_GOODS_OP_DET.ZZ_DESCRIPTION` serbest metin alanı, bazı fiyat
+kalemlerine (özellikle BEKLEME gibi navlun/uğrama dışı kalemlere) teslimat
+numarası not etmek için kullanılıyor (örnek: `ZZ_DESCRIPTION = '80032656'`).
+
+### `LMST_L_TRANSPORT` (Sevk ana tablosu) — ek kolonlar [DOĞRULANMIŞ]
+Önceden bilinenlere ek olarak: `TRACTOR_UNIT_ID`, `TRACTOR_MAPID`,
+`TRACTOR_VEHICLE_ID`, `TRACTOR_TRANSPORTTYPE` (plaka/araç birimi bilgisi —
+plaka değişikliği bu üçlü üzerinden yapılıyor, sadece plaka string'i
+değiştirilmiyor), `DRIVER_ID`, `PROJECT_ID`, `END_KM` (**Varış KM**),
+`RETURN_KM` (**Boş KM** — dönüş/boş seyir kilometresi), `ZZ_START_KM`
+(**Çıkış KM**), `ZZ_GUEST` (1 = Misafir Araç), `TRANSPORT_STATUS_ID`,
+`NOTE_LARGE` (sevk açıklama/not alanı).
+
+`Toplu Sevk Varış Km SQL.xlsx` dosyası, çok sayıda (600+) `S-...` numarası
+için `END_KM`/`RETURN_KM` alanlarını Excel'den okunan değerlerle toplu
+güncellemek amacıyla hazırlanmış bir `FOR UPDATE` sorgusu + eşleşen km
+değerleri tablosu içeriyor (kolonlar: sevk no, km, boş km).
+
+### Araç / Plaka / Mülkiyet Yapısı [DOĞRULANMIŞ]
+- `FLMD_VEHICLE` — Araç ana tablosu: `VEHICLE_ID`, `VEHICLE_CODE`,
+ `LICENSE_PLATE`, `VHC_MODEL_ID`, `TRAILER_TYPE_ID`.
+- `FLMD_VHC_ENTITY_DETAIL` — Aracın mülkiyet/cari geçmişi (tarih aralıklı):
+ `VEHICLE_ENTITY_DETAIL_ID`, `VEHICLE_ID`, `ENTITY_ID` (mülk sahibi cari),
+ `OWNERSHIP_STATUS` (**enum**: `0`=Boş, `1`=Kurum Malı, `2`=Kiralık,
+ `3`=Tedarikçi), `START_DATE`, `END_DATE`. Aynı araç için tarih aralıkları
+ çakışan/yanlış satır varsa yanlış olanı silinerek düzeltiliyor.
+ Boş (`0`) olanlar toplu olarak `3` (Tedarikçi) yapılabiliyor (varsayılan
+ kabul).
+- `FLMD_VHC_RENT_DETAIL` — Kiralık araç kira/yakıt oranı geçmişi:
+ `VEHICLE_ID`, `START_DATE`, `END_DATE`, `FUEL_RATE`, `RENT_AMT_TRA`.
+- `LMSR_VIEW_TRANSPORT_UNITS` / `LMSW_VIEW_TRANSPORT_UNITS` — Sevk'in
+ `TRACTOR_UNIT_ID`+`TRACTOR_MAPID` çiftini gerçek plakaya çeviren view'lar:
+ `TRANSPORT_UNIT_ID`, `MAPID`, `SERIALNO_PLATENO` (plaka), `UNITID`,
+ `UNIT_ID`, `TRANSPORT_TYPE`, `OWNERSHIP` (aynı enum: 1/2/3, yukarıdaki ile
+ birebir aynı anlam).
+- `LMSR_L_TRANSPORT` — plaka ↔ sevk ilişkisini taşıyan ayrı bir (view/ara)
+ tablo: `TRAC_SERIALNO_PLATENO`, `TRANSPORT_ID`.
+- `FLMD_VHC_GOODTYPE_DETAIL` + `LMSD_L_GOODS_TYPE` — bir aracın hangi
+ "Arvento" (GPS/filo takip) ID'sine sahip olduğunu bulmak için:
+ `LMSD_L_GOODS_TYPE.GOODS_TYPE_CODE` açıklaması (`DESCRIPTION`) `%ATS%`
+ içeren kayıtlar "Arvento ID" olarak kullanılıyor, join
+ `FLMD_VHC_GOODTYPE_DETAIL.VEHICLE_ID = FLMD_VEHICLE.VEHICLE_ID` ve
+ `FLMD_VHC_GOODTYPE_DETAIL.GOODS_TYPE_ID = LMSD_L_GOODS_TYPE.GOODS_TYPE_ID`.
+- Plaka tamamen silinirken sıra: önce `LMSD_L_TRANSPORT_UNIT` (`UNIT_ID`
+ ile), sonra `FLMD_VEHICLE` (`VEHICLE_ID` ile) — ama önce o plakanın
+ kullanıldığı sevkler düzeltilmeli (aksi halde referans hatası olur).
+ Mülkiyet/cari geçmişinden sadece tek bir satırı silmek gerekiyorsa
+ `FLMD_VHC_ENTITY_DETAIL.VEHICLE_ENTITY_DETAIL_ID` ile silinebiliyor.
+
+### `LMSD_L_AGR_PROJ_TYPE` (Proje Kodu) — TAM ID eşleme tablosu [DOĞRULANMIŞ]
+`SQL.xlsx`'te bulunan tam liste (`PROJECT_ID` → `PROJECT_CODE`):
+`5`=Komple, `6`=Parsiyel, `9`=İthalat/İhracat, `10`=Depo, `14`=Ankara,
+`15`=Bursa, `16`=Çankırı, `17`=İzmir, `18`=Sakarya, `19`=İade,
+`20`=Mikro Dağıtım, `21`=Filo, `22`=Kurtköy, `23`=Karaman,
+`24`=Kahramanmaraş, `26`=Antalya, `27`=Yenişehir, `28`=Gönen,
+`29`=Emirdağ, `30`=Mersin. (`25` numarası listede karşılıksız/boş
+görünüyor — silinmiş ya da kullanılmayan bir kod olabilir.)
+`LMST_L_GOODS.IS_DOOR_TO_DOOR = 1` olan (kapıdan kapıya) yüklerin
+`PROJECT_ID`'si toplu olarak `0`'a set edilmiş bir düzeltme geçmişi var
+(hem `LMST_L_GOODS.PROJECT_ID` hem de bağlı `LMST_L_TRANSPORT.PROJECT_ID`,
+`LMST_L_TRANS_GOODS_DETAIL` üzerinden join edilerek).
+
+### `LMSD_L_GOODSPRICE_TYPE` (Yük Fiyat Tipi Kodu / kargo kategorisi) — TAM ID eşleme tablosu [DOĞRULANMIŞ]
+Önceki not bu tablonun "Ücret Tipi" OLMADIĞINI, Yük'ün kargo kategorisini
+tuttuğunu belirtmişti — `SQL.xlsx`'teki tam liste bunu teyit ediyor
+(`GOODS_PRICE_TYPE_ID` → kod): `3`=CANLI, `4`=BEYAZ ET, `5`=ŞARKÜTERİ,
+`6`=PALET, `7`=HAMMADDE, `8`=İADE, `9`=SAKARYA, `10`=DONUK, `11`=MATERYAL,
+`12`=SUT, `13`=KONSERVE, `14`=DİĞER, `15`=PASTÖRİZE, `16`=KURUYÜK,
+`17`=PAMUKOVA DÖNÜŞ, `18`=SATINALMA, `19`=BURSA DEPO, `20`=SÜT TOZU,
+`21`=SERİN, `22`=SEBZE-MEYVE, `23`=Antalya Çıkış, `24`=Antalya Dönüş,
+`25`=Tarsus Çıkış, `26`=Tarsus Dönüş, `27`=Kumluca Çıkış, `28`=Bursa Çıkış,
+`29`=Bursa Dönüş, `30`=YARI MAMÜL, `31`=BİTMİŞ ÜRÜN, `32`=Elmalı Çıkış,
+`33`=Ağaköy Transit, `34`=Ara Sevkiyat, `35`=Adana Çıkış, `36`=Adana Dönüş,
+`37`=PANCAR, `38`=Nar Çıkış, `39`=GEYVE DEPO, `40`=MAKİNE, `41`=ISKARTA,
+`42`=Bursa Yeşillik Çıkış, `43`=Gemlik Çıkış, `44`=Gemlik Dönüş,
+`45`=ŞİŞECAM, `46`=KASA/PALET, `47`=CHEP PALET.
+
+Aynı sorguda `LMST_L_GOODS.GOODS_STATE_ID` enum'u da doğrulandı: `3`=Gidiş
+Yükü, `4`=Dönüş Yükü.
+
+### İrsaliye / Teslim Alma (INVT) Tabloları [DOĞRULANMIŞ]
+- `LMST_L_TRANS_GOODS_DETAIL` — Sevk ↔ Yük ilişki tablosu (çoktan-çoğa köprü):
+ `TRANSPORT_ID`, `GOODS_ID`, `TRAN_WAYBILL_DOC_NO` (irsaliye no),
+ `TRAN_WAYBILL_DOCDATE` (irsaliye tarihi), `ITEM_M_ID`, `ITEM_D_ID`,
+ `GOODS_TRANSPLAN_ID`, `TRANSPORT_GOODS_DETAIL_ID`.
+- `INVT_ITEM_M` — İrsaliye/teslim alma belge ana tablosu: `ITEM_M_ID`,
+ `DOC_NO`, `DOC_DATE`, `VOUCHER_NO`, `RECEIPT_DATE`. `INVT_ITEM_D` — detay
+ satırları (`ITEM_M_ID` ile bağlı).
+- **"Faturası kesilen sevkin irsaliyesini silme" [DOĞRULANMIŞ, riskli/manuel
+ işlem]**: Önce `LMST_L_TRANS_GOODS_DETAIL`'den ilgili `ITEM_M_ID`/
+ `ITEM_D_ID` bulunuyor, sonra `DELETE FROM INVT_ITEM_D WHERE ITEM_M_ID=...`
+ ve ardından `DELETE FROM INVT_ITEM_M WHERE ITEM_M_ID=...` çalıştırılıyor.
+ Bu, otomasyonun ASLA kendiliğinden yapmaması gereken, tamamen manuel ve
+ tehlikeli bir müdahale — sadece referans bilgisi olarak kaydedildi.
+
+### Toplu Sevk/Yük Silme — DOĞRU SIRA [DOĞRULANMIŞ, kritik]
+`SQL.xlsx`, "Toplu Sevk Yük Silme" bölümü, doğru silme sırasını gösteriyor
+(yanlış sırayla silinirse referans bütünlüğü hatası/orphan kayıt oluşur):
+
+**Yük silme sırası:**
+1. `DELETE FROM LMST_L_GOODS_OP_DET WHERE GOODS_ID IN (...)`
+2. `DELETE FROM LMST_L_GOODS_ORDER WHERE GOODS_ORDER_ID IN (...)`
+3. `DELETE FROM LMST_L_GOODS_TRANSPLAN_DET WHERE GOODS_ID IN (...)`
+4. `DELETE FROM LMST_L_GOODS WHERE REFERENCE_NO IN (...)`
+
+**Sevk silme sırası:**
+1. `DELETE FROM LMST_L_TRANS_GOODS_DETAIL WHERE TRANSPORT_ID IN (...)`
+2. `DELETE FROM LMST_L_TRANS_OP_DETAIL WHERE TRANSPORT_ID IN (...)`
+3. `DELETE FROM LMST_L_TRANSPORT WHERE TRANSPORT_NO IN (...)`
+
+Bir Yük ve bağlı Sevk'i aynı anda silmek gerekiyorsa, tüm bu satırlar alt
+alta yazılıp sırayla (yukarıdaki sıra korunarak) çalıştırılabiliyor. Bu,
+otomasyonun kendisinin YAPMADIĞI ama ileride "hatalı test kaydını temizleme"
+gibi bir talep gelirse referans olarak kullanılabilecek kritik bir sıra
+bilgisi.
+
+### E-Fatura / Fatura / Finans Tabloları [DOĞRULANMIŞ]
+- `PSMT_INVOICE_M.E_INVOICE_STATUS` — **enum**: `1`=İptal Edildi,
+ `2`=Kuyrukta, `3`=İmzalandı Gönderilmeyi Bekliyor, `4`=Gib'e Gönderildi,
+ `5`=Onaylandı, `6`=Onay Bekliyor, `7`=Red Edildi, `8`=İade Edildi,
+ `9`=Hata, `98`=Hazır, `99`=Entegratöre Gönderildi, `100`=Entegratörden
+ Geldi, `105`=Belge Kabulü Gönderildi, `110`=Belge Reddi Gönderildi.
+- `PSMT_EINVOICE_M` — e-fatura tarafı; `PSMT_INVOICE_M.E_INVOICE_M_ID` ↔
+ `PSMT_EINVOICE_M.EINVOICE_M_ID`, `PSMT_EINVOICE_M.INVOICE_M_ID` — manuel
+ kesilen fatura ile e-faturayı `DOC_NO`+`DOC_DATE` eşleşmesiyle otomatik
+ bağlayan bir güncelleme deseni mevcut (`SQL.xlsx`, "Manuel Kesilen Fatura
+ ile E Fatura eşleştirme").
+- **E-Fatura iptali [DOĞRULANMIŞ, ÇOK RİSKLİ — otomasyon ASLA yapmamalı]**:
+ Bir faturayı sistemden "iptal edilmiş" gibi geri almak için sırasıyla:
+ `FINT_ACC_M`/`FINT_ACC_D` (muhasebe fişi; `SOURCE_APP = 2` VE
+ `SOURCE_M_ID = INVOICE_M_ID` ile eşleşen kayıtlar) silinir, aynı şekilde
+ `FINT_FIN_M`/`FINT_FIN_D` (finans fişi) silinir, sonra
+ `LMST_L_GOODS_OP_DET` üzerindeki `IS_AUTO_INTEGRATION`/`INVOICE_M_ID`/
+ `INVOICE_D_ID` alanları `0`'a çekilir (faturanın satırlarla bağını
+ koparır), son olarak `PSMT_INVOICE_M.E_INVOICE_STATUS = 1` (İptal Edildi)
+ yapılır ve `COMMIT` edilir. Kullanıcı notu: "fatura numaralarını yaz. Tek
+ seferde çalıştır." — yani bu adımlar TEK bir transaction'da art arda
+ çalıştırılıyor, ara commit yok.
+- `FINT_ACC_D.ACC_ID`/`ACC_M_ID`/`LINE_NO` — muhasebe fişi satırının hesap
+ kodu (`ACC_ID`, hesap planından bakılıyor) tekil satır (`LINE_NO`: 10, 20,
+ 30... gibi 10'ar artan sıra) bazında değiştirilebiliyor.
+- **Fatura/fiyat satırı miktar (QTY) tutarsızlığı** [DOĞRULANMIŞ]: Bazen
+ `LMST_L_GOODS_OP_DET.AMT` ile bağlı `PSMT_INVOICE_D.AMT` (join:
+ `INVOICE_D_ID`+`INVOICE_M_ID`) tutmuyor (miktar hatası). Çözüm: fatura
+ oluştuktan sonra fiyat satırının `QTY`'sini `1`'e düzeltip kaydet, fatura
+ silinip yeniden oluşturulduğunda tutarlar düzelmiş oluyor.
+
+### Cari / Sürücü / Diğer [DOĞRULANMIŞ]
+- `LMSD_L_ENTITY` — Cari ana tablosu: `L_ENTITY_ID`, `ENTITY_CODE`, `NAME`.
+ IBAN bilgisi ayrı bir modülde: `FIND_ENTITY`/`FIND_ENTITY_BANK`
+ (`ENTITY_ID`, `ENTITY_CODE`, `NAME`, `IBAN_NO`) — dikkat, önek `FIND_`
+ (Finans/Muhasebe modülü), `LMSD_L_ENTITY` ile aynı ENTITY_ID uzayını
+ paylaşıyor ama farklı bir tablo/modül.
+- `LMSD_L_DRV_ENT_MAP` — bir cariyi silmeden önce, o cariye bağlı sürücü
+ (`DRIVER_ID`) kaydı olup olmadığını kontrol etmek için (`ENTITY_ID` ile).
+ Sürücü bağlıysa cari silinemiyor / önce sürücü ilişkisi çözülmeli.
+- `LMST_SUP_PAYOFF_T_D` / `LMST_SUP_PAYOFF_OPDET` / `LMST_SUP_PAYOFF_TOP_D`
+ — Tedarikçi hesaplaşma (ödeme mutabakatı) tabloları. Bir Sevk henüz
+ "dağıtılmadıysa" (`IS_DONE`/dağıtım tiki yoksa) `LMST_SUP_PAYOFF_T_D`'den
+ `TRANSPORT_ID` ile direkt silinerek dosyadan çıkarılabiliyor; dağıtıldıysa
+ önce fiyat değişikliği yapıp `SUP_PAYOFF` alanlarını sıfırlamak gerekiyor
+ (bkz. yukarıdaki `CUST_PAYOFF` ile simetrik "kilit açma" mantığı, ama
+ tedarikçi/alış tarafı için).
+- `LMSD_L_LOCATION.ZZ_MUSTERI` — `1` ise o teslim/yükleme yeri müşteri
+ tarafında da görünür/paylaşılır hale geliyor.
+- `APPD_MENU` — ERP menü ağacı (`MNU_NAME`, `PRT_ID` = üst menü). "İzlog
+ Raporlar" gibi özel menülerden bir raporu kaldırmak için buradan satır
+ silinebiliyor.
+- **Aktül entegrasyonu** (otomatik navlun/fatura entegrasyon sistemi) ile
+ ilgili birkaç bilinen sorun deseni: mükerrer `LMST_L_GOODS_TRANSPLAN_DET`
+ satırları (aynı `GOODS_ID` için birden fazla, `ROW_NUMBER() OVER(PARTITION
+ BY GOODS_ID ORDER BY CREATE_DATE)` ile tespit edilip fazlası siliniyor),
+ `LMST_L_GOODS.TRANSPORT_TYPE = 0` olan (henüz set edilmemiş) kayıtların
+ `1`'e çekilmesi gerekiyor, ve `LMST_L_GOODS_OP_DET.GOODS_TRANSPLAN_ID` ile
+ `LMST_L_GOODS_TRANSPLAN_DET.GOODS_TRANSPLAN_ID`'nin tutmaması "analiz kodu
+ hatası" ile fatura kesimini bozabiliyor.
+
 ## Bu Dosyayı Güncelleme
 
 Kullanıcı yeni bir ERP ekranı, alan ID'si, format kuralı veya Oracle
