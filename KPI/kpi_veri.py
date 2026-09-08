@@ -137,5 +137,11 @@ def hucre_degeri(deger: Any) -> Any:
     if isinstance(deger, Decimal):
         return float(deger)
     if isinstance(deger, (datetime, date)):
+        # Uyumsoft'ta "01.01.0001" boş tarih anlamına gelir (bkz. SQL'deki
+        # varsayılan CASE değerleri). Bu tür çok eski tarihler Excel COM'a
+        # yazılamaz (pywintypes -> OSError [Errno 22] Invalid argument),
+        # bu yüzden boş hücreye çevrilir.
+        if deger.year < 1900:
+            return None
         return deger
     return deger
