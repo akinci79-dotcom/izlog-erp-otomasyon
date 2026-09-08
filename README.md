@@ -126,3 +126,8 @@ bir fark olduğunda satır bulunamıyor ve akış hata veriyordu. Bu sürümde:
 - `wait_for_load_state("networkidle")` çağrıları, ERP'nin sürekli arka plan
   isteği attığı durumlarda sonsuz beklemeye/timeout'a düşmesin diye güvenli bir
   yedek beklemeyle sarmalandı (`_agsakinligini_bekle`).
+
+## KPI Analiz (ayrı modül)
+
+Üst yönetim KPI raporu **otomasyondan bağımsız** `KPI/` klasöründedir.
+Otomasyon dosyalarına dokunmaz. Bkz. [`KPI/README.md`](KPI/README.md).

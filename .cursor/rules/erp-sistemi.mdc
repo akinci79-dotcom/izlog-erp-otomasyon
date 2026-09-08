@@ -556,7 +556,15 @@ otomatik çalışır). DSN: `172.17.8.11:1521/UYUMSOFT`, kullanıcı: `uyumsoft`
 - `PSMT_INVOICE_M` — Fatura ana tablosu. `INVOICE_M_ID`, `DOC_NO` (Fatura no),
   `DOC_DATE` (Fatura tarihi). `LMST_L_GOODS_OP_DET.INVOICE_M_ID` üzerinden
   doğrudan bağlanıyor (ayrı bir detay tablosuna gerek yok).
-- `LMST_L_TRANSPORT` — Sevk tablosu. `TRANSPORT_NO` (Sevk no, `S-...`).
+- `LMST_L_TRANSPORT` — Sevk tablosu. `TRANSPORT_NO` (Sevk no, `S-...`),
+  `DOC_DATE` (sevk tarihi), `TRANSPORT_ID`.
+- `LMST_L_TRANS_GOODS_DETAIL` — Yük ↔ Sevk ara tablosu [DOĞRULANMIŞ, yük
+  bazında detay raporu SQL'i]. `TGD.GOODS_ID = YK.GOODS_ID`,
+  `TGD.TRANSPORT_ID = SK.TRANSPORT_ID`. Yük'süz sevk satırlarında
+  `TGD.GOODS_ID = 0`.
+- `LMST_L_TRANS_OP_DETAIL` — Sevk alış fiyat satırları [DOĞRULANMIŞ].
+  `PURCHASE_SALES_TYPE IN (1,3)` = alış, `(2,4)` = alış iade.
+  Bir sevkte birden fazla yük varsa alış tutarı `YUK_SAYISI` ile bölünür.
 
 `kaynak_yuk_verilerini_getir(kaynak_yuk_no)` şu sözleşmeyi (contract) döndürür:
 `{"PROJE_KODU": str, "YUK_TARIHI": "GG.AA.YYYY", "SATIS_SATIRLARI":
@@ -569,6 +577,71 @@ değerlerine (`01.01.0001` / `0`) döndürür. `DRY_RUN` aktifken tamamen atlan�
 
 **Fatura tablolarını keşfetmek için kullanılan yardımcı script**: `fatura_bul.py`
 (`all_objects` üzerinden `%INVOICE_M` / `FIND_INVOICE%` desenli tablo/görünüm arar).
+
+## KPI Analiz Modülü (otomasyondan TAMAMEN bağımsız) [DOĞRULANMIŞ — kod incelemesi]
+
+KPI işleri **yalnızca `KPI/` alt klasöründe** yürütülür. Üst klasördeki otomasyon
+(`izlog_yuk_otomasyon.py`, `ayarlar.py`, `oracle_okuyucu.py`) ile **ortak dosya yok**.
+
+| Dosya | Görevi |
+|---|---|
+| `KPI/ayarlar.py` | KPI'ya özel Oracle ayarları (otomasyon `ayarlar.py`'den BAĞIMSIZ) |
+| `KPI/oracle_baglanti.py` | KPI Oracle bağlantısı |
+| `KPI/kpi_analiz.py` | KPI sorguları + problem tespiti |
+| `KPI/kpi_kiralk_arac.py` | Lojistik tedarikçi hesaplaşma → **Filo Detay** sayfası |
+| `KPI/kpi_kalem_detay.py` | Sevk/yük kalem detay sorguları |
+| `KPI/kpi_fatura_detay.py` | Sevk/yük fatura bağlantı sorguları |
+| `KPI/kpi_sablon_rapor.py` | Referans şablondan rapor (VERİ + Filo Detay + pivot) |
+| `KPI/kpi_veri.py` | VERİ sayfası Oracle sorgusu |
+| `KPI/kpi_rapor_olustur.py` | Giriş noktası (varsayılan: şablon modu) |
+| `KPI/kpi_rapor_analiz.py` | Eski çok sayfalı analiz raporu (`--analiz`) |
+| `KPI/referans/kpi_sablon.xlsx` | Kullanıcının Temmuz KPI şablonu (repo'da yok) |
+
+Kurulum ve çalıştırma: bkz. `KPI/README.md`
+
+```powershell
+cd KPI
+copy ayarlar.example.py ayarlar.py
+python kpi_rapor_olustur.py
+```
+
+**Sütun AutoFit [DOĞRULANMIŞ — kod]**: Rapor doldurulduktan sonra VERİ/Filo Detay
+openpyxl ile, pivot özet sayfaları ise Windows + Excel COM (`UsedRange.Columns.AutoFit`)
+ile genişletilir — `#######` görünümü önlenir. `ayarlar.KPI_SUTUN_AUTOFIT = True`
+(varsayılan); pywin32/Excel yoksa yalnızca VERİ/Filo Detay otomatik genişler.
+
+**Rapor KPI'ları** (Uyumsoft yük bazında detay raporu SQL'i ile uyumlu
+[DOĞRULANMIŞ]):
+- Yük/sevk hacmi — `LMST_L_GOODS` + `LMST_L_TRANS_GOODS_DETAIL` +
+  `LMST_L_TRANSPORT`
+- Net satış geliri — `LMST_L_GOODS_OP_DET`: satış `(2,4)` − iade `(1,3)`
+- Fatura bağlama oranı — `PSMT_INVOICE_M` / `INVOICE_M_ID`
+- Proje/operasyon kırılımı — `LMSD_L_AGR_PROJ_TYPE`, `INVD_EXPENSE`
+- Brüt marj — net satış − sevk alış (`LMST_L_TRANS_OP_DETAIL`, yük başına
+  paylaştırılmış)
+- Opsiyonel filtreler: `GNLD_COMPANY.CO_CODE`, `GNLD_BRANCH.BRANCH_CODE`,
+  `YK.IS_DOOR_TO_DOOR = 0` (kapıdan kapıya hariç)
+
+**Filo Detay** (Lojistik tedarikçi hesaplaşma raporu SQL'i [DOĞRULANMIŞ]):
+- Yönetim raporundaki **Filo Detay** sayfasına ERP'den yapıştırılan veri ile aynı
+- `LMST_SUP_PAYOFF_M` — hakediş dosyası (CASE_CODE, DOC_DATE, CASE_STATUS)
+- `LMST_SUP_PAYOFF_OPDET` — dosya kalemleri (AMT_TRA, PURCHASE_SALES_TYPE)
+- `LMST_SUP_PAYOFF_T_D` — dosya ↔ sevk bağlantısı
+- Maliyet = ödenecek tutar + aldığı mazot + IZLOG OGS (rapor formülü)
+- Kar/zarar = bağlı yük satış toplamı − maliyetler toplamı
+
+**Kalem bazında detay raporu** [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
+- `LMST_L_TRANS_OP_DETAIL` + `TGD` → **Sevk Kalemi** (aynı sevk satırı yük sayısı
+  kadar tekrarlanır — çoklu yük kırılımı)
+- `LMST_L_GOODS_OP_DET` + `TGD` → **Yük Kalemi**
+- Tutar alanı: `AMT_TRA`; fatura: `PSMT_INVOICE_M.DOC_NO`
+- Sevk tarihi filtresi sevk kaleminde `SK.DOC_DATE`, yük kaleminde `YK.DOC_DATE`
+
+**Sevk/yük fatura detay raporu** [DOĞRULANMIŞ — kullanıcı rapor SQL'i]:
+- Sevk: `LMST_L_TRANS_OP_DETAIL` → `PSMT_INVOICE_M` (fatura no/tarih)
+- Yük: `LMST_L_GOODS_OP_DET` → `PSMT_INVOICE_M`
+- Operasyon kodu: `INVD_EXPENSE.EXPENSE_CODE` (rapor SQL'indeki
+  `LMSD_L_OP_DEFINITION` KPI/otomasyonda kullanılmaz — yanlış tablo)
 
 ### ⚠️ Windows/Türkçe karakter encoding riski [DOĞRULANMIŞ]
 Kullanıcının Windows sunucusunda dosyaları Notepad gibi araçlarla kaydetmesi,
