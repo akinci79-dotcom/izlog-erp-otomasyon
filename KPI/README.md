@@ -75,7 +75,15 @@ BRANCH_CODE = "MERKEZ"
 DB_SIFRE = "..."
 ```
 
-Her ay tek yapmanız gereken: `KPI_DONEM` değerini güncellemek (örn. `"08.2026"`). Farklı bir tarih aralığı gerekiyorsa (`KPI_DONEM` yerine) `KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI` kullanılabilir.
+`KPI_DONEM` üç formatı destekler:
+
+| Format | Örnek | Anlamı |
+|---|---|---|
+| `AA.YYYY` | `"08.2026"` | Tek ay (Ağustos 2026) |
+| `AA.YYYY-AA.YYYY` | `"01.2026-04.2026"` | Ay aralığı (Ocak–Nisan 2026, 4 aylık) |
+| `YYYY` | `"2026"` | Tam yıl (01.01.2026 – 31.12.2026) |
+
+Ayın/yılın kaç gün çektiğine hiç bakmanıza gerek yok, otomatik hesaplanır. Bu kalıplara uymayan özel bir aralık gerekiyorsa (`KPI_DONEM` yerine) `KPI_BASLANGIC_TARIHI` / `KPI_BITIS_TARIHI` kullanılabilir.
 
 ## Çalıştırma
 

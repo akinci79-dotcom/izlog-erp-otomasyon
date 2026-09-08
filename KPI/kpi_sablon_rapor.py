@@ -912,26 +912,58 @@ def _bind_olustur(bas: str, bit: str) -> dict:
     return bind
 
 
+def _ay_yil_ayristir(metin: str, ham: str) -> tuple[int, int]:
+    try:
+        ay_str, yil_str = metin.strip().split(".")
+        ay, yil = int(ay_str), int(yil_str)
+        if not 1 <= ay <= 12:
+            raise ValueError
+        return ay, yil
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(
+            f"KPI_DONEM formatı hatalı: '{ham}'. Beklenen: 'AA.YYYY', "
+            f"'AA.YYYY-AA.YYYY' veya 'YYYY'."
+        ) from exc
+
+
+def _donem_araligi_hesapla(donem: str) -> tuple[str, str]:
+    """KPI_DONEM'i (tek ay / ay aralığı / tam yıl) tarih aralığına çevirir."""
+    ham = donem
+    donem = donem.strip()
+
+    if re.fullmatch(r"\d{4}", donem):
+        yil = int(donem)
+        bas = date(yil, 1, 1).strftime("%d.%m.%Y")
+        bit = date(yil, 12, 31).strftime("%d.%m.%Y")
+        return bas, bit
+
+    if "-" in donem:
+        bas_metin, bit_metin = donem.split("-", 1)
+        bas_ay, bas_yil = _ay_yil_ayristir(bas_metin, ham)
+        bit_ay, bit_yil = _ay_yil_ayristir(bit_metin, ham)
+        son_gun = calendar.monthrange(bit_yil, bit_ay)[1]
+        bas = date(bas_yil, bas_ay, 1).strftime("%d.%m.%Y")
+        bit = date(bit_yil, bit_ay, son_gun).strftime("%d.%m.%Y")
+        return bas, bit
+
+    ay, yil = _ay_yil_ayristir(donem, ham)
+    son_gun = calendar.monthrange(yil, ay)[1]
+    bas = date(yil, ay, 1).strftime("%d.%m.%Y")
+    bit = date(yil, ay, son_gun).strftime("%d.%m.%Y")
+    return bas, bit
+
+
 def _tarih_araligi() -> tuple[str, str]:
-    """Rapor dönemi — KPI_DONEM ("AA.YYYY") varsa ayın ilk/son günü otomatik
-    hesaplanır (kaç gün çektiğine bakmaya gerek kalmaz). Yoksa eski
-    KPI_BASLANGIC_TARIHI / KPI_BITIS_TARIHI kullanılır (geriye dönük uyumluluk)."""
+    """Rapor dönemi:
+    - KPI_DONEM = "AA.YYYY"           -> tek ay (ör. "08.2026")
+    - KPI_DONEM = "AA.YYYY-AA.YYYY"   -> ay aralığı (ör. "01.2026-04.2026")
+    - KPI_DONEM = "YYYY"              -> tam yıl (ör. "2026")
+    Her durumda ayın kaç gün çektiği otomatik hesaplanır. KPI_DONEM tanımlı
+    değilse eski KPI_BASLANGIC_TARIHI / KPI_BITIS_TARIHI kullanılır (geriye
+    dönük uyumluluk)."""
     donem = getattr(ayarlar, "KPI_DONEM", None)
     if donem:
-        donem = str(donem).strip()
-        try:
-            ay_str, yil_str = donem.split(".")
-            ay, yil = int(ay_str), int(yil_str)
-            if not 1 <= ay <= 12:
-                raise ValueError
-        except (ValueError, AttributeError) as exc:
-            raise ValueError(
-                f"KPI_DONEM formatı hatalı: '{donem}'. Beklenen: 'AA.YYYY' (örn. '08.2026')."
-            ) from exc
-        son_gun = calendar.monthrange(yil, ay)[1]
-        bas = date(yil, ay, 1).strftime("%d.%m.%Y")
-        bit = date(yil, ay, son_gun).strftime("%d.%m.%Y")
-        return bas, bit
+        return _donem_araligi_hesapla(str(donem))
 
     bugun = datetime.now().date()
     bas = getattr(ayarlar, "KPI_BASLANGIC_TARIHI", bugun.replace(day=1).strftime("%d.%m.%Y"))
