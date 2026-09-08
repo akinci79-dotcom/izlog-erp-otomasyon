@@ -50,6 +50,31 @@ if (Test-Path (Join-Path $KpiDir "referans\kpi_veri_rapor.sql")) {
     Copy-Item (Join-Path $KpiDir "referans\kpi_veri_rapor.sql") $VeriSqlYedek -Force
 }
 
+# Repodan kaldirilmis eski dosyalari temizle (kopyalama sadece ekler/uzerine yazar,
+# hic silmezdi -- klasor zamanla eski kesif/test scriptleriyle dolardi).
+$Korunacaklar = @(
+    "ayarlar.py",
+    "raporlar",
+    "referans\kpi_sablon.xlsx",
+    "referans\kpi_veri_rapor.sql",
+    "__pycache__",
+    "izlog-kpi-temp"
+)
+$YeniDosyalar = Get-ChildItem -Path $Kaynak -Recurse -File | ForEach-Object {
+    $_.FullName.Substring($Kaynak.Length + 1)
+}
+Get-ChildItem -Path $KpiDir -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $goreli = $_.FullName.Substring($KpiDir.Length + 1)
+    $korunan = $false
+    foreach ($k in $Korunacaklar) {
+        if ($goreli -eq $k -or $goreli.StartsWith("$k\")) { $korunan = $true; break }
+    }
+    if (-not $korunan -and ($YeniDosyalar -notcontains $goreli)) {
+        Write-Host "  Eski dosya siliniyor: $goreli" -ForegroundColor DarkYellow
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Copy-Item "$Kaynak\*" $KpiDir -Recurse -Force
 
 if (Test-Path $AyarlarYedek) {
