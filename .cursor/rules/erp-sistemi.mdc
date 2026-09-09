@@ -265,6 +265,75 @@ geldiği KESİN DEĞİL. "Toplu plaka kaydetme" için bir SQL/otomasyon
 yazılmadan önce bu eşleme netleşmeli (bkz. sohbet geçmişinde kullanıcıya
 sorulan DESC/sequence soruları).
 
+### ⚠️ ÖNEMLİ KEŞİF — Araç aslında ayrıca bir "Analiz Kartı" kaydı [DOĞRULANMIŞ, ekran görüntüsüyle]
+
+Aynı plaka (`31ATR52`) için kullanıcı ayrıca **"Analiz Kartı"** ekranının
+görüntüsünü paylaştı. Bu, Uyumsoft'un GENEL (vehicle'a özel olmayan) bir
+"analiz kodu/boyutu" (maliyet merkezi / raporlama etiketi gibi) alt
+sistemi — ve her aracın **kendi Araç Tanım kaydına ek olarak** bu genel
+sistemde de bir kaydı var. Bu, "toplu plaka kaydetme" işini tek bir tablo
+INSERT'inden **en az iki bağımsız kayda** çıkarıyor:
+
+1. **Araç Tanım** (`FLMD_VEHICLE`, önceki bölümde belgelendi) — Araç Kodu,
+   Model, Mülkiyet, Ruhsat vb.
+2. **Analiz Kartı** (tablo adı henüz TEYİT EDİLMEDİ, muhtemelen
+   `GNLD_...` önekli genel bir Uyumsoft tablosu) — bkz. aşağıdaki alanlar.
+
+Araç Tanım ekranındaki `Analiz Kodu` alanı (önceki bölümde görülen, değeri
+`31ATR52` — Araç Kodu ile birebir aynı) bu iki kaydı birbirine bağlıyor
+olmalı: Araç Tanım kaydı, kendi Analiz Kartı kaydına bu kod üzerinden
+referans veriyor.
+
+**"Analiz Kartı" ekranı alan yapısı** (üst araç çubuğu Yük/Sevk/Araç Tanım
+ile aynı: `Yeni`, `Düzelt`, `Sil`, `Kopya`, `Dosya`, `Takip`, `Yorum`,
+`Etiket`, `İncele`):
+- `Analiz Kodu`: `31ATR52` (Araç Tanım'daki `Analiz Kodu`/`Araç Kodu` ile
+  aynı değer).
+- `Analiz Adı`: `31ATR52` (bu örnekte kod ile aynı, ama muhtemelen serbest
+  metin olabilir — başka bir analiz kodunda farklı olabilir).
+- `Analiz Grup Kodu`: `ARAÇ` (lookup — bu, aracın hangi "analiz grubu"na
+  ait olduğunu belirtiyor; yani bu ekran araca özel değil, GENEL bir analiz
+  kodu tanımlama ekranı, `ARAÇ` sadece bir grup/kategori değeri).
+- `Kategori`, `Kategori2` — bu örnekte BOŞ (opsiyonel ek sınıflandırma).
+- `Lojman Mı?` — checkbox, bu örnekte İŞARETSİZ (araçlar için ilgisiz,
+  muhtemelen bu analiz grubu "konut/lojman" gibi farklı analiz tiplerinde
+  de kullanılıyor, ortak bir ekran).
+- **`Firma Analiz Kartı` grid'i** (ÇOK ÖNEMLİ) — bu ERP'nin **çok şirketli
+  (multi-company/multi-tenant) paylaşımlı** bir kurulum olduğunu gösteriyor.
+  Aynı Uyumsoft veritabanında en az 5 firma tanımlı: `200` (Bazaari Urla
+  Gıda Tekstil Turizm İth. İhr. San.), `AVRASYA` (Avrasya Kimya ve Makina
+  San. Tic. Ltd. Şti.), **`IZL`** (**İzlog Nakliye ve Lojistik Hizmetleri
+  Ltd. Şti.** — bizim şirketimiz), `100` (Trendlife Güzellik Hizmetleri
+  Tic. A.Ş.), `TRENDLIFE` (Trendlife Güzellik Hizmetleri Tic. Ltd. Şti.).
+  Bu grid'de her firma için bir checkbox var; bu araç örneğinde SADECE
+  `IZL` işaretli (turuncu/vurgulu satır) — yani bir analiz kodu birden
+  fazla firmada "aktif" olarak işaretlenebiliyor, bu araç sadece İzlog'a
+  ait olduğu için sadece `IZL` işaretli. **Toplu plaka kaydı SQL/otomasyonu
+  yazılırken bu firma eşleştirmesi (`IZL` işaretlenmesi) atlanmamalı**,
+  aksi halde yeni araç kaydı oluşturulsa da İzlog'un ekranlarında/
+  raporlarında görünmeyebilir.
+  **[VARSAYIM/TODO]**: `200` ve `IZL` satırları koyu/turuncu renkte
+  görünüyor (diğerlerinden farklı) — bu muhtemelen "bu oturumda aktif olan
+  firma" ya da "en az bir yerde seçili olan firma" gibi bir UI vurgusu
+  olabilir, kesin anlamı teyit edilmedi.
+- **"Dil Tanımları" sekmesi**: `Dil Kodu` / `Açıklama` grid'i — bu örnekte
+  tek satır: `TR` → `31ATR52`. Yani Analiz Kartı kayıtları dil bazlı
+  (çoklu dil) açıklama tutuyor, standart Uyumsoft "genel tanım" (`GNLD_`
+  önekli tablolar için tipik) çoklu dil deseni.
+
+**Toplu plaka kaydetme için pratik sonuç**: Bu keşif, "sadece `FLMD_VEHICLE`'a
+INSERT at" yaklaşımının YETERSİZ olduğunu gösteriyor — muhtemelen önce (veya
+sonra) genel Analiz Kartı sisteminde de bir kayıt (+ firma eşleştirmesi +
+dil tanımı) oluşturulması gerekiyor. Bu, ham SQL INSERT yaklaşımının riskini
+daha da artırıyor (en az 2 farklı ekran/tablo grubu, çok şirketli
+eşleştirme dahil) ve **Playwright tabanlı UI otomasyonu** (mevcut Yük/Sevk
+otomasyonu gibi, ERP'nin kendi "Yeni" akışını iki ekranda da sırayla
+kullanarak) önerisini daha da güçlendiriyor — ERP'nin kendisi muhtemelen
+Araç Tanım'da "Kaydet"e basıldığında Analiz Kartı'nı OTOMATİK oluşturuyor
+olabilir (henüz teyit edilmedi) ki bu doğruysa SQL yaklaşımı ekstra bir
+tabloyu manuel doldurmak zorunda kalıp ERP'nin kendi otomatik oluşturduğu
+kayıtla çakışabilir/tutarsız kalabilir.
+
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
