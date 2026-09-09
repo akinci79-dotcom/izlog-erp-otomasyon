@@ -334,6 +334,106 @@ olabilir (henüz teyit edilmedi) ki bu doğruysa SQL yaklaşımı ekstra bir
 tabloyu manuel doldurmak zorunda kalıp ERP'nin kendi otomatik oluşturduğu
 kayıtla çakışabilir/tutarsız kalabilir.
 
+### ⚠️ İKİNCİ (DAHA DETAYLI) BİR "Araç Tanım" EKRANI BULUNDU [DOĞRULANMIŞ, ekran görüntüsüyle — hangi menüden açıldığı henüz teyit edilmedi]
+
+Kullanıcı, aynı plaka (`31ATR52`) için önceki bölümde belgelenen ekrandan
+**FARKLI**, daha zengin bir "Araç Tanım" ekranı görüntüsü paylaştı. Kullanıcı
+bunu "başka bir araç tanım ekranı" olarak tanımladı — yani bu, önceki
+ekranın sadece kaydırılmış/görünmeyen bir kısmı değil, muhtemelen FARKLI bir
+menü girişinden açılan (örn. "Filo Yönetimi" gibi ayrı bir modül) ikinci bir
+ekran. **[VARSAYIM/TODO]**: Bu ekranın gerçekten farklı bir menü öğesi mi
+olduğu, yoksa önceki ekranın az önce görülmeyen sekmeleri mi olduğu
+kullanıcıdan teyit edilmeli.
+
+**Sekme listesi** (önceki ekrandan farklı, TAM liste burada görünüyor):
+`Araç Tanımları`, `Kredi Bilgileri`, `Araç Detay Bilgileri`, `Ruhsat
+Bilgileri`, `Rehin/Satış/SatınAlma Bilgileri`, `Kontroller`. (Önceki
+ekranda "Ruhsat Bilgileri"/"Satın Alma Bilgileri"/"Rehin Bilgileri"/"Satış
+Bilgileri" TEK bir sekme içinde alt alta BLOK olarak görünüyordu; burada
+bunlar en azından kısmen BİRLEŞİK bir sekmeye (`Rehin/Satış/SatınAlma
+Bilgileri`) ve ayrı bir `Ruhsat Bilgileri` sekmesine bölünmüş durumda —
+iki ekran arasında tam olarak nasıl bir ilişki olduğu belli değil.)
+
+**Bu ekranın "Araç Tanımları" sekmesi tamamen farklı alanlar gösteriyor**
+(önceki ekrandaki Ruhsat/Satın Alma/Rehin/Satış blokları burada YOK, bunun
+yerine):
+- Üst blok: `Araç Kodu` (`31ATR52`), `Plaka` (`31ATR52`), `Çekici`
+  (checkbox, işaretli ✓), `Yurtiçi` (checkbox, işaretli ✓), `Çekici
+  Taş.Ün.Tipi(Model)` (`300` → `Tır`), `Dorse` (checkbox, işaretli ✓),
+  `YurtDışı` (checkbox, işaretsiz), `Treyler/Kamyon Taş.Ünt.Tipi`
+  (`09.02` → `Tır Frigorifik`), `Model Yılı` (`2014`), `Analiz Kodu`
+  (`31ATR52`), `Sabit Kıymet Kodu`, `Araç KM Sayacı` (`0`), `Sürücü
+  Ad/Soyadı`, `Ülke`.
+  **Not**: `Çekici`/`Dorse` checkbox'ları + iki farklı "Taş.Ün.Tipi(Model)"
+  alanı (biri Çekici için, biri Treyler/Kamyon için) gösteriyor ki bu araç
+  hem çekici hem dorse özelliği taşıyan bileşik bir kayıt — yani bir "Model
+  Kodu" tek bir araç tipini değil, çekici/dorse kombinasyonunu tanımlıyor
+  olabilir.
+- `Taşıma Özellikleri` bloğu: `En`, `Uzunluk`, `Yükseklik`, `Araç Sayısı`,
+  `Hacim Kapasite`, `Ton Kapasite`, `Hücre Sayısı` (bu örnekte hepsi
+  `0,00`).
+- `Yakıt Bilgileri` bloğu: `1. Yakıt Deposu Hacmi`, `2. Yakıt Deposu
+  Hacmi`, `Boş Yakıt Oranı`, `Dolu Yakıt Oranı` (bu örnekte hepsi `0,00`).
+- **`Araç Cari Detayı` grid'i [ÇOK ÖNEMLİ — mülkiyet GEÇMİŞİ, tarih
+  aralıklı, birden fazla satır]**: kolonlar `İşyeri`, `Başlangıç Tarihi`,
+  `Bitiş Tarihi`, `Mülkiyet`, `Cari Adı`, `Cari` (cari kodu), `Firma`,
+  `İşyeri` (tekrar, farklı bir kolon), `I` (checkbox, anlamı belirsiz —
+  muhtemelen "İptal" ya da "İzin"), `KM Ara...` (kesik, muhtemelen "KM
+  Aralığı" — checkbox). Bu grid, önceden belgelenen `FLMD_VHC_ENTITY_
+  DETAIL` tablosunun EKRANDAKİ GÖRÜNÜMÜ — her satır o tablonun bir kaydı.
+  Bu örnekte 4 satır (aracın 2015'ten 2099'a kadar süren mülkiyet geçmişi):
+  | İşyeri | Başlangıç | Bitiş | Mülkiyet | Cari Adı |
+  |---|---|---|---|---|
+  | 34-00 | 30.04.2015 | 30.04.2016 | Tedarikçi | KAPİTRANS ULUS.TAŞ.Tİ... |
+  | 34-00 | 29.09.2016 | 05.12.2018 | Tedarikçi | ÖMER ŞEN - ŞEN LOJİSTİK |
+  | 34-00 | 06.12.2018 | 17.01.2019 | Kiralık | ÖMER ŞEN - ŞEN LOJİSTİK |
+  | 34-00 | 18.01.2019 | 19.01.2099 | Tedarikçi | ÖMER ŞEN - ŞEN LOJİSTİK |
+
+  Son satırın bitiş tarihinin `19.01.2099` (yapay/sonsuz bir tarih) olması,
+  "hâlâ aktif/güncel" mülkiyet kaydının bu şekilde işaretlendiğini gösteriyor
+  — yeni bir mülkiyet kaydı girilirken muhtemelen ÖNCEKİ aktif kaydın bitiş
+  tarihi gerçek bir tarihe güncelleniyor, yeni kayıt `..2099` ile açılıyor.
+  Bu desen, olası bir "toplu plaka mülkiyet güncelleme" otomasyonu için
+  kritik bir davranış kuralı.
+
+  **✅ CO_ID/BRANCH_ID DOĞRULANDI [DOĞRULANMIŞ, bu ekran görüntüsüyle]**:
+  Grid'deki `Firma` kolonu tüm satırlarda `2.371,00`, `İşyeri` kolonu tüm
+  satırlarda `6.364,00` gösteriyor — bunlar aslında `2371` ve `6364`
+  sayılarının (muhtemelen grid'in genel amaçlı bir sayısal formatlayıcı
+  kullanması nedeniyle) yanlışlıkla iki ondalıklı para birimi gibi
+  gösterilmiş hali. Bu, dosyanın başındaki `INVD_BRANCH_EXPENSE` bölümünde
+  [VARSAYIM/TODO] olarak işaretlenmiş "İzlog'un `CO_ID=2371`, `BRANCH_ID=
+  6364` sabit" varsayımını BAĞIMSIZ bir ekrandan gelen veriyle doğruluyor —
+  bu VARSAYIM artık [DOĞRULANMIŞ] sayılabilir.
+- `Taşıma yük tipleri` grid'i: `Taşıma Yük Tipi Kodu` / `Taşıma Yük Tipi
+  Adı` — bu örnekte tek satır: `ANTALYA` / `ANTALYA`. Bu, önceden
+  belgelenen `FLMD_VHC_GOODTYPE_DETAIL` + `LMSD_L_GOODS_TYPE` ilişkisinin
+  (Arvento ID keşfinde kullanılan aynı tablo çifti) ekrandaki görünümü —
+  aracın hangi "yük tipi" etiketlerine sahip olduğunu gösteriyor.
+- **`Araç Kira Detayı` grid'i**: kolonlar `İşyeri Kodu` (`34-00`), `İşyeri
+  Adı` (`İZLOG NAKLİY...`), `Başlangıç Tarihi` (`06.12.2018`), `Bitiş
+  Tarihi` (`17.01.2019`), `Kira Tip Kodu` (`AYLIK KM`), `Kira Gün Sayısı`
+  (`30,00`), `Operasyon Kodu` (**`NAVLUN`**), `Operasyon Açıklama`
+  (`YURTİÇİ NAKLİYE HİZMET...`), `Araç Kira Bedeli` (`12.500,00`), `Yakıt
+  Oranı` (`40,00`). Bu grid, aracın kiralık olduğu dönemdeki kira
+  sözleşmesi şartlarını (aylık km bazlı kira, navlun operasyon kodu, yakıt
+  payı oranı) tutuyor — muhtemelen `FLMD_VHC_RENT_DETAIL` tablosunun (veya
+  ona yakın bir tablonun) EKRANDAKİ GÖRÜNÜMÜ, ama tam kolon eşlemesi henüz
+  teyit edilmedi. Burada tekrar **`Operasyon Kodu = NAVLUN`** metin olarak
+  (sayısal ID değil, çözümlenmiş açıklama olarak) görünüyor — yukarıdaki
+  "OPERATION_ID ↔ Operasyon Kodu" çelişkisini çözmüyor ama NAVLUN'un
+  birden fazla bağımsız ekranda tutarlı bir kavram olduğunu teyit ediyor.
+
+**Toplu plaka kaydetme için pratik sonuç**: Bu ekran, "toplu plaka
+kaydetme" görevinin başta düşünüldüğünden daha karmaşık olduğunu gösteriyor
+— artık en az ŞUNLAR var: (1) Araç Tanım temel bilgileri, (2) Analiz Kartı
++ firma eşleştirmesi, (3) Mülkiyet GEÇMİŞİ (tek değer değil, tarih aralıklı
+çoklu satır, aktif kayıt için `..2099` deseni), (4) Taşıma yük tipi
+etiketleri, (5) (kiralık araçlar için) Kira Detayı. Kullanıcının "toplu
+plaka kaydetme" isteğinin TAM OLARAK hangi alt kümeyi kapsadığı (örn.
+sadece yeni plaka + mülkiyet mi, yoksa tüm bu detaylar mı) netleşmeden
+kapsamlı bir SQL/otomasyon yazılmamalı.
+
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
