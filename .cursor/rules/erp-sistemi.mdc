@@ -1217,6 +1217,77 @@ için `END_KM`/`RETURN_KM` alanlarını Excel'den okunan değerlerle toplu
 güncellemek amacıyla hazırlanmış bir `FOR UPDATE` sorgusu + eşleşen km
 değerleri tablosu içeriyor (kolonlar: sevk no, km, boş km).
 
+### ✅ `FLMD_VEHICLE` / `FLMD_VHC_ENTITY_DETAIL` — TAM kolon yapısı ve sequence'lar [DOĞRULANMIŞ, `user_tab_columns` çıktısıyla — "toplu plaka kaydetme" görevi için]
+
+Kullanıcı, "toplu plaka kaydetme" görevi için gerçek Oracle şemasından
+`user_tab_columns` çıktısını ve `user_sequences` listesini paylaştı. Bu,
+önceki bölümlerdeki tahminleri KESİNLEŞTİRDİ:
+
+**`FLMD_VEHICLE`** — 85 kolon, PK = `VEHICLE_ID` (`NOT NULL`, TEK
+`NOT NULL` kolon — diğer TÜM kolonlar DB seviyesinde nullable; UI'da
+kırmızı/zorunlu görünen alanlar — örn. `Mülkiyet` — DB constraint'i değil,
+UYGULAMA (ekran) seviyesi validasyon). Görevle ilgili öne çıkan kolonlar:
+- `VEHICLE_ID` (PK) — sequence: **`VEHICLE_ID_FLMD_VEHICLE`** (net/kesilmemiş
+  isim, `user_sequences` listesinde doğrulandı).
+- `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`, `UPDATE_DATE` — audit
+  kolonları (Yük/Sevk otomasyonundaki "veritabanı iz temizliği" mantığıyla
+  aynı aile).
+- `VEHICLE_CODE` (Araç Kodu), `LICENSE_PLATE` (Plaka) — genellikle aynı
+  değer (örn. `31ATR52`).
+- `VHC_MODEL_ID` (Model Kodu — örnekte `300` = Tır), `MODEL_YEAR`,
+  `TRAILER_TYPE_ID` (Treyler/Kamyon tipi — örnekte `09.02` = Tır Frigorifik).
+- **`OWNERSHIP_STATUS`** — DİKKAT: bu kolon `FLMD_VHC_ENTITY_DETAIL`'de de
+  var (aşağıda). Araç ana tablosunda muhtemelen "GÜNCEL/AKTİF" mülkiyet
+  durumunun denormalize edilmiş bir kopyası; ikisinin de tutarlı
+  güncellenmesi gerekebilir.
+- **`IS_TRACTOR`** / **`IS_TRAILER`** (her ikisi `NUMBER(1)`, 0/1 checkbox) —
+  bunlar Araç Tanım ekranındaki `Çekici`/`Dorse` checkbox'larının karşılığı.
+  ÖNEMLİ: bu ikisinin AYNI satırda birlikte `1` olabildiği (örnek `31ATR52`
+  hem çekici hem dorse — bileşik/kombine kayıt) VEYA sadece biri `1`
+  olabildiği (çekici ve dorse farklı plakalarda, iki AYRI `FLMD_VEHICLE`
+  satırı) her iki senaryoyu da destekliyor — şema seviyesinde bir kısıt
+  yok, hangi deseni kullanacağımız veriye (aynı plaka mı farklı plaka mı)
+  bağlı.
+- **`TRAILER_ID`** — bir çekiciyi belirli bir dorse'ye (başka bir
+  `FLMD_VEHICLE.VEHICLE_ID`'ye) bağlamak için FK olabilir (henüz canlı
+  test edilmedi).
+- **`ANALYSIS_ID`** — [ÇOK ÖNEMLİ, önceki "Analiz Kartı" keşfini teyit
+  ediyor] Bu, Araç Tanım ekranındaki `Analiz Kodu` alanının GERÇEK FK
+  kolonu. Nullable olsa da, önceki ekran örneklerinde hep dolu (plaka ile
+  aynı değerde bir Analiz Kartı'na işaret ediyor) görüldü. **[VARSAYIM/TODO,
+  hâlâ çözülmedi]**: Yeni bir araç eklerken bu ID'yi biz mi üretmeliyiz
+  (yani önce ayrı bir Analiz Kartı INSERT'i mi gerekiyor, tablo adı henüz
+  bilinmiyor), yoksa NULL bırakmak kabul edilebilir mi (raporlama/analiz
+  özelliklerini kullanmayacaksak sorun olmayabilir)?
+- `DRIVER_ID` — nullable, kullanıcının kararıyla bu görevde NULL bırakılacak
+  (sürücü ataması yapılmayacak).
+- `COUNTRY_ID`, `CURRENT_KM`, `IS_DOMESTIC`/`IS_INTERNATIOAL` (Yurtiçi/
+  YurtDışı checkbox'ları), `CURRENT_VHC_LOCATION_ID`/`SHIPPING_VHC_LOCATION_ID`
+  (Bulunduğu Yer/Sevk Edileceği Yer), `FIXED_ASSETS_ID` (Sabit Kıymet Kodu),
+  `LIEN_STATUS`/`LIEN_BANK_ID`/`LIEN_BANK_BRANCH_ID`/`LIEN_END_DATE` (Rehin
+  Bilgileri bloğu), Satın Alma/Satış blokları için `PURCHASE_*`/`SALES_*`
+  önekli ~20 kolon (fatura no/tarih/tutar/kur/KDV/ÖTV) — bu görev kapsamında
+  hiçbiri kullanılmıyor (hepsi nullable, boş kalabilir).
+
+**`FLMD_VHC_ENTITY_DETAIL`** — 14 kolon (tam liste, `Araç Cari Detayı`
+grid'inin karşılığı), `NOT NULL` olan 3 kolon: `VEHICLE_ENTITY_DETAIL_ID`
+(PK), `VEHICLE_ID` (FK → `FLMD_VEHICLE`), `ENTITY_ID` (FK → cari, "Mülkiyet
+Sahibi"). Diğerleri: `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`,
+`UPDATE_DATE` (audit), `START_DATE`, `END_DATE` (mülkiyet geçerlilik
+aralığı — aktif kayıtlarda `END_DATE` uzak/yapay bir tarih, örn.
+`19.01.2099`), `OWNERSHIP_STATUS` (enum: 0=Boş,1=Kurum Malı,2=Kiralık,
+3=Tedarikçi), `CO_ID`, `BRANCH_ID` (İzlog için sabit `2371`/`6364`,
+DOĞRULANMIŞ), `ZZ_KM` (`NUMBER(1)`, checkbox — muhtemelen grid'deki "KM
+Ara..." kolonu), `T_ENTITY_ID` (anlamı henüz belirsiz, muhtemelen ikincil
+bir cari referansı — [VARSAYIM/TODO]).
+
+**PK sequence — [HÂLÂ TEYİT EDİLMEDİ]**: `user_sequences` listesinde
+`VEHICLE_ENTITY_DETAIL_ID_FLMD` adında bir satır var ama bu isim ekran
+görüntüsünde KESİK/eksik görünüyor (tablo adı `FLMD_VHC_ENTITY_DETAIL`
+olduğuna göre normalde daha uzun bir son ek beklenirdi) — kullanıcıdan tam/
+kesilmemiş ismi doğrulaması istendi, henüz gelmedi. Bu isim netleşmeden
+`INSERT` SQL'inde kullanılmamalı.
+
 ### Araç / Plaka / Mülkiyet Yapısı [DOĞRULANMIŞ]
 - `FLMD_VEHICLE` — Araç ana tablosu: `VEHICLE_ID`, `VEHICLE_CODE`,
  `LICENSE_PLATE`, `VHC_MODEL_ID`, `TRAILER_TYPE_ID`.
