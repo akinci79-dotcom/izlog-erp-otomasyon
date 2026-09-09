@@ -216,6 +216,55 @@ gereksiz yere durdurdu; bu kontrol KALDIRILDI. Fatura no + tutar eşleşmesi
 bulunamazsa zaten `_satirda_tutar_var_mi` mantığı net bir hata veriyor,
 ekstra bir "ekran doğrulama" katmanına gerek yok.
 
+### Araç Tanım ekranı [DOĞRULANMIŞ, kullanıcının ekran görüntüsüyle — sadece
+UI alan yapısı; DB tablo/kolon eşlemesi henüz YOK, bkz. aşağıdaki not]
+
+"Toplu plaka kaydetme" ihtiyacı için kullanıcı, ERP'deki **mevcut** bir
+plakanın (`31ATR52`) "Araç Tanım" ekranının görüntüsünü paylaştı. Üst araç
+çubuğunda `Yeni`, `Düzelt`, `Sil`, `Kopya`, `Dosya`, `Takip`, `Yorum`,
+`Etiket`, `İncele`/`Kaydet` gibi butonlar var (Yük/Sevk ekranlarındaki
+düzenin aynısı). Ekranda 3 sekme var: **Araç Tanımları**, **Kredi
+Bilgileri**, **Araç Detay Bilgileri**. Kullanıcının notu: bu örnek plaka
+için SADECE "Araç Tanımları" sekmesi dolu, diğer iki sekme (Kredi Bilgileri,
+Araç Detay Bilgileri) tamamen BOŞ — yani normal/minimal bir araç kaydı için
+bu iki sekmenin doldurulması ZORUNLU DEĞİL (opsiyonel ek bilgiler).
+
+**"Araç Tanımları" sekmesi alan listesi** (UI etiketleri; DB kolon adları
+henüz eşlenmedi):
+- Sol üst blok: `Araç Kodu` (örnek: `31ATR52`), `Model Kodu` (lookup, örnek
+  kod `300` → açıklama `Tir`), `Model Yılı` (`2014`), `Dış Renk`, `İç Renk`,
+  `Analiz Kodu` (örnekte `Araç Kodu` ile birebir aynı: `31ATR52`),
+  **`Mülkiyet`** (dropdown, kutusu KIRMIZI çerçeveli = ZORUNLU alan, bu
+  örnekte boş görünüyor — muhtemelen ekran anlık olarak boş yakalanmış ya da
+  gerçekten dolu değil), `Araç Sahibi Cari Kod`.
+- `Ruhsat Bilgileri` bloğu: `Plaka` (`31ATR52`), `İlk Tescil Tarihi`,
+  `Trafiğe Çıkış Tarihi`, `Şase No` (`1`), `Motor No` (`1`), `Muayene
+  Geçerlilik Tarihi`.
+- `Satın Alma Bilgileri` bloğu: `Fatura No`, `Fatura Tarihi`, `Cari Kodu`,
+  `Para Birimi`, `Kur`, `Fatura Tutarı`, `Kdv Tutarı`, `ÖTV Tutarı`,
+  `Toplam Tutar`, `Kredilendirilen Tutarı` (bu tutar alanları çift kolonlu
+  görünüyor — muhtemelen "Döviz" + "TL karşılığı" ayrımı, Yük/Sevk'teki
+  `AMT_TRA`/`AMT` ayrımına benzer).
+- Sağ üst blok: `Bulunduğu Yer`, `Sevk Edileceği Yer`, `Sabit Kıymet Kodu`,
+  `Asistan Araç?` (checkbox).
+- `Rehin Bilgileri` bloğu: `Rehin Var mı?` (checkbox), `Banka`, `Şube`,
+  `Rehin Kaldırılma Tarihi`, `Verildiği İl/İlçe`, `Tescil Sıra No`, `Tescil
+  Tarihi`, `Vergi No`, `Unvan`, `Ruhsat No`.
+- `Satış Bilgileri` bloğu: `Fatura No`, `Fatura Tarihi`, `Satılan Cari
+  Kodu`, `Faturalanan Cari Kodu`, `Para Birimi`, `Kur`, `Fatura Tutarı`,
+  `Kdv Tutarı`, `Toplam Tutar`.
+
+**[VARSAYIM/TODO] — bu ekranın hangi Oracle tablo(lar)ına yazdığı henüz
+teyit edilmedi**: `FLMD_VEHICLE` (araç ana tablosu, bkz. yukarıdaki "Araç /
+Plaka / Mülkiyet Yapısı" bölümü) muhtemel ana hedef, ama `Model Kodu` →
+`VHC_MODEL_ID`, `Mülkiyet` alanı → `FLMD_VHC_ENTITY_DETAIL.OWNERSHIP_STATUS`
++ `ENTITY_ID` (ayrı bir tabloya mı yazıyor, yoksa `FLMD_VEHICLE` üzerinde
+mi tutuluyor belli değil), `Ruhsat Bilgileri`/`Satın Alma Bilgileri`/`Rehin
+Bilgileri`/`Satış Bilgileri` bloklarının hangi kolonlara/tablolara karşılık
+geldiği KESİN DEĞİL. "Toplu plaka kaydetme" için bir SQL/otomasyon
+yazılmadan önce bu eşleme netleşmeli (bkz. sohbet geçmişinde kullanıcıya
+sorulan DESC/sequence soruları).
+
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
