@@ -424,8 +424,41 @@ yerine):
   "OPERATION_ID ↔ Operasyon Kodu" çelişkisini çözmüyor ama NAVLUN'un
   birden fazla bağımsız ekranda tutarlı bir kavram olduğunu teyit ediyor.
 
-**Toplu plaka kaydetme için pratik sonuç**: Bu ekran, "toplu plaka
-kaydetme" görevinin başta düşünüldüğünden daha karmaşık olduğunu gösteriyor
+**✅ İKİ EKRANIN KİMLİĞİ NETLEŞTİ [DOĞRULANMIŞ, kullanıcının ERP debug/tanı
+etiketleriyle]**: Kullanıcı her iki ekranın alt taraftaki (kırmızı banner)
+sayfa kimlik etiketlerini paylaştı:
+- **İlk paylaşılan basit ekran** (Ruhsat/Satın Alma/Rehin/Satış Bilgileri
+  blokları, mülkiyet TEKİL alan olarak, `Araç Cari Detayı` grid'i YOK):
+  `FLM/VehicleManagement/Vehicle.xml`, sayfa kodu **`FLM1017`**, action
+  `VehicleCollection.Show`. `FLM` öneki, Oracle'daki `FLMD_VEHICLE` /
+  `FLMD_VHC_ENTITY_DETAIL` tablo önekiyle (**Filo Master Data**) birebir
+  eşleşiyor — bu ekranın doğrudan bu tabloları hedeflediğine dair güçlü bir
+  işaret.
+- **İkinci paylaşılan detaylı ekran** (`Araç Cari Detayı` mülkiyet geçmişi
+  grid'i, Taşıma Özellikleri, Yakıt Bilgileri, Taşıma Yük Tipleri, Araç
+  Kira Detayı olan): `LMS/FleetManagement/Vehicle.xml`, sayfa kodu
+  **`LMS1032`**, action `VehicleCollectionLMS.Show`. `LMS` öneki, Yük/Sevk
+  otomasyonunun kullandığı tüm tablolarla (`LMST_L_GOODS`, `LMST_L_
+  TRANSPORT`, `LMSD_L_...`, `LMSR_...`) AYNI modül ailesi (**Lojistik
+  Management System**) — yani bu ekran, temel Filo verisinin (`FLMD_*`)
+  ÜZERİNE, lojistik modülüne özgü ek bilgiler (kira, taşıma tipi, mülkiyet
+  GEÇMİŞİ) ekleyen bir "genişletilmiş görünüm" olabilir.
+
+Kullanıcının kendi ifadesi: "Araç cari detaylarının olduğu araç tanımı
+ekranına [`LMS/FleetManagement/Vehicle.xml`, `LMS1032`] buradan girdim.
+İkinci resimdeki [`FLM/VehicleManagement/Vehicle.xml`, `FLM1017`] de ilk
+gönderdiğim basit ekranı çağırıyor." — yani bunlar GERÇEKTEN iki farklı
+menü/sayfa, aynı ekranın farklı sekmeleri/kaydırılmış hali DEĞİL.
+
+**Toplu plaka kaydetme için pratik sonuç (güncellendi)**: Kullanıcının
+istediği kayıtlar (yeni plaka + tarih aralıklı Tedarikçi mülkiyeti:
+01.09.2026 → 31.12.2099) **mülkiyet GEÇMİŞİ grid'ine** ihtiyaç duyuyor —
+bu grid sadece `LMS1032` (`LMS/FleetManagement/Vehicle.xml`) ekranında var,
+`FLM1017`'de (basit ekran) mülkiyet tekil bir alan gibi görünüyordu (grid
+yok). Bu yüzden bir Playwright otomasyonu yazılırsa **`LMS1032` ekranı
+hedeflenmeli**; `FLM1017` sadece temel araç kaydı (Araç Kodu, Plaka, Model)
+için yeterli olabilir ama mülkiyet tarih aralığını giremeyebilir. Bu ekran,
+"toplu plaka kaydetme" görevinin başta düşünüldüğünden daha karmaşık olduğunu gösteriyor
 — artık en az ŞUNLAR var: (1) Araç Tanım temel bilgileri, (2) Analiz Kartı
 + firma eşleştirmesi, (3) Mülkiyet GEÇMİŞİ (tek değer değil, tarih aralıklı
 çoklu satır, aktif kayıt için `..2099` deseni), (4) Taşıma yük tipi
