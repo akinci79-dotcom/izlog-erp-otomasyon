@@ -216,6 +216,257 @@ gereksiz yere durdurdu; bu kontrol KALDIRILDI. Fatura no + tutar eşleşmesi
 bulunamazsa zaten `_satirda_tutar_var_mi` mantığı net bir hata veriyor,
 ekstra bir "ekran doğrulama" katmanına gerek yok.
 
+### Araç Tanım ekranı [DOĞRULANMIŞ, kullanıcının ekran görüntüsüyle — sadece
+UI alan yapısı; DB tablo/kolon eşlemesi henüz YOK, bkz. aşağıdaki not]
+
+"Toplu plaka kaydetme" ihtiyacı için kullanıcı, ERP'deki **mevcut** bir
+plakanın (`31ATR52`) "Araç Tanım" ekranının görüntüsünü paylaştı. Üst araç
+çubuğunda `Yeni`, `Düzelt`, `Sil`, `Kopya`, `Dosya`, `Takip`, `Yorum`,
+`Etiket`, `İncele`/`Kaydet` gibi butonlar var (Yük/Sevk ekranlarındaki
+düzenin aynısı). Ekranda 3 sekme var: **Araç Tanımları**, **Kredi
+Bilgileri**, **Araç Detay Bilgileri**. Kullanıcının notu: bu örnek plaka
+için SADECE "Araç Tanımları" sekmesi dolu, diğer iki sekme (Kredi Bilgileri,
+Araç Detay Bilgileri) tamamen BOŞ — yani normal/minimal bir araç kaydı için
+bu iki sekmenin doldurulması ZORUNLU DEĞİL (opsiyonel ek bilgiler).
+
+**"Araç Tanımları" sekmesi alan listesi** (UI etiketleri; DB kolon adları
+henüz eşlenmedi):
+- Sol üst blok: `Araç Kodu` (örnek: `31ATR52`), `Model Kodu` (lookup, örnek
+  kod `300` → açıklama `Tir`), `Model Yılı` (`2014`), `Dış Renk`, `İç Renk`,
+  `Analiz Kodu` (örnekte `Araç Kodu` ile birebir aynı: `31ATR52`),
+  **`Mülkiyet`** (dropdown, kutusu KIRMIZI çerçeveli = ZORUNLU alan, bu
+  örnekte boş görünüyor — muhtemelen ekran anlık olarak boş yakalanmış ya da
+  gerçekten dolu değil), `Araç Sahibi Cari Kod`.
+- `Ruhsat Bilgileri` bloğu: `Plaka` (`31ATR52`), `İlk Tescil Tarihi`,
+  `Trafiğe Çıkış Tarihi`, `Şase No` (`1`), `Motor No` (`1`), `Muayene
+  Geçerlilik Tarihi`.
+- `Satın Alma Bilgileri` bloğu: `Fatura No`, `Fatura Tarihi`, `Cari Kodu`,
+  `Para Birimi`, `Kur`, `Fatura Tutarı`, `Kdv Tutarı`, `ÖTV Tutarı`,
+  `Toplam Tutar`, `Kredilendirilen Tutarı` (bu tutar alanları çift kolonlu
+  görünüyor — muhtemelen "Döviz" + "TL karşılığı" ayrımı, Yük/Sevk'teki
+  `AMT_TRA`/`AMT` ayrımına benzer).
+- Sağ üst blok: `Bulunduğu Yer`, `Sevk Edileceği Yer`, `Sabit Kıymet Kodu`,
+  `Asistan Araç?` (checkbox).
+- `Rehin Bilgileri` bloğu: `Rehin Var mı?` (checkbox), `Banka`, `Şube`,
+  `Rehin Kaldırılma Tarihi`, `Verildiği İl/İlçe`, `Tescil Sıra No`, `Tescil
+  Tarihi`, `Vergi No`, `Unvan`, `Ruhsat No`.
+- `Satış Bilgileri` bloğu: `Fatura No`, `Fatura Tarihi`, `Satılan Cari
+  Kodu`, `Faturalanan Cari Kodu`, `Para Birimi`, `Kur`, `Fatura Tutarı`,
+  `Kdv Tutarı`, `Toplam Tutar`.
+
+**[VARSAYIM/TODO] — bu ekranın hangi Oracle tablo(lar)ına yazdığı henüz
+teyit edilmedi**: `FLMD_VEHICLE` (araç ana tablosu, bkz. yukarıdaki "Araç /
+Plaka / Mülkiyet Yapısı" bölümü) muhtemel ana hedef, ama `Model Kodu` →
+`VHC_MODEL_ID`, `Mülkiyet` alanı → `FLMD_VHC_ENTITY_DETAIL.OWNERSHIP_STATUS`
++ `ENTITY_ID` (ayrı bir tabloya mı yazıyor, yoksa `FLMD_VEHICLE` üzerinde
+mi tutuluyor belli değil), `Ruhsat Bilgileri`/`Satın Alma Bilgileri`/`Rehin
+Bilgileri`/`Satış Bilgileri` bloklarının hangi kolonlara/tablolara karşılık
+geldiği KESİN DEĞİL. "Toplu plaka kaydetme" için bir SQL/otomasyon
+yazılmadan önce bu eşleme netleşmeli (bkz. sohbet geçmişinde kullanıcıya
+sorulan DESC/sequence soruları).
+
+### ⚠️ ÖNEMLİ KEŞİF — Araç aslında ayrıca bir "Analiz Kartı" kaydı [DOĞRULANMIŞ, ekran görüntüsüyle]
+
+Aynı plaka (`31ATR52`) için kullanıcı ayrıca **"Analiz Kartı"** ekranının
+görüntüsünü paylaştı. Bu, Uyumsoft'un GENEL (vehicle'a özel olmayan) bir
+"analiz kodu/boyutu" (maliyet merkezi / raporlama etiketi gibi) alt
+sistemi — ve her aracın **kendi Araç Tanım kaydına ek olarak** bu genel
+sistemde de bir kaydı var. Bu, "toplu plaka kaydetme" işini tek bir tablo
+INSERT'inden **en az iki bağımsız kayda** çıkarıyor:
+
+1. **Araç Tanım** (`FLMD_VEHICLE`, önceki bölümde belgelendi) — Araç Kodu,
+   Model, Mülkiyet, Ruhsat vb.
+2. **Analiz Kartı** (tablo adı henüz TEYİT EDİLMEDİ, muhtemelen
+   `GNLD_...` önekli genel bir Uyumsoft tablosu) — bkz. aşağıdaki alanlar.
+
+Araç Tanım ekranındaki `Analiz Kodu` alanı (önceki bölümde görülen, değeri
+`31ATR52` — Araç Kodu ile birebir aynı) bu iki kaydı birbirine bağlıyor
+olmalı: Araç Tanım kaydı, kendi Analiz Kartı kaydına bu kod üzerinden
+referans veriyor.
+
+**"Analiz Kartı" ekranı alan yapısı** (üst araç çubuğu Yük/Sevk/Araç Tanım
+ile aynı: `Yeni`, `Düzelt`, `Sil`, `Kopya`, `Dosya`, `Takip`, `Yorum`,
+`Etiket`, `İncele`):
+- `Analiz Kodu`: `31ATR52` (Araç Tanım'daki `Analiz Kodu`/`Araç Kodu` ile
+  aynı değer).
+- `Analiz Adı`: `31ATR52` (bu örnekte kod ile aynı, ama muhtemelen serbest
+  metin olabilir — başka bir analiz kodunda farklı olabilir).
+- `Analiz Grup Kodu`: `ARAÇ` (lookup — bu, aracın hangi "analiz grubu"na
+  ait olduğunu belirtiyor; yani bu ekran araca özel değil, GENEL bir analiz
+  kodu tanımlama ekranı, `ARAÇ` sadece bir grup/kategori değeri).
+- `Kategori`, `Kategori2` — bu örnekte BOŞ (opsiyonel ek sınıflandırma).
+- `Lojman Mı?` — checkbox, bu örnekte İŞARETSİZ (araçlar için ilgisiz,
+  muhtemelen bu analiz grubu "konut/lojman" gibi farklı analiz tiplerinde
+  de kullanılıyor, ortak bir ekran).
+- **`Firma Analiz Kartı` grid'i** (ÇOK ÖNEMLİ) — bu ERP'nin **çok şirketli
+  (multi-company/multi-tenant) paylaşımlı** bir kurulum olduğunu gösteriyor.
+  Aynı Uyumsoft veritabanında en az 5 firma tanımlı: `200` (Bazaari Urla
+  Gıda Tekstil Turizm İth. İhr. San.), `AVRASYA` (Avrasya Kimya ve Makina
+  San. Tic. Ltd. Şti.), **`IZL`** (**İzlog Nakliye ve Lojistik Hizmetleri
+  Ltd. Şti.** — bizim şirketimiz), `100` (Trendlife Güzellik Hizmetleri
+  Tic. A.Ş.), `TRENDLIFE` (Trendlife Güzellik Hizmetleri Tic. Ltd. Şti.).
+  Bu grid'de her firma için bir checkbox var; bu araç örneğinde SADECE
+  `IZL` işaretli (turuncu/vurgulu satır) — yani bir analiz kodu birden
+  fazla firmada "aktif" olarak işaretlenebiliyor, bu araç sadece İzlog'a
+  ait olduğu için sadece `IZL` işaretli. **Toplu plaka kaydı SQL/otomasyonu
+  yazılırken bu firma eşleştirmesi (`IZL` işaretlenmesi) atlanmamalı**,
+  aksi halde yeni araç kaydı oluşturulsa da İzlog'un ekranlarında/
+  raporlarında görünmeyebilir.
+  **[VARSAYIM/TODO]**: `200` ve `IZL` satırları koyu/turuncu renkte
+  görünüyor (diğerlerinden farklı) — bu muhtemelen "bu oturumda aktif olan
+  firma" ya da "en az bir yerde seçili olan firma" gibi bir UI vurgusu
+  olabilir, kesin anlamı teyit edilmedi.
+- **"Dil Tanımları" sekmesi**: `Dil Kodu` / `Açıklama` grid'i — bu örnekte
+  tek satır: `TR` → `31ATR52`. Yani Analiz Kartı kayıtları dil bazlı
+  (çoklu dil) açıklama tutuyor, standart Uyumsoft "genel tanım" (`GNLD_`
+  önekli tablolar için tipik) çoklu dil deseni.
+
+**Toplu plaka kaydetme için pratik sonuç**: Bu keşif, "sadece `FLMD_VEHICLE`'a
+INSERT at" yaklaşımının YETERSİZ olduğunu gösteriyor — muhtemelen önce (veya
+sonra) genel Analiz Kartı sisteminde de bir kayıt (+ firma eşleştirmesi +
+dil tanımı) oluşturulması gerekiyor. Bu, ham SQL INSERT yaklaşımının riskini
+daha da artırıyor (en az 2 farklı ekran/tablo grubu, çok şirketli
+eşleştirme dahil) ve **Playwright tabanlı UI otomasyonu** (mevcut Yük/Sevk
+otomasyonu gibi, ERP'nin kendi "Yeni" akışını iki ekranda da sırayla
+kullanarak) önerisini daha da güçlendiriyor — ERP'nin kendisi muhtemelen
+Araç Tanım'da "Kaydet"e basıldığında Analiz Kartı'nı OTOMATİK oluşturuyor
+olabilir (henüz teyit edilmedi) ki bu doğruysa SQL yaklaşımı ekstra bir
+tabloyu manuel doldurmak zorunda kalıp ERP'nin kendi otomatik oluşturduğu
+kayıtla çakışabilir/tutarsız kalabilir.
+
+### ⚠️ İKİNCİ (DAHA DETAYLI) BİR "Araç Tanım" EKRANI BULUNDU [DOĞRULANMIŞ, ekran görüntüsüyle — hangi menüden açıldığı henüz teyit edilmedi]
+
+Kullanıcı, aynı plaka (`31ATR52`) için önceki bölümde belgelenen ekrandan
+**FARKLI**, daha zengin bir "Araç Tanım" ekranı görüntüsü paylaştı. Kullanıcı
+bunu "başka bir araç tanım ekranı" olarak tanımladı — yani bu, önceki
+ekranın sadece kaydırılmış/görünmeyen bir kısmı değil, muhtemelen FARKLI bir
+menü girişinden açılan (örn. "Filo Yönetimi" gibi ayrı bir modül) ikinci bir
+ekran. **[VARSAYIM/TODO]**: Bu ekranın gerçekten farklı bir menü öğesi mi
+olduğu, yoksa önceki ekranın az önce görülmeyen sekmeleri mi olduğu
+kullanıcıdan teyit edilmeli.
+
+**Sekme listesi** (önceki ekrandan farklı, TAM liste burada görünüyor):
+`Araç Tanımları`, `Kredi Bilgileri`, `Araç Detay Bilgileri`, `Ruhsat
+Bilgileri`, `Rehin/Satış/SatınAlma Bilgileri`, `Kontroller`. (Önceki
+ekranda "Ruhsat Bilgileri"/"Satın Alma Bilgileri"/"Rehin Bilgileri"/"Satış
+Bilgileri" TEK bir sekme içinde alt alta BLOK olarak görünüyordu; burada
+bunlar en azından kısmen BİRLEŞİK bir sekmeye (`Rehin/Satış/SatınAlma
+Bilgileri`) ve ayrı bir `Ruhsat Bilgileri` sekmesine bölünmüş durumda —
+iki ekran arasında tam olarak nasıl bir ilişki olduğu belli değil.)
+
+**Bu ekranın "Araç Tanımları" sekmesi tamamen farklı alanlar gösteriyor**
+(önceki ekrandaki Ruhsat/Satın Alma/Rehin/Satış blokları burada YOK, bunun
+yerine):
+- Üst blok: `Araç Kodu` (`31ATR52`), `Plaka` (`31ATR52`), `Çekici`
+  (checkbox, işaretli ✓), `Yurtiçi` (checkbox, işaretli ✓), `Çekici
+  Taş.Ün.Tipi(Model)` (`300` → `Tır`), `Dorse` (checkbox, işaretli ✓),
+  `YurtDışı` (checkbox, işaretsiz), `Treyler/Kamyon Taş.Ünt.Tipi`
+  (`09.02` → `Tır Frigorifik`), `Model Yılı` (`2014`), `Analiz Kodu`
+  (`31ATR52`), `Sabit Kıymet Kodu`, `Araç KM Sayacı` (`0`), `Sürücü
+  Ad/Soyadı`, `Ülke`.
+  **Not**: `Çekici`/`Dorse` checkbox'ları + iki farklı "Taş.Ün.Tipi(Model)"
+  alanı (biri Çekici için, biri Treyler/Kamyon için) gösteriyor ki bu araç
+  hem çekici hem dorse özelliği taşıyan bileşik bir kayıt — yani bir "Model
+  Kodu" tek bir araç tipini değil, çekici/dorse kombinasyonunu tanımlıyor
+  olabilir.
+- `Taşıma Özellikleri` bloğu: `En`, `Uzunluk`, `Yükseklik`, `Araç Sayısı`,
+  `Hacim Kapasite`, `Ton Kapasite`, `Hücre Sayısı` (bu örnekte hepsi
+  `0,00`).
+- `Yakıt Bilgileri` bloğu: `1. Yakıt Deposu Hacmi`, `2. Yakıt Deposu
+  Hacmi`, `Boş Yakıt Oranı`, `Dolu Yakıt Oranı` (bu örnekte hepsi `0,00`).
+- **`Araç Cari Detayı` grid'i [ÇOK ÖNEMLİ — mülkiyet GEÇMİŞİ, tarih
+  aralıklı, birden fazla satır]**: kolonlar `İşyeri`, `Başlangıç Tarihi`,
+  `Bitiş Tarihi`, `Mülkiyet`, `Cari Adı`, `Cari` (cari kodu), `Firma`,
+  `İşyeri` (tekrar, farklı bir kolon), `I` (checkbox, anlamı belirsiz —
+  muhtemelen "İptal" ya da "İzin"), `KM Ara...` (kesik, muhtemelen "KM
+  Aralığı" — checkbox). Bu grid, önceden belgelenen `FLMD_VHC_ENTITY_
+  DETAIL` tablosunun EKRANDAKİ GÖRÜNÜMÜ — her satır o tablonun bir kaydı.
+  Bu örnekte 4 satır (aracın 2015'ten 2099'a kadar süren mülkiyet geçmişi):
+  | İşyeri | Başlangıç | Bitiş | Mülkiyet | Cari Adı |
+  |---|---|---|---|---|
+  | 34-00 | 30.04.2015 | 30.04.2016 | Tedarikçi | KAPİTRANS ULUS.TAŞ.Tİ... |
+  | 34-00 | 29.09.2016 | 05.12.2018 | Tedarikçi | ÖMER ŞEN - ŞEN LOJİSTİK |
+  | 34-00 | 06.12.2018 | 17.01.2019 | Kiralık | ÖMER ŞEN - ŞEN LOJİSTİK |
+  | 34-00 | 18.01.2019 | 19.01.2099 | Tedarikçi | ÖMER ŞEN - ŞEN LOJİSTİK |
+
+  Son satırın bitiş tarihinin `19.01.2099` (yapay/sonsuz bir tarih) olması,
+  "hâlâ aktif/güncel" mülkiyet kaydının bu şekilde işaretlendiğini gösteriyor
+  — yeni bir mülkiyet kaydı girilirken muhtemelen ÖNCEKİ aktif kaydın bitiş
+  tarihi gerçek bir tarihe güncelleniyor, yeni kayıt `..2099` ile açılıyor.
+  Bu desen, olası bir "toplu plaka mülkiyet güncelleme" otomasyonu için
+  kritik bir davranış kuralı.
+
+  **✅ CO_ID/BRANCH_ID DOĞRULANDI [DOĞRULANMIŞ, bu ekran görüntüsüyle]**:
+  Grid'deki `Firma` kolonu tüm satırlarda `2.371,00`, `İşyeri` kolonu tüm
+  satırlarda `6.364,00` gösteriyor — bunlar aslında `2371` ve `6364`
+  sayılarının (muhtemelen grid'in genel amaçlı bir sayısal formatlayıcı
+  kullanması nedeniyle) yanlışlıkla iki ondalıklı para birimi gibi
+  gösterilmiş hali. Bu, dosyanın başındaki `INVD_BRANCH_EXPENSE` bölümünde
+  [VARSAYIM/TODO] olarak işaretlenmiş "İzlog'un `CO_ID=2371`, `BRANCH_ID=
+  6364` sabit" varsayımını BAĞIMSIZ bir ekrandan gelen veriyle doğruluyor —
+  bu VARSAYIM artık [DOĞRULANMIŞ] sayılabilir.
+- `Taşıma yük tipleri` grid'i: `Taşıma Yük Tipi Kodu` / `Taşıma Yük Tipi
+  Adı` — bu örnekte tek satır: `ANTALYA` / `ANTALYA`. Bu, önceden
+  belgelenen `FLMD_VHC_GOODTYPE_DETAIL` + `LMSD_L_GOODS_TYPE` ilişkisinin
+  (Arvento ID keşfinde kullanılan aynı tablo çifti) ekrandaki görünümü —
+  aracın hangi "yük tipi" etiketlerine sahip olduğunu gösteriyor.
+- **`Araç Kira Detayı` grid'i**: kolonlar `İşyeri Kodu` (`34-00`), `İşyeri
+  Adı` (`İZLOG NAKLİY...`), `Başlangıç Tarihi` (`06.12.2018`), `Bitiş
+  Tarihi` (`17.01.2019`), `Kira Tip Kodu` (`AYLIK KM`), `Kira Gün Sayısı`
+  (`30,00`), `Operasyon Kodu` (**`NAVLUN`**), `Operasyon Açıklama`
+  (`YURTİÇİ NAKLİYE HİZMET...`), `Araç Kira Bedeli` (`12.500,00`), `Yakıt
+  Oranı` (`40,00`). Bu grid, aracın kiralık olduğu dönemdeki kira
+  sözleşmesi şartlarını (aylık km bazlı kira, navlun operasyon kodu, yakıt
+  payı oranı) tutuyor — muhtemelen `FLMD_VHC_RENT_DETAIL` tablosunun (veya
+  ona yakın bir tablonun) EKRANDAKİ GÖRÜNÜMÜ, ama tam kolon eşlemesi henüz
+  teyit edilmedi. Burada tekrar **`Operasyon Kodu = NAVLUN`** metin olarak
+  (sayısal ID değil, çözümlenmiş açıklama olarak) görünüyor — yukarıdaki
+  "OPERATION_ID ↔ Operasyon Kodu" çelişkisini çözmüyor ama NAVLUN'un
+  birden fazla bağımsız ekranda tutarlı bir kavram olduğunu teyit ediyor.
+
+**✅ İKİ EKRANIN KİMLİĞİ NETLEŞTİ [DOĞRULANMIŞ, kullanıcının ERP debug/tanı
+etiketleriyle]**: Kullanıcı her iki ekranın alt taraftaki (kırmızı banner)
+sayfa kimlik etiketlerini paylaştı:
+- **İlk paylaşılan basit ekran** (Ruhsat/Satın Alma/Rehin/Satış Bilgileri
+  blokları, mülkiyet TEKİL alan olarak, `Araç Cari Detayı` grid'i YOK):
+  `FLM/VehicleManagement/Vehicle.xml`, sayfa kodu **`FLM1017`**, action
+  `VehicleCollection.Show`. `FLM` öneki, Oracle'daki `FLMD_VEHICLE` /
+  `FLMD_VHC_ENTITY_DETAIL` tablo önekiyle (**Filo Master Data**) birebir
+  eşleşiyor — bu ekranın doğrudan bu tabloları hedeflediğine dair güçlü bir
+  işaret.
+- **İkinci paylaşılan detaylı ekran** (`Araç Cari Detayı` mülkiyet geçmişi
+  grid'i, Taşıma Özellikleri, Yakıt Bilgileri, Taşıma Yük Tipleri, Araç
+  Kira Detayı olan): `LMS/FleetManagement/Vehicle.xml`, sayfa kodu
+  **`LMS1032`**, action `VehicleCollectionLMS.Show`. `LMS` öneki, Yük/Sevk
+  otomasyonunun kullandığı tüm tablolarla (`LMST_L_GOODS`, `LMST_L_
+  TRANSPORT`, `LMSD_L_...`, `LMSR_...`) AYNI modül ailesi (**Lojistik
+  Management System**) — yani bu ekran, temel Filo verisinin (`FLMD_*`)
+  ÜZERİNE, lojistik modülüne özgü ek bilgiler (kira, taşıma tipi, mülkiyet
+  GEÇMİŞİ) ekleyen bir "genişletilmiş görünüm" olabilir.
+
+Kullanıcının kendi ifadesi: "Araç cari detaylarının olduğu araç tanımı
+ekranına [`LMS/FleetManagement/Vehicle.xml`, `LMS1032`] buradan girdim.
+İkinci resimdeki [`FLM/VehicleManagement/Vehicle.xml`, `FLM1017`] de ilk
+gönderdiğim basit ekranı çağırıyor." — yani bunlar GERÇEKTEN iki farklı
+menü/sayfa, aynı ekranın farklı sekmeleri/kaydırılmış hali DEĞİL.
+
+**Toplu plaka kaydetme için pratik sonuç (güncellendi)**: Kullanıcının
+istediği kayıtlar (yeni plaka + tarih aralıklı Tedarikçi mülkiyeti:
+01.09.2026 → 31.12.2099) **mülkiyet GEÇMİŞİ grid'ine** ihtiyaç duyuyor —
+bu grid sadece `LMS1032` (`LMS/FleetManagement/Vehicle.xml`) ekranında var,
+`FLM1017`'de (basit ekran) mülkiyet tekil bir alan gibi görünüyordu (grid
+yok). Bu yüzden bir Playwright otomasyonu yazılırsa **`LMS1032` ekranı
+hedeflenmeli**; `FLM1017` sadece temel araç kaydı (Araç Kodu, Plaka, Model)
+için yeterli olabilir ama mülkiyet tarih aralığını giremeyebilir. Bu ekran,
+"toplu plaka kaydetme" görevinin başta düşünüldüğünden daha karmaşık olduğunu gösteriyor
+— artık en az ŞUNLAR var: (1) Araç Tanım temel bilgileri, (2) Analiz Kartı
++ firma eşleştirmesi, (3) Mülkiyet GEÇMİŞİ (tek değer değil, tarih aralıklı
+çoklu satır, aktif kayıt için `..2099` deseni), (4) Taşıma yük tipi
+etiketleri, (5) (kiralık araçlar için) Kira Detayı. Kullanıcının "toplu
+plaka kaydetme" isteğinin TAM OLARAK hangi alt kümeyi kapsadığı (örn.
+sadece yeni plaka + mülkiyet mi, yoksa tüm bu detaylar mı) netleşmeden
+kapsamlı bir SQL/otomasyon yazılmamalı.
+
 ### Yük/Sevk detay formu (`TabControl_*` öneki)
 - `#TabControl_txt_ReferenceNo_I` — Yük referans no (`Y-...`).
 - `#TabControl_txt_TransportNo_I` — Sevk/Transport no (`S-...`).
@@ -811,6 +1062,390 @@ görünür bir popup/uyarı varsa metni doğrudan hata mesajında görünecek. (
 Üretilen `debug_*_satir{N}_*.png` dosyalarının HİÇBİRİ birbirinin üzerine
 yazılmayacak, bu yüzden 1. ve 2. satırın TAM veri akışı ayrı ayrı
 incelenebilecek.
+
+## ⚠️ ÇELİŞKİ — OPERATION_ID ↔ Operasyon Kodu eşlemesi [ÇÖZÜLMEMİŞ, kullanıcıya
+sorulmalı]
+
+Kullanıcının paylaştığı 4 Excel dosyası (`fiyat satırı olmayan sevklere toplu
+fiyat girişi.xlsx`, `Pasifik-Horizon toplu fiyat giriş.xls`, `SQL.xlsx`,
+`Toplu Sevk Varış Km SQL.xlsx` — gerçek production'a karşı çalıştırılmış SQL
+sorguları ve sonuçları içeriyorlar) taranırken, `oracle_okuyucu.py`'de
+şu anda [DOĞRULANMIŞ] olarak işaretli "Operasyon Kodu → `INVD_EXPENSE.
+EXPENSE_CODE`, join `INVD_EXPENSE.EXPENSE_ID = LMST_L_GOODS_OP_DET.
+OPERATION_ID`" kuralıyla **doğrudan çelişen** güçlü bir kanıt bulundu:
+
+- `SQL.xlsx` / `Sayfa1` (satır ~312-319), gerçek ve İzlog'un kendi kullandığı
+ bir sorgu:
+ ```sql
+ select a.goods_op_id,b.reference_no,c.operation_code,a.zz_description
+   from lmst_l_goods_op_det a
+   left join lmst_l_goods b on b.goods_id = a.goods_id
+   left join lmsd_l_op_definition c on c.operation_id = a.operation_id
+  where b.reference_no like '000%'
+  and a.operation_id not in (3,11)
+ ```
+ Kullanıcının SQL'in yanına yazdığı açıklama notu (birebir alıntı): **"bu sql
+ ile navlun ve uğrama dışındaki boş olanları çekiyoruz."** — yani şirketin
+ kendisi `operation_id = 3`'ü **NAVLUN**, `operation_id = 11`'i **UĞRAMA**
+ olarak tanımlıyor, ve bunun için `LMSD_L_OP_DEFINITION.OPERATION_CODE`
+ kolonunu kullanıyor (aynı sorgunun altında, satır ~332, bir örnek kayıtta
+ `OPERATION_CODE = 'BEKLEME'` görünüyor — yani bu kolon dolu ve çalışıyor).
+- `Pasifik-Horizon toplu fiyat giriş.xls` (`Select lmst_l_goods_op_det`
+ sayfası, 67 gerçek satır) ve `fiyat satırı olmayan sevklere toplu fiyat
+ girişi.xlsx` (`Select lmst_l_trans_op_detail` sayfası, 838 gerçek satır) —
+ ikisi de "toplu **Navlun** fiyatı girişi" amaçlı, ve HER İKİSİNDE de TÜM
+ satırlarda `OPERATION_ID = 3` VE `OPERATION_PRICE_TYPE = 1` (Ücret Tipi
+ enum'unda 1 = Navlun) birlikte görülüyor — bu da `OPERATION_ID = 3`'ün
+ NAVLUN olduğunu bağımsız olarak doğruluyor.
+
+Bu, `erp-sistemi.mdc`'nin daha önceki [DOĞRULANMIŞ] notuyla (NAVLUN'un
+`INVD_EXPENSE.EXPENSE_ID = 732`, UĞRAMA'nın `= 745` olduğu, ve
+`LMSD_L_OP_DEFINITION`'ın "TAMAMEN YANLIŞ" olup artık hiç kullanılmadığı)
+**doğrudan çelişiyor**. İki olasılık var:
+1. `LMST_L_GOODS_OP_DET.OPERATION_ID` / `LMST_L_TRANS_OP_DETAIL.OPERATION_ID`
+ aslında `LMSD_L_OP_DEFINITION.OPERATION_ID`'ye join oluyor (yukarıdaki
+ gerçek şirket sorgusunun gösterdiği gibi), `INVD_EXPENSE.EXPENSE_ID`'ye
+ DEĞİL — yani önceki "kesin çözüm" (`ucret_tipi_kesif.py` / rapor SQL'i ile
+ teyit edilen) YANLIŞ bir tabloya bakıyor olabilir.
+2. Ya da iki farklı bağlamda gerçekten iki farklı ID alanı var (örn.
+ raporun kullandığı özel bir view/senaryo farklı bir ID uzayı kullanıyor
+ olabilir) ve rastlantısal olarak aynı sayılar (3, 11 vs 732, 745) çıkmadı
+ ama farklı anlam taşıyorlar — bu ihtimal düşük görünüyor çünkü OPERATION_
+ PRICE_TYPE=1 (Navlun) ile OPERATION_ID=3 birlikteliği 900+ gerçek satırda
+ tutarlı.
+
+**Kullanıcıya (hüseyin) SORULMALI**: `oracle_okuyucu.py`'deki
+`kaynak_yuk_verilerini_getir()` şu an `INVD_EXPENSE`/`INVD_BRANCH_EXPENSE`
+join'iyle Operasyon Kodu ve Ücret Tipi'ni çekiyor — eğer gerçek doğru join
+`LMSD_L_OP_DEFINITION.OPERATION_ID = LMST_L_GOODS_OP_DET.OPERATION_ID` ise,
+otomasyon HENÜZ CANLI ORTAMDA TESPİT EDİLMEMİŞ yanlış Operasyon Kodu/Ücret
+Tipi değerleri üretiyor olabilir (ya da tesadüfen aynı sonucu veriyor
+olabilir, çünkü `INVD_EXPENSE`/`INVD_BRANCH_EXPENSE` sonuçta gerçek canlı
+UĞRAMA/NAVLUN testlerinde doğru değer üretmişti — bu yüzden acil bir hata
+olmayabilir, ama kesinlik için doğrulanmalı). Bu bölüm kullanıcı teyidi
+alınana kadar [ÇÖZÜLMEMİŞ] kalacak, otomasyon koduna DOKUNULMADI.
+
+## SQL Referans Bilgisi — Kullanıcının Excel/SQL Arşivinden [DOĞRULANMIŞ, gerçek production sorguları]
+
+Kullanıcının paylaştığı 4 Excel dosyası, İzlog'un yıllar içinde Oracle'a
+karşı elle çalıştırdığı gerçek düzeltme/rapor SQL'lerinin bir arşivi.
+Otomasyonun bugünkü kapsamı dışında olsa da, ileride yeni bir otomasyon/
+rapor istenirse doğrudan kullanılabilecek tablo/kolon/enum bilgisi burada
+toplanıyor.
+
+### `LMST_L_TRANS_OP_DETAIL` (Sevk fiyat/operasyon detay satırı) — TAM kolon listesi
+`fiyat satırı olmayan sevklere toplu fiyat girişi.xlsx` (838 gerçek satır)
+ve `SQL.xlsx`'teki "SEVK FİYAT GİRİŞ" sorgusundan tam kolon listesi:
+`TRANSPORT_OP_ID` (PK), `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`,
+`UPDATE_DATE`, `TRANSPORT_ID` (FK → `LMST_L_TRANSPORT`), `OPERATION_ID`,
+`UNIT_ID` (gözlenen sabit değer: `164`), `UNIT_PRICE_TRA`, `AMT_TRA`,
+`CUR_TRA_ID` (gözlenen: `114` = TL), `CUR_RATE_TRA` (kur, TL için `1`),
+`AMT`, `VAT_ID` (gözlenen sabit: `132` = KDV), `VAT_RATE`, `VAT_AMT`,
+`ISPRORATED_TO_GOODS`, `CHARGED_L_ENTITY_ID` (faturanın yansıtılacağı cari),
+`OPERATION_PRICE_TYPE` (bkz. `UCRET_TIPI_ENUM_ESLEME`), `BEFORE_DISC_AMT_TRA`,
+`DISC_RATE`, `PURCHASE_SALES_TYPE`, `SUP_PAYOFF_ID`, `INVOICE_M_ID`,
+`INVOICE_D_ID`, `EVALUTION_FORMULA`, `CALCULATION_FOMULA` (yazım hatası
+tabloda da böyle, sic), `SUP_PAYOFF_OPDET_ID`, `SUP_PAYOFF_T_ID`,
+`SUP_PAYOFF_TOP_ID`, `IS_AUTO_INTEGRATION`, `VAT_STATUS`,
+`CUR_RATE_TYPE_ID`, `FIN_M_ID`, `FIN_D_ID`, `TRA_TYPE_ID`, `CARD_TYPE`
+(gözlenen: `0`), `FIN_DCARD_ID`, `BRNCH_ENTG_ID`, `CALC_TARIFF_D_ID`, `QTY`.
+
+**Bulk fiyat girişi formülleri [DOĞRULANMIŞ, dosyadaki gerçek Excel
+formüllerinden]**: `AMT_TRA = UNIT_PRICE_TRA` (QTY=1 iken), `AMT = AMT_TRA`
+(TL/TL, kur=1 iken), `VAT_AMT = UNIT_PRICE_TRA * 0.18` (o dönemki %18 KDV
+oranıyla — güncel oran farklı olabilir, kullanılmadan önce teyit edilmeli).
+
+**`PURCHASE_SALES_TYPE` enum'u — Sevk tarafı [DOĞRULANMIŞ, `Personel Yük
+Raporu Komple` sorgusundaki `SEVK_TOPLAM_ALIS`/`SEVK_TOPLAM_ALIS_IADE` alt
+sorgularından]**: Sevk (`LMST_L_TRANS_OP_DETAIL`) tarafında `1` = Alış,
+`4` = Alış İade. Yük (`LMST_L_GOODS_OP_DET`) tarafında (daha önce
+doğrulanmış) `2` = Satış, `3` = Satış İade. Yani aynı kolonun anlamı
+tabloya (Yük/Sevk) göre değişiyor, dörtlü tam enum: `1`=Sevk Alış,
+`2`=Yük Satış, `3`=Yük Satış İade, `4`=Sevk Alış İade.
+
+**"Belirsiz 1 TL" temizlik deseni [DOĞRULANMIŞ]**: `CHARGED_L_ENTITY_ID =
+8676` (özel/"belirsiz cari" gibi kullanılan sabit bir cari id) VE
+`UNIT_PRICE_TRA = 1` olan `LMST_L_TRANS_OP_DETAIL` satırları, yanlışlıkla
+oluşmuş "belirsiz 1 TL" satırları olarak kabul ediliyor ve `SELECT`'i
+`DELETE`'e çevirerek temizleniyor (`SQL.xlsx`, "BELİRSİZ 1 TL OLANLARI
+SİLME"). Not: `8676` değeri daha önce (bu dosyadan bağımsız olarak)
+otomasyon kodunda da `CHARGED_L_ENTITY_ID` örnek değeri olarak görülmüştü
+(bkz. `Select lmst_l_trans_op_detail` sayfası satır örnekleri).
+
+### `LMST_L_GOODS_OP_DET` (Yük fiyat/operasyon detay satırı) — TAM kolon listesi
+`Pasifik-Horizon toplu fiyat giriş.xls` (67 gerçek satır) ve `SQL.xlsx`'teki
+"YÜK FİYAT GİRİŞ" sorgusundan tam kolon listesi: `GOODS_OP_ID` (PK),
+`CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`, `UPDATE_DATE`,
+`GOODS_ID` (FK → `LMST_L_GOODS`), `OPERATION_ID`, `UNIT_ID` (gözlenen: `164`),
+`QTY`, `AMT_TRA`, `CUR_TRA_ID` (`114`=TL), `CUR_RATE_TRA`, `AMT`, `VAT_ID`
+(`132`=KDV), `VAT_AMT`, `DOC_DATE`, `DOC_NO`, `CUR_RATE_TYPE_ID`,
+`VAT_STATUS`, `CHARGED_L_ENTITY_ID`, `OPERATION_PRICE_TYPE`, `CUST_PAYOFF_ID`,
+`INVOICE_M_ID`, `INVOICE_D_ID`, `BEFORE_DISC_AMT_TRA`, `DISC_RATE`,
+`EVALUTION_FORMULA`, `CALCULATION_FOMULA`, `CUST_PAYOFF_OPDET_ID`,
+`GOODS_TRANSPLAN_ID`, `CUST_PAYOFF_G_ID`, `CUST_PAYOFF_GOP_ID`,
+`PURCHASE_SALES_TYPE`, `IS_AUTO_INTEGRATION`, `VAT_RATE`, `FIN_M_ID`,
+`FIN_D_ID`, `TRA_TYPE_ID`, `CARD_TYPE`, `FIN_DCARD_ID`, `BRNCH_ENTG_ID`,
+**`UNIT_PRICE`** (Sevk tarafındaki `UNIT_PRICE_TRA` yerine burada sade
+`UNIT_PRICE` adıyla geçiyor — otomasyon/rapor kodu yazarken bu isim farkına
+dikkat edilmeli), `CALC_TARIFF_D_ID`, `ZZ_DESCRIPTION` (bkz. aşağıda —
+teslimat/irsaliye no gibi serbest metin notu saklamak için kullanılıyor),
+`ZZ_VEHICLE_CODE`.
+
+**"Müşteri hesaplaşma kilidi" [DOĞRULANMIŞ]**: `CUST_PAYOFF_ID`/
+`CUST_PAYOFF_G_ID`/`CUST_PAYOFF_OPDET_ID`/`CUST_PAYOFF_GOP_ID` alanları
+sıfırlanınca (`update ... set cust_payoff_id=0, ...`) o fiyat satırının
+müşteri hesaplaşma (tahsilat mutabakatı) kilidi açılıyor ve satır tekrar
+düzenlenebilir/silinebilir hale geliyor (`SQL.xlsx`, "CUST OLANLARI SIFIR
+YAPTIĞIMIZDA MÜŞTERİ HESAPLAŞMANIN KİLİDİ AÇILIYOR").
+
+**`ZZ_DESCRIPTION` — teslimat/irsaliye no notu [DOĞRULANMIŞ]**:
+`LMST_L_GOODS_OP_DET.ZZ_DESCRIPTION` serbest metin alanı, bazı fiyat
+kalemlerine (özellikle BEKLEME gibi navlun/uğrama dışı kalemlere) teslimat
+numarası not etmek için kullanılıyor (örnek: `ZZ_DESCRIPTION = '80032656'`).
+
+### `LMST_L_TRANSPORT` (Sevk ana tablosu) — ek kolonlar [DOĞRULANMIŞ]
+Önceden bilinenlere ek olarak: `TRACTOR_UNIT_ID`, `TRACTOR_MAPID`,
+`TRACTOR_VEHICLE_ID`, `TRACTOR_TRANSPORTTYPE` (plaka/araç birimi bilgisi —
+plaka değişikliği bu üçlü üzerinden yapılıyor, sadece plaka string'i
+değiştirilmiyor), `DRIVER_ID`, `PROJECT_ID`, `END_KM` (**Varış KM**),
+`RETURN_KM` (**Boş KM** — dönüş/boş seyir kilometresi), `ZZ_START_KM`
+(**Çıkış KM**), `ZZ_GUEST` (1 = Misafir Araç), `TRANSPORT_STATUS_ID`,
+`NOTE_LARGE` (sevk açıklama/not alanı).
+
+`Toplu Sevk Varış Km SQL.xlsx` dosyası, çok sayıda (600+) `S-...` numarası
+için `END_KM`/`RETURN_KM` alanlarını Excel'den okunan değerlerle toplu
+güncellemek amacıyla hazırlanmış bir `FOR UPDATE` sorgusu + eşleşen km
+değerleri tablosu içeriyor (kolonlar: sevk no, km, boş km).
+
+### ✅ `FLMD_VEHICLE` / `FLMD_VHC_ENTITY_DETAIL` — TAM kolon yapısı ve sequence'lar [DOĞRULANMIŞ, `user_tab_columns` çıktısıyla — "toplu plaka kaydetme" görevi için]
+
+Kullanıcı, "toplu plaka kaydetme" görevi için gerçek Oracle şemasından
+`user_tab_columns` çıktısını ve `user_sequences` listesini paylaştı. Bu,
+önceki bölümlerdeki tahminleri KESİNLEŞTİRDİ:
+
+**`FLMD_VEHICLE`** — 85 kolon, PK = `VEHICLE_ID` (`NOT NULL`, TEK
+`NOT NULL` kolon — diğer TÜM kolonlar DB seviyesinde nullable; UI'da
+kırmızı/zorunlu görünen alanlar — örn. `Mülkiyet` — DB constraint'i değil,
+UYGULAMA (ekran) seviyesi validasyon). Görevle ilgili öne çıkan kolonlar:
+- `VEHICLE_ID` (PK) — sequence: **`VEHICLE_ID_FLMD_VEHICLE`** (net/kesilmemiş
+  isim, `user_sequences` listesinde doğrulandı).
+- `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`, `UPDATE_DATE` — audit
+  kolonları (Yük/Sevk otomasyonundaki "veritabanı iz temizliği" mantığıyla
+  aynı aile).
+- `VEHICLE_CODE` (Araç Kodu), `LICENSE_PLATE` (Plaka) — genellikle aynı
+  değer (örn. `31ATR52`).
+- `VHC_MODEL_ID` (Model Kodu — örnekte `300` = Tır), `MODEL_YEAR`,
+  `TRAILER_TYPE_ID` (Treyler/Kamyon tipi — örnekte `09.02` = Tır Frigorifik).
+- **`OWNERSHIP_STATUS`** — DİKKAT: bu kolon `FLMD_VHC_ENTITY_DETAIL`'de de
+  var (aşağıda). Araç ana tablosunda muhtemelen "GÜNCEL/AKTİF" mülkiyet
+  durumunun denormalize edilmiş bir kopyası; ikisinin de tutarlı
+  güncellenmesi gerekebilir.
+- **`IS_TRACTOR`** / **`IS_TRAILER`** (her ikisi `NUMBER(1)`, 0/1 checkbox) —
+  bunlar Araç Tanım ekranındaki `Çekici`/`Dorse` checkbox'larının karşılığı.
+  ÖNEMLİ: bu ikisinin AYNI satırda birlikte `1` olabildiği (örnek `31ATR52`
+  hem çekici hem dorse — bileşik/kombine kayıt) VEYA sadece biri `1`
+  olabildiği (çekici ve dorse farklı plakalarda, iki AYRI `FLMD_VEHICLE`
+  satırı) her iki senaryoyu da destekliyor — şema seviyesinde bir kısıt
+  yok, hangi deseni kullanacağımız veriye (aynı plaka mı farklı plaka mı)
+  bağlı.
+- **`TRAILER_ID`** — bir çekiciyi belirli bir dorse'ye (başka bir
+  `FLMD_VEHICLE.VEHICLE_ID`'ye) bağlamak için FK olabilir (henüz canlı
+  test edilmedi).
+- **`ANALYSIS_ID`** — [ÇOK ÖNEMLİ, önceki "Analiz Kartı" keşfini teyit
+  ediyor] Bu, Araç Tanım ekranındaki `Analiz Kodu` alanının GERÇEK FK
+  kolonu. Nullable olsa da, önceki ekran örneklerinde hep dolu (plaka ile
+  aynı değerde bir Analiz Kartı'na işaret ediyor) görüldü. **[VARSAYIM/TODO,
+  hâlâ çözülmedi]**: Yeni bir araç eklerken bu ID'yi biz mi üretmeliyiz
+  (yani önce ayrı bir Analiz Kartı INSERT'i mi gerekiyor, tablo adı henüz
+  bilinmiyor), yoksa NULL bırakmak kabul edilebilir mi (raporlama/analiz
+  özelliklerini kullanmayacaksak sorun olmayabilir)?
+- `DRIVER_ID` — nullable, kullanıcının kararıyla bu görevde NULL bırakılacak
+  (sürücü ataması yapılmayacak).
+- `COUNTRY_ID`, `CURRENT_KM`, `IS_DOMESTIC`/`IS_INTERNATIOAL` (Yurtiçi/
+  YurtDışı checkbox'ları), `CURRENT_VHC_LOCATION_ID`/`SHIPPING_VHC_LOCATION_ID`
+  (Bulunduğu Yer/Sevk Edileceği Yer), `FIXED_ASSETS_ID` (Sabit Kıymet Kodu),
+  `LIEN_STATUS`/`LIEN_BANK_ID`/`LIEN_BANK_BRANCH_ID`/`LIEN_END_DATE` (Rehin
+  Bilgileri bloğu), Satın Alma/Satış blokları için `PURCHASE_*`/`SALES_*`
+  önekli ~20 kolon (fatura no/tarih/tutar/kur/KDV/ÖTV) — bu görev kapsamında
+  hiçbiri kullanılmıyor (hepsi nullable, boş kalabilir).
+
+**`FLMD_VHC_ENTITY_DETAIL`** — 14 kolon (tam liste, `Araç Cari Detayı`
+grid'inin karşılığı), `NOT NULL` olan 3 kolon: `VEHICLE_ENTITY_DETAIL_ID`
+(PK), `VEHICLE_ID` (FK → `FLMD_VEHICLE`), `ENTITY_ID` (FK → cari, "Mülkiyet
+Sahibi"). Diğerleri: `CREATE_USER_ID`, `UPDATE_USER_ID`, `CREATE_DATE`,
+`UPDATE_DATE` (audit), `START_DATE`, `END_DATE` (mülkiyet geçerlilik
+aralığı — aktif kayıtlarda `END_DATE` uzak/yapay bir tarih, örn.
+`19.01.2099`), `OWNERSHIP_STATUS` (enum: 0=Boş,1=Kurum Malı,2=Kiralık,
+3=Tedarikçi), `CO_ID`, `BRANCH_ID` (İzlog için sabit `2371`/`6364`,
+DOĞRULANMIŞ), `ZZ_KM` (`NUMBER(1)`, checkbox — muhtemelen grid'deki "KM
+Ara..." kolonu), `T_ENTITY_ID` (anlamı henüz belirsiz, muhtemelen ikincil
+bir cari referansı — [VARSAYIM/TODO]).
+
+**PK sequence — [HÂLÂ TEYİT EDİLMEDİ]**: `user_sequences` listesinde
+`VEHICLE_ENTITY_DETAIL_ID_FLMD` adında bir satır var ama bu isim ekran
+görüntüsünde KESİK/eksik görünüyor (tablo adı `FLMD_VHC_ENTITY_DETAIL`
+olduğuna göre normalde daha uzun bir son ek beklenirdi) — kullanıcıdan tam/
+kesilmemiş ismi doğrulaması istendi, henüz gelmedi. Bu isim netleşmeden
+`INSERT` SQL'inde kullanılmamalı.
+
+### Araç / Plaka / Mülkiyet Yapısı [DOĞRULANMIŞ]
+- `FLMD_VEHICLE` — Araç ana tablosu: `VEHICLE_ID`, `VEHICLE_CODE`,
+ `LICENSE_PLATE`, `VHC_MODEL_ID`, `TRAILER_TYPE_ID`.
+- `FLMD_VHC_ENTITY_DETAIL` — Aracın mülkiyet/cari geçmişi (tarih aralıklı):
+ `VEHICLE_ENTITY_DETAIL_ID`, `VEHICLE_ID`, `ENTITY_ID` (mülk sahibi cari),
+ `OWNERSHIP_STATUS` (**enum**: `0`=Boş, `1`=Kurum Malı, `2`=Kiralık,
+ `3`=Tedarikçi), `START_DATE`, `END_DATE`. Aynı araç için tarih aralıkları
+ çakışan/yanlış satır varsa yanlış olanı silinerek düzeltiliyor.
+ Boş (`0`) olanlar toplu olarak `3` (Tedarikçi) yapılabiliyor (varsayılan
+ kabul).
+- `FLMD_VHC_RENT_DETAIL` — Kiralık araç kira/yakıt oranı geçmişi:
+ `VEHICLE_ID`, `START_DATE`, `END_DATE`, `FUEL_RATE`, `RENT_AMT_TRA`.
+- `LMSR_VIEW_TRANSPORT_UNITS` / `LMSW_VIEW_TRANSPORT_UNITS` — Sevk'in
+ `TRACTOR_UNIT_ID`+`TRACTOR_MAPID` çiftini gerçek plakaya çeviren view'lar:
+ `TRANSPORT_UNIT_ID`, `MAPID`, `SERIALNO_PLATENO` (plaka), `UNITID`,
+ `UNIT_ID`, `TRANSPORT_TYPE`, `OWNERSHIP` (aynı enum: 1/2/3, yukarıdaki ile
+ birebir aynı anlam).
+- `LMSR_L_TRANSPORT` — plaka ↔ sevk ilişkisini taşıyan ayrı bir (view/ara)
+ tablo: `TRAC_SERIALNO_PLATENO`, `TRANSPORT_ID`.
+- `FLMD_VHC_GOODTYPE_DETAIL` + `LMSD_L_GOODS_TYPE` — bir aracın hangi
+ "Arvento" (GPS/filo takip) ID'sine sahip olduğunu bulmak için:
+ `LMSD_L_GOODS_TYPE.GOODS_TYPE_CODE` açıklaması (`DESCRIPTION`) `%ATS%`
+ içeren kayıtlar "Arvento ID" olarak kullanılıyor, join
+ `FLMD_VHC_GOODTYPE_DETAIL.VEHICLE_ID = FLMD_VEHICLE.VEHICLE_ID` ve
+ `FLMD_VHC_GOODTYPE_DETAIL.GOODS_TYPE_ID = LMSD_L_GOODS_TYPE.GOODS_TYPE_ID`.
+- Plaka tamamen silinirken sıra: önce `LMSD_L_TRANSPORT_UNIT` (`UNIT_ID`
+ ile), sonra `FLMD_VEHICLE` (`VEHICLE_ID` ile) — ama önce o plakanın
+ kullanıldığı sevkler düzeltilmeli (aksi halde referans hatası olur).
+ Mülkiyet/cari geçmişinden sadece tek bir satırı silmek gerekiyorsa
+ `FLMD_VHC_ENTITY_DETAIL.VEHICLE_ENTITY_DETAIL_ID` ile silinebiliyor.
+
+### `LMSD_L_AGR_PROJ_TYPE` (Proje Kodu) — TAM ID eşleme tablosu [DOĞRULANMIŞ]
+`SQL.xlsx`'te bulunan tam liste (`PROJECT_ID` → `PROJECT_CODE`):
+`5`=Komple, `6`=Parsiyel, `9`=İthalat/İhracat, `10`=Depo, `14`=Ankara,
+`15`=Bursa, `16`=Çankırı, `17`=İzmir, `18`=Sakarya, `19`=İade,
+`20`=Mikro Dağıtım, `21`=Filo, `22`=Kurtköy, `23`=Karaman,
+`24`=Kahramanmaraş, `26`=Antalya, `27`=Yenişehir, `28`=Gönen,
+`29`=Emirdağ, `30`=Mersin. (`25` numarası listede karşılıksız/boş
+görünüyor — silinmiş ya da kullanılmayan bir kod olabilir.)
+`LMST_L_GOODS.IS_DOOR_TO_DOOR = 1` olan (kapıdan kapıya) yüklerin
+`PROJECT_ID`'si toplu olarak `0`'a set edilmiş bir düzeltme geçmişi var
+(hem `LMST_L_GOODS.PROJECT_ID` hem de bağlı `LMST_L_TRANSPORT.PROJECT_ID`,
+`LMST_L_TRANS_GOODS_DETAIL` üzerinden join edilerek).
+
+### `LMSD_L_GOODSPRICE_TYPE` (Yük Fiyat Tipi Kodu / kargo kategorisi) — TAM ID eşleme tablosu [DOĞRULANMIŞ]
+Önceki not bu tablonun "Ücret Tipi" OLMADIĞINI, Yük'ün kargo kategorisini
+tuttuğunu belirtmişti — `SQL.xlsx`'teki tam liste bunu teyit ediyor
+(`GOODS_PRICE_TYPE_ID` → kod): `3`=CANLI, `4`=BEYAZ ET, `5`=ŞARKÜTERİ,
+`6`=PALET, `7`=HAMMADDE, `8`=İADE, `9`=SAKARYA, `10`=DONUK, `11`=MATERYAL,
+`12`=SUT, `13`=KONSERVE, `14`=DİĞER, `15`=PASTÖRİZE, `16`=KURUYÜK,
+`17`=PAMUKOVA DÖNÜŞ, `18`=SATINALMA, `19`=BURSA DEPO, `20`=SÜT TOZU,
+`21`=SERİN, `22`=SEBZE-MEYVE, `23`=Antalya Çıkış, `24`=Antalya Dönüş,
+`25`=Tarsus Çıkış, `26`=Tarsus Dönüş, `27`=Kumluca Çıkış, `28`=Bursa Çıkış,
+`29`=Bursa Dönüş, `30`=YARI MAMÜL, `31`=BİTMİŞ ÜRÜN, `32`=Elmalı Çıkış,
+`33`=Ağaköy Transit, `34`=Ara Sevkiyat, `35`=Adana Çıkış, `36`=Adana Dönüş,
+`37`=PANCAR, `38`=Nar Çıkış, `39`=GEYVE DEPO, `40`=MAKİNE, `41`=ISKARTA,
+`42`=Bursa Yeşillik Çıkış, `43`=Gemlik Çıkış, `44`=Gemlik Dönüş,
+`45`=ŞİŞECAM, `46`=KASA/PALET, `47`=CHEP PALET.
+
+Aynı sorguda `LMST_L_GOODS.GOODS_STATE_ID` enum'u da doğrulandı: `3`=Gidiş
+Yükü, `4`=Dönüş Yükü.
+
+### İrsaliye / Teslim Alma (INVT) Tabloları [DOĞRULANMIŞ]
+- `LMST_L_TRANS_GOODS_DETAIL` — Sevk ↔ Yük ilişki tablosu (çoktan-çoğa köprü):
+ `TRANSPORT_ID`, `GOODS_ID`, `TRAN_WAYBILL_DOC_NO` (irsaliye no),
+ `TRAN_WAYBILL_DOCDATE` (irsaliye tarihi), `ITEM_M_ID`, `ITEM_D_ID`,
+ `GOODS_TRANSPLAN_ID`, `TRANSPORT_GOODS_DETAIL_ID`.
+- `INVT_ITEM_M` — İrsaliye/teslim alma belge ana tablosu: `ITEM_M_ID`,
+ `DOC_NO`, `DOC_DATE`, `VOUCHER_NO`, `RECEIPT_DATE`. `INVT_ITEM_D` — detay
+ satırları (`ITEM_M_ID` ile bağlı).
+- **"Faturası kesilen sevkin irsaliyesini silme" [DOĞRULANMIŞ, riskli/manuel
+ işlem]**: Önce `LMST_L_TRANS_GOODS_DETAIL`'den ilgili `ITEM_M_ID`/
+ `ITEM_D_ID` bulunuyor, sonra `DELETE FROM INVT_ITEM_D WHERE ITEM_M_ID=...`
+ ve ardından `DELETE FROM INVT_ITEM_M WHERE ITEM_M_ID=...` çalıştırılıyor.
+ Bu, otomasyonun ASLA kendiliğinden yapmaması gereken, tamamen manuel ve
+ tehlikeli bir müdahale — sadece referans bilgisi olarak kaydedildi.
+
+### Toplu Sevk/Yük Silme — DOĞRU SIRA [DOĞRULANMIŞ, kritik]
+`SQL.xlsx`, "Toplu Sevk Yük Silme" bölümü, doğru silme sırasını gösteriyor
+(yanlış sırayla silinirse referans bütünlüğü hatası/orphan kayıt oluşur):
+
+**Yük silme sırası:**
+1. `DELETE FROM LMST_L_GOODS_OP_DET WHERE GOODS_ID IN (...)`
+2. `DELETE FROM LMST_L_GOODS_ORDER WHERE GOODS_ORDER_ID IN (...)`
+3. `DELETE FROM LMST_L_GOODS_TRANSPLAN_DET WHERE GOODS_ID IN (...)`
+4. `DELETE FROM LMST_L_GOODS WHERE REFERENCE_NO IN (...)`
+
+**Sevk silme sırası:**
+1. `DELETE FROM LMST_L_TRANS_GOODS_DETAIL WHERE TRANSPORT_ID IN (...)`
+2. `DELETE FROM LMST_L_TRANS_OP_DETAIL WHERE TRANSPORT_ID IN (...)`
+3. `DELETE FROM LMST_L_TRANSPORT WHERE TRANSPORT_NO IN (...)`
+
+Bir Yük ve bağlı Sevk'i aynı anda silmek gerekiyorsa, tüm bu satırlar alt
+alta yazılıp sırayla (yukarıdaki sıra korunarak) çalıştırılabiliyor. Bu,
+otomasyonun kendisinin YAPMADIĞI ama ileride "hatalı test kaydını temizleme"
+gibi bir talep gelirse referans olarak kullanılabilecek kritik bir sıra
+bilgisi.
+
+### E-Fatura / Fatura / Finans Tabloları [DOĞRULANMIŞ]
+- `PSMT_INVOICE_M.E_INVOICE_STATUS` — **enum**: `1`=İptal Edildi,
+ `2`=Kuyrukta, `3`=İmzalandı Gönderilmeyi Bekliyor, `4`=Gib'e Gönderildi,
+ `5`=Onaylandı, `6`=Onay Bekliyor, `7`=Red Edildi, `8`=İade Edildi,
+ `9`=Hata, `98`=Hazır, `99`=Entegratöre Gönderildi, `100`=Entegratörden
+ Geldi, `105`=Belge Kabulü Gönderildi, `110`=Belge Reddi Gönderildi.
+- `PSMT_EINVOICE_M` — e-fatura tarafı; `PSMT_INVOICE_M.E_INVOICE_M_ID` ↔
+ `PSMT_EINVOICE_M.EINVOICE_M_ID`, `PSMT_EINVOICE_M.INVOICE_M_ID` — manuel
+ kesilen fatura ile e-faturayı `DOC_NO`+`DOC_DATE` eşleşmesiyle otomatik
+ bağlayan bir güncelleme deseni mevcut (`SQL.xlsx`, "Manuel Kesilen Fatura
+ ile E Fatura eşleştirme").
+- **E-Fatura iptali [DOĞRULANMIŞ, ÇOK RİSKLİ — otomasyon ASLA yapmamalı]**:
+ Bir faturayı sistemden "iptal edilmiş" gibi geri almak için sırasıyla:
+ `FINT_ACC_M`/`FINT_ACC_D` (muhasebe fişi; `SOURCE_APP = 2` VE
+ `SOURCE_M_ID = INVOICE_M_ID` ile eşleşen kayıtlar) silinir, aynı şekilde
+ `FINT_FIN_M`/`FINT_FIN_D` (finans fişi) silinir, sonra
+ `LMST_L_GOODS_OP_DET` üzerindeki `IS_AUTO_INTEGRATION`/`INVOICE_M_ID`/
+ `INVOICE_D_ID` alanları `0`'a çekilir (faturanın satırlarla bağını
+ koparır), son olarak `PSMT_INVOICE_M.E_INVOICE_STATUS = 1` (İptal Edildi)
+ yapılır ve `COMMIT` edilir. Kullanıcı notu: "fatura numaralarını yaz. Tek
+ seferde çalıştır." — yani bu adımlar TEK bir transaction'da art arda
+ çalıştırılıyor, ara commit yok.
+- `FINT_ACC_D.ACC_ID`/`ACC_M_ID`/`LINE_NO` — muhasebe fişi satırının hesap
+ kodu (`ACC_ID`, hesap planından bakılıyor) tekil satır (`LINE_NO`: 10, 20,
+ 30... gibi 10'ar artan sıra) bazında değiştirilebiliyor.
+- **Fatura/fiyat satırı miktar (QTY) tutarsızlığı** [DOĞRULANMIŞ]: Bazen
+ `LMST_L_GOODS_OP_DET.AMT` ile bağlı `PSMT_INVOICE_D.AMT` (join:
+ `INVOICE_D_ID`+`INVOICE_M_ID`) tutmuyor (miktar hatası). Çözüm: fatura
+ oluştuktan sonra fiyat satırının `QTY`'sini `1`'e düzeltip kaydet, fatura
+ silinip yeniden oluşturulduğunda tutarlar düzelmiş oluyor.
+
+### Cari / Sürücü / Diğer [DOĞRULANMIŞ]
+- `LMSD_L_ENTITY` — Cari ana tablosu: `L_ENTITY_ID`, `ENTITY_CODE`, `NAME`.
+ IBAN bilgisi ayrı bir modülde: `FIND_ENTITY`/`FIND_ENTITY_BANK`
+ (`ENTITY_ID`, `ENTITY_CODE`, `NAME`, `IBAN_NO`) — dikkat, önek `FIND_`
+ (Finans/Muhasebe modülü), `LMSD_L_ENTITY` ile aynı ENTITY_ID uzayını
+ paylaşıyor ama farklı bir tablo/modül.
+- `LMSD_L_DRV_ENT_MAP` — bir cariyi silmeden önce, o cariye bağlı sürücü
+ (`DRIVER_ID`) kaydı olup olmadığını kontrol etmek için (`ENTITY_ID` ile).
+ Sürücü bağlıysa cari silinemiyor / önce sürücü ilişkisi çözülmeli.
+- `LMST_SUP_PAYOFF_T_D` / `LMST_SUP_PAYOFF_OPDET` / `LMST_SUP_PAYOFF_TOP_D`
+ — Tedarikçi hesaplaşma (ödeme mutabakatı) tabloları. Bir Sevk henüz
+ "dağıtılmadıysa" (`IS_DONE`/dağıtım tiki yoksa) `LMST_SUP_PAYOFF_T_D`'den
+ `TRANSPORT_ID` ile direkt silinerek dosyadan çıkarılabiliyor; dağıtıldıysa
+ önce fiyat değişikliği yapıp `SUP_PAYOFF` alanlarını sıfırlamak gerekiyor
+ (bkz. yukarıdaki `CUST_PAYOFF` ile simetrik "kilit açma" mantığı, ama
+ tedarikçi/alış tarafı için).
+- `LMSD_L_LOCATION.ZZ_MUSTERI` — `1` ise o teslim/yükleme yeri müşteri
+ tarafında da görünür/paylaşılır hale geliyor.
+- `APPD_MENU` — ERP menü ağacı (`MNU_NAME`, `PRT_ID` = üst menü). "İzlog
+ Raporlar" gibi özel menülerden bir raporu kaldırmak için buradan satır
+ silinebiliyor.
+- **Aktül entegrasyonu** (otomatik navlun/fatura entegrasyon sistemi) ile
+ ilgili birkaç bilinen sorun deseni: mükerrer `LMST_L_GOODS_TRANSPLAN_DET`
+ satırları (aynı `GOODS_ID` için birden fazla, `ROW_NUMBER() OVER(PARTITION
+ BY GOODS_ID ORDER BY CREATE_DATE)` ile tespit edilip fazlası siliniyor),
+ `LMST_L_GOODS.TRANSPORT_TYPE = 0` olan (henüz set edilmemiş) kayıtların
+ `1`'e çekilmesi gerekiyor, ve `LMST_L_GOODS_OP_DET.GOODS_TRANSPLAN_ID` ile
+ `LMST_L_GOODS_TRANSPLAN_DET.GOODS_TRANSPLAN_ID`'nin tutmaması "analiz kodu
+ hatası" ile fatura kesimini bozabiliyor.
 
 ## Bu Dosyayı Güncelleme
 
