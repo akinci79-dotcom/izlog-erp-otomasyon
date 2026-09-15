@@ -17,6 +17,7 @@ from typing import Any
 import ayarlar
 
 _KPI_KOKU = Path(__file__).resolve().parent
+_EXCEL_EPOK = datetime(1899, 12, 30)  # Excel'in seri tarih başlangıcı (1900 artık yıl hatası dahil)
 
 _UYUMSOFT_PARAMETRELER = (
     "@CoCode@",
@@ -143,5 +144,18 @@ def hucre_degeri(deger: Any) -> Any:
         # bu yüzden boş hücreye çevrilir.
         if deger.year < 1900:
             return None
-        return deger
+        # ÖNEMLİ: Python datetime/date nesnesini DOĞRUDAN Range.Value'ya
+        # atamak pywin32'nin COM tarih dönüştürücüsünü (saat dilimi farkı
+        # uygulayan) devreye sokuyor -- gece yarısına yakın tarihler (örn.
+        # 01.08.2026 00:00) UTC+3 farkıyla BİR GÜN ÖNCESİNE (31.07.2026)
+        # kayıyordu (kullanıcı canlı testte teyit etti: Ağustos filtresiyle
+        # gelen satırların YUK_TARIHI/SEVK_TARIHI kolonu 31.07.2026
+        # gösteriyordu, oysa Oracle filtresi zaten sadece Ağustos'u
+        # döndürüyor). Çözüm: tarihi Excel'in kendi seri sayısına çevirip
+        # düz sayı olarak yazıyoruz -- saat dilimi dönüşümü hiç devreye
+        # girmiyor, hücre biçimi (bkz. kpi_sablon_rapor._com_tarih_bicimi_uygula)
+        # tarih olarak ayarlanınca doğru görünüyor.
+        tam = deger if isinstance(deger, datetime) else datetime(deger.year, deger.month, deger.day)
+        fark = tam - _EXCEL_EPOK
+        return fark.days + fark.seconds / 86400.0
     return deger

@@ -497,6 +497,33 @@ def _com_sayfaya_yaz(
     return len(satirlar), esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
 
+def _com_tarih_bicimi_uygula(
+    sheet, baslik_satiri: int, satir_sayisi: int, esleme: dict[int, str]
+) -> None:
+    """Tarih kolonlarına açık 'dd.mm.yyyy' biçimi uygular.
+
+    hucre_degeri() artık tarihleri Excel seri sayısına (düz float) çeviriyor
+    (bkz. kpi_veri.py — pywin32'nin datetime->COM dönüşümündeki saat dilimi
+    kayması hatasını önlemek için). Hücrenin biçimi zaten tarih değilse bu
+    sayı düz bir rakam olarak görünür; bu yüzden ORACLE kolonu "...TARIHI" ile
+    bitenler için biçim burada açıkça ayarlanır.
+    """
+    if satir_sayisi <= 0:
+        return
+    son_satir = baslik_satiri + satir_sayisi
+    for col_idx, oracle_kolon in esleme.items():
+        if not str(oracle_kolon).upper().endswith("TARIHI"):
+            continue
+        try:
+            araligi = sheet.Range(
+                sheet.Cells(baslik_satiri + 1, col_idx),
+                sheet.Cells(son_satir, col_idx),
+            )
+            araligi.NumberFormat = "dd.mm.yyyy"
+        except Exception:
+            pass
+
+
 def _com_pivot_kaynak_guncelle(
     wb,
     sayfa_adi: str,
@@ -713,9 +740,10 @@ def _excel_sablon_doldur(
             return False, f"Filo Detay sayfası bulunamadı: {filo_sayfa_adlari}", 0, 0, []
 
         _progress(f"  [Excel] VERİ yazılıyor ({len(veri_satirlari)} satır)...")
-        veri_adet, _, eslesmeyen_veri, veri_kolon, veri_tablo_sol = _com_sayfaya_yaz(
+        veri_adet, veri_esleme, eslesmeyen_veri, veri_kolon, veri_tablo_sol = _com_sayfaya_yaz(
             ws_veri, veri_baslik_satiri, veri_satirlari
         )
+        _com_tarih_bicimi_uygula(ws_veri, veri_baslik_satiri, veri_adet, veri_esleme)
         _com_pivot_kaynak_guncelle(
             wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon, veri_tablo_sol
         )
