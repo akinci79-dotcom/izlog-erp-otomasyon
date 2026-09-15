@@ -13,6 +13,7 @@ from __future__ import annotations
 import calendar
 import re
 import shutil
+import time
 import unicodedata
 from datetime import date, datetime
 from pathlib import Path
@@ -139,6 +140,39 @@ def _cikti_yolu(sablon: Path | None = None) -> Path:
         return _raporlar_klasoru() / dosya
     suffix = (sablon or sablon_yolu()).suffix or ".xlsx"
     return _raporlar_klasoru() / f"kpi_rapor{suffix}"
+
+
+def _sablon_hedefe_kopyala(kaynak: Path, hedef: Path, deneme: int = 5, bekleme_sn: float = 2.0) -> None:
+    """Şablonu çıktı yoluna kopyalar; 'dosya başka bir işlem tarafından kullanılıyor'
+    (WinError 32) tipik olarak GEÇİCİ bir kilit (virüs taraması, OneDrive senkronu)
+    veya çıktı dosyasının hâlâ Excel'de/bir önceki çökmüş çalıştırmanın arkada kalan
+    (görünmez) Excel sürecinde açık olmasından kaynaklanır. Birkaç kez kısa aralıkla
+    tekrar dener; hâlâ başarısızsa kullanıcıya somut bir eylem listesi veren net bir
+    hata fırlatır (ham WinError metni yerine)."""
+    son_hata: OSError | None = None
+    for deneme_no in range(1, deneme + 1):
+        try:
+            shutil.copy2(kaynak, hedef)
+            return
+        except OSError as exc:
+            son_hata = exc
+            if deneme_no < deneme:
+                _progress(
+                    f"  Uyarı: {hedef.name} şu an başka bir işlem tarafından kullanılıyor "
+                    f"gibi görünüyor, {bekleme_sn:.0f}sn sonra tekrar denenecek "
+                    f"({deneme_no}/{deneme})..."
+                )
+                time.sleep(bekleme_sn)
+
+    raise RuntimeError(
+        f"'{hedef.name}' dosyasına yazılamadı — başka bir işlem (muhtemelen Excel) "
+        f"dosyayı açık tutuyor.\n"
+        f"Kontrol edin: (1) {hedef.name} dosyası Excel'de açıksa kapatın, "
+        f"(2) Görev Yöneticisi'nde (Ctrl+Shift+Esc) arkada kalmış bir 'EXCEL.EXE' "
+        f"süreci varsa (görünür pencere olmasa bile — Excel COM otomasyonu gizli "
+        f"çalışır) sonlandırın, (3) tekrar 'python kpi_rapor_olustur.py' çalıştırın.\n"
+        f"Ham hata: {son_hata}"
+    ) from son_hata
 
 
 def _normalize_kolon(adi: str) -> str:
@@ -1223,7 +1257,7 @@ def sablon_rapor_olustur(
     _progress(f"  Şablon: {kaynak.name}")
 
     hedef.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(kaynak, hedef)
+    _sablon_hedefe_kopyala(kaynak, hedef)
     _progress(f"  Çıktı kopyalandı: {hedef.name}")
 
     veri_satirlari: list[dict] = []

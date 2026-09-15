@@ -201,6 +201,13 @@ Eşleşmeyen kolonları `ayarlar.py` → `KPI_KOLON_ESLEME` ile tanımlayın.
 
 **ORA-00933:** Güncel KPI kodunu git clone ile alın (Oracle 11g uyumlu).
 
+**`[WinError 32] The process cannot access the file because it is being used by another process`:**
+`raporlar\kpi_rapor.xlsx` (veya şablon) başka bir işlem tarafından açık tutuluyor. Kod artık bunu birkaç
+kez kısa aralıkla otomatik tekrar deniyor; hâlâ başarısızsa: (1) `kpi_rapor.xlsx` Excel'de açıksa kapatın,
+(2) Görev Yöneticisi'nde (`Ctrl+Shift+Esc`) arkada kalmış bir `EXCEL.EXE` süreci varsa (görünür pencere
+olmasa bile — Excel COM otomasyonu gizli/`Visible=False` çalışır, önceki bir çalıştırma çökmüşse arkada
+kalabilir) sonlandırın, (3) `python kpi_rapor_olustur.py`'yi tekrar çalıştırın.
+
 **"Zarar Detay" sayfasındaki rakamlar / Özet'teki "Toplam zarar büyüklüğü" hep 0:** Bu, eski
 (elle doldurulan) tasarımın bilinen bir sorunuydu — bkz. yukarıdaki "Zarar Detay sayfası otomatik
 tazeleme" bölümü. Güncel koddan sonra hâlâ 0 görüyorsanız: (1) `KPI_ZARAR_DETAY_GUNCELLE` yanlışlıkla
