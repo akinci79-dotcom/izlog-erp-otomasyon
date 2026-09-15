@@ -709,22 +709,153 @@ _ZARAR_DETAY_SAYFA_ADLARI_VARSAYILAN = ["Zarar Detay", "Zarar detay", "ZARAR DET
 _ZARAR_TEDARIKCI_TABLO_ADI_VARSAYILAN = "ZararTedarikci"
 _ZARAR_KIRALIK_TABLO_ADI_VARSAYILAN = "ZararKiralik"
 
+# Otomatik satır ekleme için sadece bir "akıl sağlığı" güvenlik sınırı — sonsuz
+# döngü riski yok (tek seferlik bulk Insert), ama beklenmedik derecede büyük
+# (muhtemelen bir hesaplama hatasından kaynaklanan) bir istek varsa körü körüne
+# binlerce satır eklemek yerine net bir hata ile durup elle kontrole yönlendirir.
+_ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME = 20000
+
+
+def _com_zarar_detay_kapasite_arttir(
+    sheet,
+    lo,
+    tablo_adi: str,
+    tablo_sol: int,
+    veri_ilk_satir: int,
+    veri_son_satir: int,
+    kapasite: int,
+    gereken_satir_sayisi: int,
+) -> tuple[int, int]:
+    """ZararTedarikci/ZararKiralik tablosunun satır kapasitesi yetersiz kaldığında
+    eksik kadar satırı GERÇEK bir Excel satır ekleme işlemiyle tablonun İÇİNE ekler.
+
+    Zarar eden sevk sayısı her ay farklı olacağı için (bu ay 89/236, gelecek ay
+    farklı bir sayı) sabit bir kapasiteyi elle bir kere büyütmek kalıcı bir çözüm
+    DEĞİL — bu fonksiyon her çalıştırmada gerektiği kadar otomatik büyütür.
+
+    KRİTİK NOKTA — ekleme konumu: Yeni satırlar tablonun mevcut SON VERİ satırının
+    ('veri_son_satir') TAM ÜZERİNE eklenir, 'veri_son_satir + 1'e DEĞİL. Excel'in
+    "bir aralığın İÇİNE satır eklenirse o aralığa bakan formüller otomatik
+    genişler, aralığın TAM ALTINA eklenirse genişlemez" kuralı sayesinde, hemen
+    altındaki 'Ara Toplam' SUM(...) formülü (aralığı tam bu son satırda bitiyor)
+    otomatik olarak yeni satırları da kapsayacak şekilde büyür — aralık dışına
+    eklenseydi (veri_son_satir + 1) bu formül YENİ satırları GÖRMEZDİ.
+
+    Performans: `N` satır gerekiyorsa `N` kere ayrı `ListRows.Add()`/`Insert()`
+    çağrısı YAPILMAZ (bkz. bu dosyadaki "hücre hücre yazma donması" dersi) — TEK
+    bir `sheet.Rows("a:b").Insert()` çağrısıyla tüm eksik satırlar birden eklenir.
+
+    Hesaplanan sütun formülleri (J:N — Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı):
+    Excel'in tablo satır ekleme davranışı bunları otomatik kopyalamayı deneyebilir
+    ama GARANTİ değildir; bu yüzden ekleme sonrası her sütun için tablonun İLK veri
+    satırındaki (her zaman dolu, şablondan gelen orijinal) formül `.FormulaR1C1`
+    (satır-bağımsız/relative referans korunarak) yeni satırlara AÇIKÇA kopyalanır.
+
+    Dönüş: (yeni_kapasite, yeni_veri_son_satir). Herhangi bir adım başarısız
+    olursa İSTİSNA fırlatır — çağıran taraf bunu yakalayıp ESKİ kapasiteyle
+    devam eder (otomatik büyütme başarısız olursa en azından önceki davranış
+    -- kapasiteyi aşanları logla -- korunur, rapor yine de tamamlanır).
+    """
+    eksik = gereken_satir_sayisi - kapasite
+    if eksik <= 0:
+        return kapasite, veri_son_satir
+
+    if eksik > _ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME:
+        raise RuntimeError(
+            f"{eksik} satır isteniyor — güvenlik sınırını "
+            f"({_ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME}) aşıyor, beklenmedik "
+            "derecede büyük bir sıçrama görünüyor, elle kontrol edin."
+        )
+
+    _progress(
+        f"  [Excel] {tablo_adi} kapasitesi yetersiz ({kapasite} satır var, "
+        f"{gereken_satir_sayisi} gerekiyor) — {eksik} satır otomatik ekleniyor..."
+    )
+
+    # Formül kaynağı: tablonun İLK veri satırı — şablondan gelen, her zaman dolu
+    # ve doğru olduğu varsayılan orijinal formülleri taşır (kaç kez büyütülürse
+    # büyütülsün bu satır hiç silinmediği için güvenilir bir referans kalır).
+    kaynak_satir = veri_ilk_satir
+
+    # TEK bir Insert() çağrısıyla `eksik` satırı, mevcut son veri satırının TAM
+    # ÜZERİNE ekle (yukarıdaki docstring'deki "aralık içine ekleme" kuralı için).
+    try:
+        sheet.Rows(f"{veri_son_satir}:{veri_son_satir + eksik - 1}").Insert()
+    except Exception as exc:
+        raise RuntimeError(f"satır ekleme (Rows.Insert) başarısız: {exc}") from exc
+
+    yeni_veri_son_satir = veri_son_satir + eksik
+    yeni_kapasite = kapasite + eksik
+
+    metin_kolon_sayisi = len(ZARAR_DETAY_METIN_SUTUNLARI)
+    formul_sol = tablo_sol + metin_kolon_sayisi
+    formul_sag = formul_sol + 4  # J..N -> Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı (5 sütun)
+
+    # Her sütun İÇİN AYRI (ama satırlar için TEK) atama yapılıyor: kaynaktaki
+    # tek hücrenin FormulaR1C1'i (relative referans) hedef aralığa bir SKALER
+    # olarak atanıyor — Excel R1C1 göreli formülleri her hedef hücre için
+    # KENDİ konumuna göre otomatik ayarlar, bu yüzden 5 sütun x 1 satır kaynak
+    # okuma + 5 sütun x N satır hedef yazma toplamda sadece 10 COM çağrısı
+    # (satır sayısından BAĞIMSIZ) — performans için satır sayısı kadar döngü
+    # kurulmuyor.
+    for offset in range(formul_sag - formul_sol + 1):
+        col = formul_sol + offset
+        try:
+            kaynak_formul = sheet.Cells(kaynak_satir, col).FormulaR1C1
+            sheet.Range(
+                sheet.Cells(veri_son_satir, col),
+                sheet.Cells(yeni_veri_son_satir - 1, col),
+            ).FormulaR1C1 = kaynak_formul
+        except Exception as exc:
+            raise RuntimeError(
+                f"sütun {col} formülü yeni satırlara ({veri_son_satir}-"
+                f"{yeni_veri_son_satir - 1}) kopyalanamadı: {exc}"
+            ) from exc
+
+    # ListObject sınırını açıkça genişlet — native Excel Table davranışı satır
+    # eklendiğinde bunu genelde kendiliğinden yapar, ama garantiye almak için
+    # açıkça da çağrılıyor (zararsız no-op olabilir, hataysa yutuluyor).
+    try:
+        hdr = lo.HeaderRowRange
+        yeni_tablo_araligi = sheet.Range(
+            hdr.Cells(1, 1),
+            sheet.Cells(yeni_veri_son_satir, tablo_sol + int(hdr.Columns.Count) - 1),
+        )
+        lo.Resize(yeni_tablo_araligi)
+    except Exception:
+        pass
+
+    _progress(
+        f"  [Excel] {tablo_adi} kapasitesi {yeni_kapasite} satıra büyütüldü "
+        "(Ara Toplam formülü otomatik genişledi)."
+    )
+
+    return yeni_kapasite, yeni_veri_son_satir
+
 
 def _com_zarar_detay_tablo_yaz(
     sheet, tablo_adi: str, satirlar: list[dict[str, Any]]
 ) -> tuple[int, int]:
-    """ZararTedarikci/ZararKiralik tablosunun MEVCUT satır sınırları İÇİNDE üstten
-    aşağı yazar; kapasiteyi aşmaz, kullanılmayanları sıfırlar.
+    """ZararTedarikci/ZararKiralik tablosuna üstten aşağı yazar; kapasite
+    yetersizse önce OTOMATİK olarak gereken kadar satır ekler (bkz.
+    `_com_zarar_detay_kapasite_arttir`), sonra kullanılmayan (varsa) satırları
+    sıfırlar.
 
-    Tablonun kendisi (ListObject.Resize) BİLEREK büyütülüp küçültülmüyor — hemen
+    Tablonun kendisi eskiden BİLİNÇLİ OLARAK büyütülmüyordu çünkü hemen
     altındaki 'Ara Toplam' satırı (sabit satır numaralarına SUM(...) yapan bir
-    formül) ve bir sonraki bölümün başlığı yerinde kalsın diye (satır ekleme/
-    silme tüm sayfanın geri kalanını kaydırır, bu risklidir). Sadece metin/sayı
-    sütunları (A-I: Tarih..Kayıt Sayısı) yazılır; J-N (Alış/Satış/Kâr-Zarar/
-    Zarar %/Zarar Payı) sütunlarındaki ORİJİNAL satır formülleri (Tablo5'e SUMIF
-    ile bakan) dokunulmadan bırakılır — Sevk No (G) güncellenince bu formüller
-    kendiliğinden doğru sonucu verir. Kapasiteden fazla zarar eden sevk varsa
-    fazlası (en küçük zararlılar) gösterilmez, çağıran taraf bunu loglar.
+    formül) ve bir sonraki bölümün başlığı satır ekleme/silmeyle kayabilirdi.
+    Artık `_com_zarar_detay_kapasite_arttir` bunu GÜVENLİ şekilde yapıyor —
+    ekleme noktası özenle tablonun son veri satırının TAM ÜZERİNE seçiliyor ki
+    Excel'in "aralık içine ekleme = referans genişlet" kuralı ile 'Ara Toplam'
+    formülü otomatik büyüsün (bkz. o fonksiyonun docstring'i). Otomatik büyütme
+    herhangi bir nedenle başarısız olursa (ör. korumalı sayfa, birleştirilmiş
+    hücre), eski davranışa (kapasiteyi aşanları logla, göstermeden bırak) geri
+    dönülür — rapor yine de BAŞARIYLA tamamlanır.
+
+    Sadece metin/sayı sütunları (A-I: Tarih..Kayıt Sayısı) doğrudan yazılır;
+    J-N (Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı) sütunlarındaki ORİJİNAL satır
+    formülleri (Tablo5'e SUMIF ile bakan) dokunulmadan bırakılır — Sevk No (G)
+    güncellenince bu formüller kendiliğinden doğru sonucu verir.
     """
     try:
         lo = sheet.ListObjects(tablo_adi)
@@ -743,9 +874,34 @@ def _com_zarar_detay_tablo_yaz(
     if kapasite <= 0:
         return 0, len(satirlar)
 
+    if len(satirlar) > kapasite:
+        try:
+            kapasite, veri_son_satir = _com_zarar_detay_kapasite_arttir(
+                sheet, lo, tablo_adi, tablo_sol, veri_ilk_satir, veri_son_satir,
+                kapasite, len(satirlar),
+            )
+        except Exception as exc:
+            _progress(
+                f"  Uyarı: {tablo_adi} kapasitesi otomatik büyütülemedi ({exc}) "
+                "— mevcut kapasiteyle devam ediliyor, fazlası gösterilmeyecek."
+            )
+
     yazilan = min(len(satirlar), kapasite)
     tasan = len(satirlar) - yazilan
     metin_kolon_sayisi = len(ZARAR_DETAY_METIN_SUTUNLARI)
+
+    # Tarih sütununu veri yazılmadan ÖNCE 'General'e sıfırla (bkz.
+    # _com_bicim_genel_yap docstring'i — format sıralaması önemli).
+    tarih_kolon = tablo_sol + ZARAR_DETAY_METIN_SUTUNLARI.index("Tarih")
+    try:
+        _com_bicim_genel_yap(
+            sheet.Range(
+                sheet.Cells(veri_ilk_satir, tarih_kolon),
+                sheet.Cells(veri_son_satir, tarih_kolon),
+            )
+        )
+    except Exception:
+        pass
 
     # ÖNEMLİ (performans): Buradaki her hücreye TEK TEK `sheet.Cells(r, c).Value = ...`
     # ile yazmak eskiden yüzlerce/binlerce ayrı COM çağrısına yol açıyordu — her çağrının
@@ -782,16 +938,13 @@ def _com_zarar_detay_tablo_yaz(
         )
         _com_araliga_yaz(sifir_araligi, sifir_matrisi)
 
-    try:
-        tarih_kolon = tablo_sol + ZARAR_DETAY_METIN_SUTUNLARI.index("Tarih")
-        _com_tarih_bicimi_zorla(
-            sheet.Range(
-                sheet.Cells(veri_ilk_satir, tarih_kolon),
-                sheet.Cells(veri_son_satir, tarih_kolon),
-            )
+    if not _com_tarih_bicimi_zorla(
+        sheet.Range(
+            sheet.Cells(veri_ilk_satir, tarih_kolon),
+            sheet.Cells(veri_son_satir, tarih_kolon),
         )
-    except Exception:
-        pass
+    ):
+        _progress(f"  Uyarı: {tablo_adi} 'Tarih' sütunu biçimi doğrulanamadı.")
 
     return yazilan, tasan
 
@@ -849,17 +1002,28 @@ def _com_zarar_detay_guncelle(
     ted_yazilan, ted_tasan = _com_zarar_detay_tablo_yaz(ws, tedarikci_adi, tedarikci)
     kir_yazilan, kir_tasan = _com_zarar_detay_tablo_yaz(ws, kiralik_adi, kiralik)
 
+    # NOT: Tablo kapasitesi artık `_com_zarar_detay_tablo_yaz` içinde OTOMATİK
+    # büyütülüyor (bkz. `_com_zarar_detay_kapasite_arttir`) — bu uyarılar normal
+    # şartlarda ARTIK TETİKLENMEMELİ. Sadece otomatik büyütme bir nedenle
+    # başarısız olursa (konsolda ayrıca `_progress` ile ayrıntılı hata loglanır)
+    # devreye girer; bu yüzden mesaj artık "elle büyütün" yerine otomatik
+    # büyütmenin başarısız olduğunu ve konsol logunun kontrol edilmesi
+    # gerektiğini belirtiyor.
     if ted_tasan > 0:
         uyarilar.append(
-            f"Zarar Detay/{tedarikci_adi}: {len(tedarikci)} zarar eden sevk var ama "
-            f"tabloda {ted_yazilan} satırlık yer var — {ted_tasan} tanesi (en küçük "
-            "zararlılar) gösterilmedi. Tablonun satır kapasitesini Excel'de büyütün."
+            f"Zarar Detay/{tedarikci_adi}: {len(tedarikci)} zarar eden sevk var, "
+            f"otomatik satır ekleme denendi ama {ted_tasan} tanesi (en küçük "
+            f"zararlılar) yine de sığmadı (tabloda {ted_yazilan} satırlık yer var) "
+            "— konsol logunda otomatik büyütme hatasına bakın; gerekirse tabloyu "
+            "Excel'de elle büyütün."
         )
     if kir_tasan > 0:
         uyarilar.append(
-            f"Zarar Detay/{kiralik_adi}: {len(kiralik)} zarar eden sevk var ama "
-            f"tabloda {kir_yazilan} satırlık yer var — {kir_tasan} tanesi (en küçük "
-            "zararlılar) gösterilmedi. Tablonun satır kapasitesini Excel'de büyütün."
+            f"Zarar Detay/{kiralik_adi}: {len(kiralik)} zarar eden sevk var, "
+            f"otomatik satır ekleme denendi ama {kir_tasan} tanesi (en küçük "
+            f"zararlılar) yine de sığmadı (tabloda {kir_yazilan} satırlık yer var) "
+            "— konsol logunda otomatik büyütme hatasına bakın; gerekirse tabloyu "
+            "Excel'de elle büyütün."
         )
 
     try:

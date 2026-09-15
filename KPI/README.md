@@ -121,14 +121,39 @@ Artık `kpi_rapor_olustur.py` her çalıştığında:
 1. VERİ satırlarını **Sevk No**'ya göre gruplar (aynı sevkteki birden fazla yük satırı birleştirilir),
 2. Toplam Kâr/Zarar'ı negatif olan (zarar eden) sevkleri bulur,
 3. `PLAKA_MULKIYET` alanına göre **Tedarikçi**/**Kiralık** olarak ikiye ayırır, en büyük zarardan küçüğe sıralar,
-4. `ZararTedarikci`/`ZararKiralik` tablolarının **mevcut satır kapasitesi içinde** üstten yazar
-   (tablo boyutu büyütülüp küçültülmez — hemen altındaki "Ara Toplam" satırı ve bir sonraki bölümün
-   yeri bozulmasın diye); kapasiteden fazla zarar eden sevk varsa konsolda uyarı verir (tabloyu Excel'de
-   büyütmeniz gerekir).
+4. `ZararTedarikci`/`ZararKiralik` tablolarına üstten yazar — **tablonun satır kapasitesi yetersizse
+   otomatik olarak büyütülür** (aşağıdaki "Tablo kapasitesi artık otomatik büyüyor" bölümüne bakın),
+   yani zarar eden sevk sayısı ay ay değişse bile elle bir şey yapmanız gerekmez.
 
 Bu davranış `ayarlar.py` → `KPI_ZARAR_DETAY_GUNCELLE = False` ile kapatılabilir; sayfa/tablo adları
 farklıysa `KPI_ZARAR_DETAY_SAYFA_ADLARI` / `KPI_ZARAR_TEDARIKCI_TABLO_ADI` / `KPI_ZARAR_KIRALIK_TABLO_ADI`
 ile ayarlanabilir. Şablonda bu sayfa hiç yoksa adım sessizce atlanır.
+
+### Tablo kapasitesi artık otomatik büyüyor (elle satır eklemeniz gerekmiyor)
+
+Zarar eden sevk sayısı her ay farklı olacağı için (bir ay 89, başka bir ay 300 olabilir), tabloyu
+Excel'de bir kere elle büyütmek kalıcı bir çözüm değildi. Artık `ZararTedarikci`/`ZararKiralik`
+tablolarının satır kapasitesi o ayki zarar eden sevk sayısına yetmezse, kod eksik kadar satırı
+**gerçek bir Excel satır ekleme işlemiyle** tablonun içine (mevcut son veri satırının tam üzerine)
+otomatik olarak ekler. Bu ekleme noktası özenle seçiliyor: Excel'de bir aralığın **içine** satır
+eklenirse, o aralığa bakan formüller (örn. hemen altındaki "Ara Toplam" satırındaki `SUM(...)`)
+otomatik olarak yeni satırları da kapsayacak şekilde genişler; aralığın **dışına** (tam altına)
+eklenseydi bu genişleme olmazdı. Yeni eklenen satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı
+(J-N) formülleri de tablonun ilk veri satırından açıkça kopyalanır (Excel'in kendiliğinden
+kopyalamasına güvenilmez).
+
+Konsolda böyle bir büyütme olduğunda şu satırı görürsünüz:
+
+```
+[Excel] ZararTedarikci kapasitesi yetersiz (77 satır var, 89 gerekiyor) — 12 satır otomatik ekleniyor...
+[Excel] ZararTedarikci kapasitesi 89 satıra büyütüldü (Ara Toplam formülü otomatik genişledi).
+```
+
+Otomatik büyütme (çok nadir — ör. korumalı sayfa, birleştirilmiş hücre gibi beklenmedik bir Excel
+kısıtlaması) başarısız olursa, eski davranışa (kapasiteyi aşan sevkler gösterilmez, konsolda ve
+raporun uyarı mesajında bu belirtilir) geri dönülür; rapor yine de başarıyla tamamlanır. Bu durumda
+konsol logundaki hata mesajına bakıp tabloyu Excel'de elle büyütmeniz gerekebilir — ama normal
+şartlarda bu hiç gerekmemeli.
 
 ## Eski analiz raporu (isteğe bağlı)
 
@@ -220,7 +245,10 @@ Excel/Oracle gecikmesidir; sabırla bekleyin veya konsoldaki en son satırın ha
 (elle doldurulan) tasarımın bilinen bir sorunuydu — bkz. yukarıdaki "Zarar Detay sayfası otomatik
 tazeleme" bölümü. Güncel koddan sonra hâlâ 0 görüyorsanız: (1) `KPI_ZARAR_DETAY_GUNCELLE` yanlışlıkla
 `False` yapılmış olabilir, (2) konsolda `Zarar Detay güncellendi: ...` satırını arayın — hiç
-görünmüyorsa sayfa adı eşleşmiyordur (`KPI_ZARAR_DETAY_SAYFA_ADLARI`'nı kontrol edin), (3) "tabloda X
-satırlık yer var" uyarısı varsa `ZararTedarikci`/`ZararKiralik` tablosunun satır kapasitesi bu ayki
-zarar eden sevk sayısına yetmiyor demektir — Excel'de tabloyu (Ara Toplam satırından önce) birkaç yüz
-satır büyütüp tekrar deneyin.
+görünmüyorsa sayfa adı eşleşmiyordur (`KPI_ZARAR_DETAY_SAYFA_ADLARI`'nı kontrol edin).
+
+**"...otomatik satır ekleme denendi ama X tanesi yine de sığmadı" uyarısı:** Tablo kapasitesi artık
+otomatik büyütülüyor (bkz. yukarıdaki "Tablo kapasitesi artık otomatik büyüyor" bölümü); bu uyarı
+SADECE otomatik büyütmenin kendisi başarısız olduğunda çıkar (ör. sayfa korumalı, tabloda birleştirilmiş
+hücre var). Konsol logunda `kapasitesi otomatik büyütülemedi (...)` satırını arayıp asıl hatayı görün;
+gerekirse tabloyu (Ara Toplam satırından önce) Excel'de elle büyütüp tekrar deneyin.
