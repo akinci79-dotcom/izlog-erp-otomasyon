@@ -498,6 +498,35 @@ def _com_sayfaya_yaz(
     return len(satirlar), esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
 
+def _com_tarih_bicimi_zorla(araligi) -> None:
+    """Bir aralığa 'dd.mm.yyyy' biçimini GARANTİLİ uygular.
+
+    Bilinen kırılma [DOĞRULANMIŞ — kullanıcı canlı ekran görüntüsüyle teyit
+    etti]: bazı tarih hücrelerinin (VERİ sayfası SEVK_TARIHI/YUK_TARIHI vb.)
+    NumberFormat'ı 'mm/\\m\\m/yyyy' gibi İÇİNDE KAÇIŞLI ('\\m') literal 'mm'
+    METNİ barındıran BOZUK bir kalıba sahip olabiliyor — bu, her hücrede
+    GERÇEK ay (ör. '08') + SABİT literal 'mm' metni + gerçek yıl gösterip
+    GÜN bilgisini tamamen kaybediyor (ekranda '08.mm.2026' gibi görünüyor;
+    tüm satırlar aynı aydaysa hepsi birbirinin AYNI görünüyor, sanki hiç
+    değişmiyor). Bu bozuk kalıp muhtemelen şablondan (kpi_sablon.xlsx'te
+    elle/yanlışlıkla oluşturulmuş özel bir biçim) veya önceki bir
+    çalıştırmadan kalıyor; doğrudan '.NumberFormat = "dd.mm.yyyy"' ataması
+    HER ZAMAN üzerine yazmayabiliyor (gözlemsel). Çözüm: önce 'General'e
+    resetleyip SONRA istenen biçimi uygula — gerekirse ikinci kez dene.
+    """
+    for _ in range(2):
+        try:
+            araligi.NumberFormat = "General"
+            araligi.NumberFormat = "dd.mm.yyyy"
+        except Exception:
+            continue
+        try:
+            if str(araligi.Cells(1, 1).NumberFormat) == "dd.mm.yyyy":
+                return
+        except Exception:
+            return
+
+
 def _com_tarih_bicimi_uygula(
     sheet, baslik_satiri: int, satir_sayisi: int, esleme: dict[int, str]
 ) -> None:
@@ -507,7 +536,9 @@ def _com_tarih_bicimi_uygula(
     (bkz. kpi_veri.py — pywin32'nin datetime->COM dönüşümündeki saat dilimi
     kayması hatasını önlemek için). Hücrenin biçimi zaten tarih değilse bu
     sayı düz bir rakam olarak görünür; bu yüzden ORACLE kolonu "...TARIHI" ile
-    bitenler için biçim burada açıkça ayarlanır.
+    bitenler için biçim burada açıkça ayarlanır (bkz. _com_tarih_bicimi_zorla
+    — bilinen 'mm/\\m\\m/yyyy' bozuk kalıp sorunu için General'e resetleyip
+    yeniden uyguluyor).
     """
     if satir_sayisi <= 0:
         return
@@ -520,7 +551,7 @@ def _com_tarih_bicimi_uygula(
                 sheet.Cells(baslik_satiri + 1, col_idx),
                 sheet.Cells(son_satir, col_idx),
             )
-            araligi.NumberFormat = "dd.mm.yyyy"
+            _com_tarih_bicimi_zorla(araligi)
         except Exception:
             pass
 
@@ -617,10 +648,12 @@ def _com_zarar_detay_tablo_yaz(
 
     try:
         tarih_kolon = tablo_sol + ZARAR_DETAY_METIN_SUTUNLARI.index("Tarih")
-        sheet.Range(
-            sheet.Cells(veri_ilk_satir, tarih_kolon),
-            sheet.Cells(veri_son_satir, tarih_kolon),
-        ).NumberFormat = "dd.mm.yyyy"
+        _com_tarih_bicimi_zorla(
+            sheet.Range(
+                sheet.Cells(veri_ilk_satir, tarih_kolon),
+                sheet.Cells(veri_son_satir, tarih_kolon),
+            )
+        )
     except Exception:
         pass
 
