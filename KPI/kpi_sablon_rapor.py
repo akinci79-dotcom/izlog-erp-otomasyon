@@ -25,6 +25,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 import ayarlar
 from kpi_kiralk_arac import FILO_DETAY_SUTUNLARI, kiralk_arac_detay_getir, kiralk_arac_semasi_hazir
 from kpi_veri import hucre_degeri, veri_satirlari_getir, veri_semasi_hazir, veri_sql_kaynak_bilgisi
+from kpi_zarar_detay import ZARAR_DETAY_METIN_SUTUNLARI, zarar_eden_sevkleri_hesapla
 from oracle_baglanti import baglanti_yonet
 
 _KPI_KOKU = Path(__file__).resolve().parent
@@ -552,6 +553,166 @@ def _com_pivot_kaynak_guncelle(
         pass
 
 
+_ZARAR_DETAY_SAYFA_ADLARI_VARSAYILAN = ["Zarar Detay", "Zarar detay", "ZARAR DETAY"]
+_ZARAR_TEDARIKCI_TABLO_ADI_VARSAYILAN = "ZararTedarikci"
+_ZARAR_KIRALIK_TABLO_ADI_VARSAYILAN = "ZararKiralik"
+
+
+def _com_zarar_detay_tablo_yaz(
+    sheet, tablo_adi: str, satirlar: list[dict[str, Any]]
+) -> tuple[int, int]:
+    """ZararTedarikci/ZararKiralik tablosunun MEVCUT satır sınırları İÇİNDE üstten
+    aşağı yazar; kapasiteyi aşmaz, kullanılmayanları sıfırlar.
+
+    Tablonun kendisi (ListObject.Resize) BİLEREK büyütülüp küçültülmüyor — hemen
+    altındaki 'Ara Toplam' satırı (sabit satır numaralarına SUM(...) yapan bir
+    formül) ve bir sonraki bölümün başlığı yerinde kalsın diye (satır ekleme/
+    silme tüm sayfanın geri kalanını kaydırır, bu risklidir). Sadece metin/sayı
+    sütunları (A-I: Tarih..Kayıt Sayısı) yazılır; J-N (Alış/Satış/Kâr-Zarar/
+    Zarar %/Zarar Payı) sütunlarındaki ORİJİNAL satır formülleri (Tablo5'e SUMIF
+    ile bakan) dokunulmadan bırakılır — Sevk No (G) güncellenince bu formüller
+    kendiliğinden doğru sonucu verir. Kapasiteden fazla zarar eden sevk varsa
+    fazlası (en küçük zararlılar) gösterilmez, çağıran taraf bunu loglar.
+    """
+    try:
+        lo = sheet.ListObjects(tablo_adi)
+    except Exception:
+        return 0, 0
+
+    try:
+        hdr = lo.HeaderRowRange
+        tablo_sol = int(hdr.Column)
+        veri_ilk_satir = int(hdr.Row) + 1
+        veri_son_satir = int(lo.Range.Row) + int(lo.Range.Rows.Count) - 1
+        kapasite = veri_son_satir - veri_ilk_satir + 1
+    except Exception:
+        return 0, 0
+
+    if kapasite <= 0:
+        return 0, len(satirlar)
+
+    yazilan = min(len(satirlar), kapasite)
+    tasan = len(satirlar) - yazilan
+    metin_kolon_sayisi = len(ZARAR_DETAY_METIN_SUTUNLARI)
+
+    for i in range(kapasite):
+        row_no = veri_ilk_satir + i
+        if i < yazilan:
+            degerler = [hucre_degeri(satirlar[i].get(k)) for k in ZARAR_DETAY_METIN_SUTUNLARI]
+        else:
+            degerler = [None] * metin_kolon_sayisi
+            # Kullanılmayan satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı
+            # formüllerini sıfırla — Tablo5'te boş Sevk No eşleşmesiyle Ara
+            # Toplam'a hatalı katkı yapmasınlar diye (bkz. modül docstring'i).
+            for offset in range(metin_kolon_sayisi, metin_kolon_sayisi + 5):
+                try:
+                    sheet.Cells(row_no, tablo_sol + offset).Value = 0
+                except Exception:
+                    pass
+        for offset, deger in enumerate(degerler):
+            try:
+                sheet.Cells(row_no, tablo_sol + offset).Value = deger
+            except Exception:
+                pass
+
+    try:
+        tarih_kolon = tablo_sol + ZARAR_DETAY_METIN_SUTUNLARI.index("Tarih")
+        sheet.Range(
+            sheet.Cells(veri_ilk_satir, tarih_kolon),
+            sheet.Cells(veri_son_satir, tarih_kolon),
+        ).NumberFormat = "dd.mm.yyyy"
+    except Exception:
+        pass
+
+    return yazilan, tasan
+
+
+def _donem_etiketi(bas: str, bit: str) -> str:
+    """'01.08.2026'/'31.08.2026' -> 'Ağustos 2026'; tam yıl -> 'YYYY'; aksi halde aralık metni."""
+    ay_adlari = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+        "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+    ]
+    try:
+        bas_d = datetime.strptime(bas, "%d.%m.%Y").date()
+        bit_d = datetime.strptime(bit, "%d.%m.%Y").date()
+    except ValueError:
+        return f"{bas} – {bit}"
+
+    if bas_d.day == 1 and bas_d.month == 1 and bit_d.month == 12 and bit_d.day == 31 and bas_d.year == bit_d.year:
+        return str(bas_d.year)
+
+    son_gun = calendar.monthrange(bas_d.year, bas_d.month)[1]
+    if bas_d.day == 1 and bit_d.day == son_gun and bas_d.month == bit_d.month and bas_d.year == bit_d.year:
+        return f"{ay_adlari[bas_d.month - 1]} {bas_d.year}"
+
+    return f"{bas} – {bit}"
+
+
+def _com_zarar_detay_guncelle(
+    wb, veri_satirlari: list[dict[str, Any]], bas: str, bit: str
+) -> list[str]:
+    """'Zarar Detay' sayfasındaki ZararTedarikci/ZararKiralik tablolarını bu
+    dönemin zarar eden sevkleriyle tazeler. Sayfa/tablo bulunamazsa sessizce
+    atlanır (her şablonda bu sayfa olmayabilir)."""
+    uyarilar: list[str] = []
+
+    sayfa_adlari = getattr(
+        ayarlar, "KPI_ZARAR_DETAY_SAYFA_ADLARI", _ZARAR_DETAY_SAYFA_ADLARI_VARSAYILAN
+    )
+    ws = _excel_sayfa_bul(wb, sayfa_adlari)
+    if ws is None:
+        return uyarilar
+
+    if getattr(ayarlar, "KPI_ZARAR_DETAY_GUNCELLE", True) is False:
+        return uyarilar
+
+    tedarikci_adi = getattr(
+        ayarlar, "KPI_ZARAR_TEDARIKCI_TABLO_ADI", _ZARAR_TEDARIKCI_TABLO_ADI_VARSAYILAN
+    )
+    kiralik_adi = getattr(
+        ayarlar, "KPI_ZARAR_KIRALIK_TABLO_ADI", _ZARAR_KIRALIK_TABLO_ADI_VARSAYILAN
+    )
+
+    tedarikci, kiralik, hesap_uyarilari = zarar_eden_sevkleri_hesapla(veri_satirlari)
+    uyarilar.extend(hesap_uyarilari)
+
+    ted_yazilan, ted_tasan = _com_zarar_detay_tablo_yaz(ws, tedarikci_adi, tedarikci)
+    kir_yazilan, kir_tasan = _com_zarar_detay_tablo_yaz(ws, kiralik_adi, kiralik)
+
+    if ted_tasan > 0:
+        uyarilar.append(
+            f"Zarar Detay/{tedarikci_adi}: {len(tedarikci)} zarar eden sevk var ama "
+            f"tabloda {ted_yazilan} satırlık yer var — {ted_tasan} tanesi (en küçük "
+            "zararlılar) gösterilmedi. Tablonun satır kapasitesini Excel'de büyütün."
+        )
+    if kir_tasan > 0:
+        uyarilar.append(
+            f"Zarar Detay/{kiralik_adi}: {len(kiralik)} zarar eden sevk var ama "
+            f"tabloda {kir_yazilan} satırlık yer var — {kir_tasan} tanesi (en küçük "
+            "zararlılar) gösterilmedi. Tablonun satır kapasitesini Excel'de büyütün."
+        )
+
+    try:
+        baslik_hucre = ws.Cells(2, 1)
+        mevcut = str(baslik_hucre.Value or "")
+        if "zarar eden sevk" in mevcut.lower():
+            donem = _donem_etiketi(bas, bit)
+            baslik_hucre.Value = (
+                f"{donem} | Aynı sevk numarasındaki satırlar birleştirilmiştir | "
+                f"Tedarikçi {len(tedarikci)}, Kiralık {len(kiralik)} zarar eden sevk"
+            )
+    except Exception:
+        pass
+
+    _progress(
+        f"  [Excel] Zarar Detay güncellendi: Tedarikçi {ted_yazilan}/{len(tedarikci)}, "
+        f"Kiralık {kir_yazilan}/{len(kiralik)} zarar eden sevk yazıldı."
+    )
+
+    return uyarilar
+
+
 def _excel_uygulama_ac():
     import win32com.client  # type: ignore
 
@@ -712,6 +873,8 @@ def _excel_sablon_doldur(
     filo_baslik_satiri: int,
     pivot_yenile: bool,
     sutun_autofit: bool,
+    bas: str = "",
+    bit: str = "",
 ) -> tuple[bool, str | None, int, int, list[str]]:
     """Şablon kopyasına Excel COM ile veri yazar, pivot yeniler, sütunları genişletir."""
     excel = None
@@ -756,6 +919,13 @@ def _excel_sablon_doldur(
         _com_pivot_kaynak_guncelle(
             wb, ws_filo.Name, filo_baslik_satiri, filo_adet, filo_kolon, filo_tablo_sol
         )
+
+        _progress("  [Excel] Zarar Detay güncelleniyor...")
+        try:
+            zarar_uyarilari = _com_zarar_detay_guncelle(wb, veri_satirlari, bas, bit)
+            uyarilar.extend(zarar_uyarilari)
+        except Exception as exc:
+            uyarilar.append(f"Zarar Detay güncelleme: {exc}")
 
         if pivot_yenile:
             _progress("  [Excel] Pivotlar yenileniyor...")
@@ -1070,6 +1240,8 @@ def sablon_rapor_olustur(
             filo_baslik_satiri,
             pivot_yenile=pivot_yenile_calistir,
             sutun_autofit=sutun_autofit,
+            bas=bas,
+            bit=bit,
         )
         if not excel_ok:
             raise RuntimeError(

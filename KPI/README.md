@@ -101,7 +101,34 @@ python kpi_rapor_olustur.py
 **Ne yapar:**
 1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx` (veya şablon `.xlsm` ise `.xlsm`)
 2. **VERİ** ve **Filo Detay** sayfalarına Oracle verisi **Excel COM** ile yazılır (pivot şablonu bozulmaz)
-3. Pivotlar yenilenir, sütunlar genişletilir
+3. **Zarar Detay** sayfası (varsa) — VERİ'den o ayın zarar eden sevkleri otomatik hesaplanıp `ZararTedarikci`/`ZararKiralik` tablolarına yazılır (bkz. aşağıdaki bölüm)
+4. Pivotlar yenilenir, sütunlar genişletilir
+
+## "Zarar Detay" sayfası otomatik tazeleme
+
+"Zarar Detay" sayfasındaki `ZararTedarikci`/`ZararKiralik` tabloları eskiden **elle** dolduruluyordu
+(geçmiş ayın zarar eden sevkleri tek tek bulunup Sevk No/Müşteri/Rota bilgileri yapıştırılıyordu).
+Bu tablolardaki Alış/Satış/Kâr-Zarar sütunları VERİ sayfasına (`Tablo5`) bakan formüller olduğu için,
+otomasyon her ay `Tablo5`'i o ayın verisiyle sıfırdan yazınca eski ayda elle girilmiş Sevk No'lar
+artık `Tablo5`'te bulunmuyor ve bu formüller sessizce **0** dönüyordu.
+
+**Önemli:** Bu durum sadece "Zarar Detay" sayfasıyla sınırlı kalmıyor — "Özet" sayfasındaki
+**YÖNETİM ALARMLARI** kutusu (`Toplam zarar büyüklüğü`, `Kiralık araç zararı`, `Tedarikçi araç zararı`,
+`Zarar Eden Sevkiyat Oranı`) doğrudan bu iki tablonun toplamını okuyor; yani sayfa güncellenmeyince
+o alarmlar da sessizce 0/yanlış görünüyordu.
+
+Artık `kpi_rapor_olustur.py` her çalıştığında:
+1. VERİ satırlarını **Sevk No**'ya göre gruplar (aynı sevkteki birden fazla yük satırı birleştirilir),
+2. Toplam Kâr/Zarar'ı negatif olan (zarar eden) sevkleri bulur,
+3. `PLAKA_MULKIYET` alanına göre **Tedarikçi**/**Kiralık** olarak ikiye ayırır, en büyük zarardan küçüğe sıralar,
+4. `ZararTedarikci`/`ZararKiralik` tablolarının **mevcut satır kapasitesi içinde** üstten yazar
+   (tablo boyutu büyütülüp küçültülmez — hemen altındaki "Ara Toplam" satırı ve bir sonraki bölümün
+   yeri bozulmasın diye); kapasiteden fazla zarar eden sevk varsa konsolda uyarı verir (tabloyu Excel'de
+   büyütmeniz gerekir).
+
+Bu davranış `ayarlar.py` → `KPI_ZARAR_DETAY_GUNCELLE = False` ile kapatılabilir; sayfa/tablo adları
+farklıysa `KPI_ZARAR_DETAY_SAYFA_ADLARI` / `KPI_ZARAR_TEDARIKCI_TABLO_ADI` / `KPI_ZARAR_KIRALIK_TABLO_ADI`
+ile ayarlanabilir. Şablonda bu sayfa hiç yoksa adım sessizce atlanır.
 
 ## Eski analiz raporu (isteğe bağlı)
 
@@ -156,3 +183,12 @@ Eşleşmeyen kolonları `ayarlar.py` → `KPI_KOLON_ESLEME` ile tanımlayın.
 **VERİ sayfası bulunamadı:** Şablondaki gizli sayfa adını `KPI_VERI_SAYFA_ADLARI` ile ayarlayın.
 
 **ORA-00933:** Güncel KPI kodunu git clone ile alın (Oracle 11g uyumlu).
+
+**"Zarar Detay" sayfasındaki rakamlar / Özet'teki "Toplam zarar büyüklüğü" hep 0:** Bu, eski
+(elle doldurulan) tasarımın bilinen bir sorunuydu — bkz. yukarıdaki "Zarar Detay sayfası otomatik
+tazeleme" bölümü. Güncel koddan sonra hâlâ 0 görüyorsanız: (1) `KPI_ZARAR_DETAY_GUNCELLE` yanlışlıkla
+`False` yapılmış olabilir, (2) konsolda `Zarar Detay güncellendi: ...` satırını arayın — hiç
+görünmüyorsa sayfa adı eşleşmiyordur (`KPI_ZARAR_DETAY_SAYFA_ADLARI`'nı kontrol edin), (3) "tabloda X
+satırlık yer var" uyarısı varsa `ZararTedarikci`/`ZararKiralik` tablosunun satır kapasitesi bu ayki
+zarar eden sevk sayısına yetmiyor demektir — Excel'de tabloyu (Ara Toplam satırından önce) birkaç yüz
+satır büyütüp tekrar deneyin.

@@ -67,6 +67,17 @@ KPI_ALIS_SUTUN_GENISLIK = 28
 #     "Özet": {"A": 14, "B": 32, "C": 28, "D": 18},
 # }
 
+# "Zarar Detay" sayfası (ZararTedarikci/ZararKiralik tabloları) — VERİ'den
+# hesaplanan zarar eden sevkleri her ay otomatik tazeler. Bu sayfa yoksa
+# (şablonunuzda tanımlı değilse) sessizce atlanır. "Özet" sayfasındaki
+# YÖNETİM ALARMLARI kutusu (Toplam zarar büyüklüğü vb.) bu tablolara bağlı
+# olduğu için kapatmanız önerilmez — sadece test amaçlı False yapın.
+KPI_ZARAR_DETAY_GUNCELLE = True
+# Sayfa/tablo adları farklıysa (varsayılan: "Zarar Detay" / "ZararTedarikci" / "ZararKiralik")
+# KPI_ZARAR_DETAY_SAYFA_ADLARI = ["Zarar Detay"]
+# KPI_ZARAR_TEDARIKCI_TABLO_ADI = "ZararTedarikci"
+# KPI_ZARAR_KIRALIK_TABLO_ADI = "ZararKiralik"
+
 # Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
 CO_CODE = "IZLOG"
 BRANCH_CODE = "MERKEZ"
