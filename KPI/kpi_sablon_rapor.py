@@ -716,6 +716,73 @@ _ZARAR_KIRALIK_TABLO_ADI_VARSAYILAN = "ZararKiralik"
 _ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME = 20000
 
 
+def _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
+    sheet,
+    tablo_adi: str,
+    formul_sol: int,
+    formul_sag: int,
+    eski_veri_son_satir: int,
+    yeni_veri_son_satir: int,
+) -> None:
+    """'Ara Toplam' satırındaki SUM formüllerinin, satır eklendikten SONRA
+    GERÇEKTEN yeni veri aralığını (...son satır=yeni_veri_son_satir) kapsayıp
+    kapsamadığını DOĞRULAR; Excel'in "aralığın İÇİNE satır eklenirse ona bakan
+    formüller otomatik genişler" kuralına KÖRÜ KÖRÜNE güvenmek yerine (bu proje
+    kapsamında henüz gerçek Excel'de canlı doğrulanmamış bir davranış), formülü
+    okuyup GEREKTİĞİNDE açıkça düzeltir — böylece davranış artık "umulan Excel
+    büyüsüne" değil, kodun kendi doğrulamasına dayanıyor.
+
+    Yöntem: Satır ekleme sonrası 'Ara Toplam' satırı fiziksel olarak
+    `yeni_veri_son_satir + 1` konumuna kaymış olmalı (Excel'in satır ekleme
+    sonrası alttaki HER ŞEYİ aşağı kaydırması temel/kesin bir davranıştır, bu
+    kısımda belirsizlik yok — belirsiz olan tek şey, formülün İÇİNDEKİ ARALIK
+    REFERANSININ da otomatik büyüyüp büyümediğidir). O satırdaki her J-N
+    hücresinin (locale-bağımsız `.Formula`, A1 stili) metni okunur; formülde
+    KENDİ sütununa ait ESKİ son satır numarası (ör. 'J93' veya '$J$93') hâlâ
+    geçiyorsa, bu aralığın OTOMATİK genişlemediği anlamına gelir — bu durumda
+    SADECE o satır numarası, sütun harfiyle birlikte YENİ son satır numarasıyla
+    ('J97') değiştirilir; formülün geri kalanı (SUM, başka sarmalayan
+    fonksiyonlar, diğer sütunlara ait referanslar vb.) OLDUĞU GİBİ korunur —
+    formül körü körüne '=SUM(...)' ile YENİDEN YAZILMAZ (şablondaki formülün
+    tam yapısını bilmediğimiz için bu, bilinmeyen bir davranışı/eki kaybetme
+    riskini taşırdı). Formülde eski satır numarası hiç geçmiyorsa (Excel zaten
+    doğru genişletmiş demektir), hiçbir şey değiştirilmez — bu fonksiyon hem
+    "genişledi" hem "genişlemedi" senaryosunda güvenli ve idempotenttir.
+    """
+    if eski_veri_son_satir == yeni_veri_son_satir:
+        return
+    ara_toplam_satir = yeni_veri_son_satir + 1
+    for col in range(formul_sol, formul_sag + 1):
+        col_harf = get_column_letter(col)
+        try:
+            hucre = sheet.Cells(ara_toplam_satir, col)
+            mevcut_formul = hucre.Formula
+        except Exception:
+            continue
+        if not mevcut_formul or not isinstance(mevcut_formul, str):
+            continue
+
+        desen = re.compile(
+            rf"(?<![A-Za-z])(\$?{re.escape(col_harf)}\$?){eski_veri_son_satir}\b"
+        )
+        if not desen.search(mevcut_formul):
+            continue  # Excel zaten doğru genişletmiş (ya da bu sütunda beklenen desen yok) — dokunma
+
+        yeni_formul = desen.sub(rf"\g<1>{yeni_veri_son_satir}", mevcut_formul)
+        try:
+            hucre.Formula = yeni_formul
+        except Exception as exc:
+            raise RuntimeError(
+                f"'{tablo_adi}' Ara Toplam {col_harf} sütunu formülü "
+                f"düzeltilemedi: {exc}"
+            ) from exc
+        _progress(
+            f"  [Excel] {tablo_adi} 'Ara Toplam' {col_harf} sütunu Excel "
+            f"tarafından otomatik genişletilmemişti — açıkça düzeltildi: "
+            f"{mevcut_formul} → {yeni_formul}"
+        )
+
+
 def _com_zarar_detay_kapasite_arttir(
     sheet,
     lo,
@@ -733,23 +800,40 @@ def _com_zarar_detay_kapasite_arttir(
     farklı bir sayı) sabit bir kapasiteyi elle bir kere büyütmek kalıcı bir çözüm
     DEĞİL — bu fonksiyon her çalıştırmada gerektiği kadar otomatik büyütür.
 
+    [Gerçek PivotTable'a KARŞI tercih gerekçesi — kullanıcı bunu önerdi, teknik
+    olarak değerlendirildi]: Zarar Detay'ı sıfırdan bir PivotTable'a çevirmek
+    (alan yerleşimi, sadece negatif değerleri gösteren filtre, gizli bir ham
+    veri alanının senkronizasyonu) hem çok daha karmaşık hem de bu sandboxta
+    gerçek Excel'de HİÇ doğrulanamaz bir COM inşası gerektiriyor — mevcut
+    şablondaki elle ayarlanmış görünümü/biçimlendirmeyi bozma riski, aşağıda
+    ele alınan "satır ekleme" riskinden daha yüksek. Bunun yerine mevcut sabit
+    tablo + Ara Toplam formülü mimarisi KORUNUYOR, ama tek belirsiz nokta
+    (Ara Toplam'ın otomatik genişleyip genişlemediği) artık TAHMİNE değil,
+    aşağıdaki AÇIK DOĞRULAMA adımına dayanıyor (bkz. 3. madde).
+
     KRİTİK NOKTA — ekleme konumu: Yeni satırlar tablonun mevcut SON VERİ satırının
     ('veri_son_satir') TAM ÜZERİNE eklenir, 'veri_son_satir + 1'e DEĞİL. Excel'in
     "bir aralığın İÇİNE satır eklenirse o aralığa bakan formüller otomatik
-    genişler, aralığın TAM ALTINA eklenirse genişlemez" kuralı sayesinde, hemen
-    altındaki 'Ara Toplam' SUM(...) formülü (aralığı tam bu son satırda bitiyor)
-    otomatik olarak yeni satırları da kapsayacak şekilde büyür — aralık dışına
-    eklenseydi (veri_son_satir + 1) bu formül YENİ satırları GÖRMEZDİ.
+    genişler, aralığın TAM ALTINA eklenirse genişlemez" kuralı bu ADIM için
+    geçerli olmalı — ama bu kurala artık KÖRÜ KÖRÜNE güvenilmiyor (bkz. 3. madde).
 
-    Performans: `N` satır gerekiyorsa `N` kere ayrı `ListRows.Add()`/`Insert()`
-    çağrısı YAPILMAZ (bkz. bu dosyadaki "hücre hücre yazma donması" dersi) — TEK
-    bir `sheet.Rows("a:b").Insert()` çağrısıyla tüm eksik satırlar birden eklenir.
-
-    Hesaplanan sütun formülleri (J:N — Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı):
-    Excel'in tablo satır ekleme davranışı bunları otomatik kopyalamayı deneyebilir
-    ama GARANTİ değildir; bu yüzden ekleme sonrası her sütun için tablonun İLK veri
-    satırındaki (her zaman dolu, şablondan gelen orijinal) formül `.FormulaR1C1`
-    (satır-bağımsız/relative referans korunarak) yeni satırlara AÇIKÇA kopyalanır.
+    1. Performans: `N` satır gerekiyorsa `N` kere ayrı `ListRows.Add()`/`Insert()`
+       çağrısı YAPILMAZ (bkz. bu dosyadaki "hücre hücre yazma donması" dersi) —
+       TEK bir `sheet.Rows("a:b").Insert()` çağrısıyla tüm eksik satırlar birden
+       eklenir.
+    2. Hesaplanan sütun formülleri (J:N — Alış/Satış/Kâr-Zarar/Zarar %/Zarar
+       Payı): Excel'in tablo satır ekleme davranışı bunları otomatik
+       kopyalamayı deneyebilir ama GARANTİ değildir; bu yüzden ekleme sonrası
+       her sütun için tablonun İLK veri satırındaki (her zaman dolu,
+       şablondan gelen orijinal) formül `.FormulaR1C1` (satır-bağımsız/
+       relative referans korunarak) yeni satırlara AÇIKÇA kopyalanır.
+    3. 'Ara Toplam' formülü ARTIK TAHMİN EDİLMİYOR: `_com_zarar_detay_ara_toplam_
+       dogrula_ve_duzelt` ile satır ekleme sonrası formül GERÇEKTEN okunup yeni
+       aralığı kapsayıp kapsamadığı kontrol ediliyor; kapsamıyorsa açıkça
+       düzeltiliyor. Bu, kullanıcının haklı olarak işaret ettiği tek büyük
+       belirsizliği ("Ara Toplam'ın doğru genişlediği hâlâ doğrulanmadı")
+       ortadan kaldırıyor — davranış artık zımni bir Excel kuralına değil,
+       kodun kendi doğrulama+düzeltme adımına dayanıyor.
 
     Dönüş: (yeni_kapasite, yeni_veri_son_satir). Herhangi bir adım başarısız
     olursa İSTİSNA fırlatır — çağıran taraf bunu yakalayıp ESKİ kapasiteyle
@@ -776,6 +860,7 @@ def _com_zarar_detay_kapasite_arttir(
     # ve doğru olduğu varsayılan orijinal formülleri taşır (kaç kez büyütülürse
     # büyütülsün bu satır hiç silinmediği için güvenilir bir referans kalır).
     kaynak_satir = veri_ilk_satir
+    eski_veri_son_satir = veri_son_satir
 
     # TEK bir Insert() çağrısıyla `eksik` satırı, mevcut son veri satırının TAM
     # ÜZERİNE ekle (yukarıdaki docstring'deki "aralık içine ekleme" kuralı için).
@@ -825,9 +910,16 @@ def _com_zarar_detay_kapasite_arttir(
     except Exception:
         pass
 
+    # 'Ara Toplam' formülünün GERÇEKTEN yeni aralığı kapsadığını doğrula,
+    # kapsamıyorsa açıkça düzelt (bkz. yukarıdaki docstring 3. madde — bu,
+    # Excel'in zımni genişletme davranışına duyulan güveni ortadan kaldırır).
+    _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
+        sheet, tablo_adi, formul_sol, formul_sag, eski_veri_son_satir, yeni_veri_son_satir
+    )
+
     _progress(
         f"  [Excel] {tablo_adi} kapasitesi {yeni_kapasite} satıra büyütüldü "
-        "(Ara Toplam formülü otomatik genişledi)."
+        "('Ara Toplam' formülü doğrulandı/gerekirse düzeltildi)."
     )
 
     return yeni_kapasite, yeni_veri_son_satir

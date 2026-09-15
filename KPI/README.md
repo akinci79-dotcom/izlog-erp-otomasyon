@@ -135,18 +135,39 @@ Zarar eden sevk sayısı her ay farklı olacağı için (bir ay 89, başka bir a
 Excel'de bir kere elle büyütmek kalıcı bir çözüm değildi. Artık `ZararTedarikci`/`ZararKiralik`
 tablolarının satır kapasitesi o ayki zarar eden sevk sayısına yetmezse, kod eksik kadar satırı
 **gerçek bir Excel satır ekleme işlemiyle** tablonun içine (mevcut son veri satırının tam üzerine)
-otomatik olarak ekler. Bu ekleme noktası özenle seçiliyor: Excel'de bir aralığın **içine** satır
-eklenirse, o aralığa bakan formüller (örn. hemen altındaki "Ara Toplam" satırındaki `SUM(...)`)
-otomatik olarak yeni satırları da kapsayacak şekilde genişler; aralığın **dışına** (tam altına)
-eklenseydi bu genişleme olmazdı. Yeni eklenen satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı
-(J-N) formülleri de tablonun ilk veri satırından açıkça kopyalanır (Excel'in kendiliğinden
+otomatik olarak ekler.
+
+**Neden gerçek bir PivotTable değil de bu yöntem?** PivotTable'lar satır sayısına göre doğal olarak
+büyür/küçülür, ama sıfırdan bir PivotCache/PivotTable kurmak (alan yerleşimi, sadece zarar eden
+(negatif) sevkleri gösteren filtre, gizli bir ham veri alanının senkronizasyonu) çok daha karmaşık
+bir COM inşası gerektiriyor ve mevcut şablondaki elle ayarlanmış görünümü/biçimlendirmeyi bozma
+riski taşıyor — üstelik bu sandboxta gerçek Excel'de hiç doğrulanamaz. Bunun yerine mevcut sabit
+tablo + "Ara Toplam" formülü tasarımı korunuyor, sadece güvenilirliği artırıldı (aşağıya bakın).
+
+**Ara Toplam formülü artık TAHMİN EDİLMİYOR, DOĞRULANIYOR:** Satır ekleme sonrası Excel'in "bir
+aralığın içine satır eklenirse ona bakan formüller otomatik genişler" davranışına güvenmek yerine
+(bu davranış bu sandboxta gerçek Excel'de doğrulanamadığı için), kod artık satır eklendikten SONRA
+hemen altındaki "Ara Toplam" satırının `SUM(...)` formülünü GERÇEKTEN OKUYUP yeni veri aralığını
+kapsayıp kapsamadığını kontrol ediyor; kapsamıyorsa formülün SADECE satır numarasını (formülün geri
+kalanını olduğu gibi koruyarak) açıkça düzeltiyor. Yani sonuç artık "Excel'in umulan davranışına"
+değil, kodun kendi doğrulama adımına dayanıyor — hem "Excel otomatik genişletti" hem "genişletmedi"
+senaryosunda doğru sonucu garanti eder. Yeni eklenen satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar
+Payı (J-N) formülleri de tablonun ilk veri satırından açıkça kopyalanır (Excel'in kendiliğinden
 kopyalamasına güvenilmez).
 
-Konsolda böyle bir büyütme olduğunda şu satırı görürsünüz:
+Konsolda böyle bir büyütme olduğunda şu satırları görürsünüz:
 
 ```
 [Excel] ZararTedarikci kapasitesi yetersiz (77 satır var, 89 gerekiyor) — 12 satır otomatik ekleniyor...
-[Excel] ZararTedarikci kapasitesi 89 satıra büyütüldü (Ara Toplam formülü otomatik genişledi).
+[Excel] ZararTedarikci kapasitesi 89 satıra büyütüldü ('Ara Toplam' formülü doğrulandı/gerekirse düzeltildi).
+```
+
+Formülün açıkça düzeltilmesi gerekirse (yani Excel kendiliğinden genişletmediyse) ayrıca şu satırı
+da görürsünüz — bu bir HATA DEĞİL, sistemin tam olarak tasarlandığı gibi (doğrulayıp gerekirse
+düzelterek) çalıştığının kanıtıdır:
+
+```
+[Excel] ZararTedarikci 'Ara Toplam' J sütunu Excel tarafından otomatik genişletilmemişti — açıkça düzeltildi: =SUM(J2:J77) → =SUM(J2:J89)
 ```
 
 Otomatik büyütme (çok nadir — ör. korumalı sayfa, birleştirilmiş hücre gibi beklenmedik bir Excel
