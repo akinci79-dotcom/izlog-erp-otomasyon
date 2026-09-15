@@ -164,6 +164,23 @@ hiç değişmesin diye kalıcı yapabilirsiniz:
 Bu ayar tanımlıysa o sayfada AutoFit tamamen devre dışı kalır, sütunlar her raporda
 birebir bu genişliklerle açılır. Birden fazla sayfa için sözlüğe ek sayfa girebilirsiniz.
 
+## Boş alanlara otomatik varsayılan değer (pivot'ta "(boş)" kategorisini önler)
+
+Personel ERP'ye veri girerken bazı alanları atlayabiliyor; bu durumda pivot tablolarda
+"(boş)" diye bir kategori oluşuyor. Otomasyon, VERİ Oracle'dan çekildikten SONRA (SQL'e
+dokunmadan) şu iki alanı varsayılan bir değerle dolduruyor:
+
+- **MÜLKİYET** (VERİ sayfası Z sütunu) boşsa → **Tedarikçi**
+- **Proje Kodu = "Konya"** VE **Yük Fiyat Tipi Kodu** (VERİ sayfası K sütunu) boşsa → **ŞARKÜTERİ**
+
+`ayarlar.py` içinde ayarlanabilir:
+
+```python
+KPI_BOS_ALAN_VARSAYILARI = True                       # tamamen kapatmak için False
+KPI_MULKIYET_BOS_VARSAYILAN = "Tedarikçi"
+KPI_KONYA_YUK_FIYAT_TIPI_BOS_VARSAYILAN = "ŞARKÜTERİ"
+```
+
 ## Sorun giderme
 
 **Copy-Item: izlog-kpi-temp\KPI bulunamadı:** `$Base`, `$KpiDir`, `$Temp` tanımlanmadan sadece alt satırlar çalıştırılmış demektir. Yukarıdaki bloğu **baştan sona tek parça** yapıştırın veya `kpi_guncelle.ps1` kullanın.

@@ -124,12 +124,57 @@ def _uyumsoft_parametreleri_yerlestir(sql: str, bas: str, bit: str) -> str:
     return sql
 
 
+def _bos_mu(deger: Any) -> bool:
+    return deger is None or (isinstance(deger, str) and deger.strip() == "")
+
+
+def _varsayilanlari_uygula(satirlar: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Personel veri girişinde bazen atlanan alanları makul bir varsayılanla
+    doldurur — pivot tablolarda '(boş)' kategorisi oluşmasını önler.
+
+    [VARSAYIM/TODO — kullanıcı isteğiyle eklendi, henüz canlı veriyle teyit
+    edilmedi. SQL'e (referans/kpi_veri_rapor.sql) DOKUNULMUYOR — bu, o dosyanın
+    "Uyumsoft raporu aynen kullanılır" kuralına aykırı olmasın diye kasıtlı
+    olarak Python tarafında, veri Oracle'dan çekildikten SONRA uygulanıyor.]
+
+    - MÜLKİYET (PLAKA_MULKIYET) boşsa -> 'Tedarikçi'. SQL'deki CASE ifadesi
+      (ED.OWNERSHIP_STATUS'a bakan) hiçbir WHEN'e uymayan/NULL bir durumda
+      ELSE'siz kalıp NULL dönüyor; canlı verideki en sık görülen gerçek değer
+      Tedarikçi olduğu için varsayılan bu seçildi.
+    - Proje Kodu 'Konya' VE Yük Fiyat Tipi Kodu (YUK_FIYAT_TIP_KODU) boşsa
+      -> 'ŞARKÜTERİ'. Konya şubesinin ağırlıklı kargo kategorisi bu olduğu
+      için personel bu alanı atladığında varsayılan olarak bu kullanılıyor.
+    """
+    if getattr(ayarlar, "KPI_BOS_ALAN_VARSAYILARI", True) is False:
+        return satirlar
+
+    mulkiyet_varsayilan = getattr(ayarlar, "KPI_MULKIYET_BOS_VARSAYILAN", "Tedarikçi")
+    konya_fiyat_tipi_varsayilan = getattr(
+        ayarlar, "KPI_KONYA_YUK_FIYAT_TIPI_BOS_VARSAYILAN", "ŞARKÜTERİ"
+    )
+
+    for satir in satirlar:
+        if "PLAKA_MULKIYET" in satir and _bos_mu(satir.get("PLAKA_MULKIYET")):
+            satir["PLAKA_MULKIYET"] = mulkiyet_varsayilan
+
+        proje_kodu = str(satir.get("PROJE_KODU") or "").strip().lower()
+        if (
+            proje_kodu == "konya"
+            and "YUK_FIYAT_TIP_KODU" in satir
+            and _bos_mu(satir.get("YUK_FIYAT_TIP_KODU"))
+        ):
+            satir["YUK_FIYAT_TIP_KODU"] = konya_fiyat_tipi_varsayilan
+
+    return satirlar
+
+
 def veri_satirlari_getir(cursor, bas: str, bit: str, bind: dict) -> list[dict[str, Any]]:
     del bind  # VERİ sorgusu Uyumsoft placeholder değiştirme kullanır; :bas/:bit bind edilmez
     sql = _uyumsoft_parametreleri_yerlestir(_veri_sql(), bas, bit)
     cursor.execute(sql)
     sutunlar = [c[0] for c in cursor.description]
-    return [dict(zip(sutunlar, satir)) for satir in cursor.fetchall()]
+    satirlar = [dict(zip(sutunlar, satir)) for satir in cursor.fetchall()]
+    return _varsayilanlari_uygula(satirlar)
 
 
 def hucre_degeri(deger: Any) -> Any:
