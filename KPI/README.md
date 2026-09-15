@@ -252,3 +252,11 @@ otomatik büyütülüyor (bkz. yukarıdaki "Tablo kapasitesi artık otomatik bü
 SADECE otomatik büyütmenin kendisi başarısız olduğunda çıkar (ör. sayfa korumalı, tabloda birleştirilmiş
 hücre var). Konsol logunda `kapasitesi otomatik büyütülemedi (...)` satırını arayıp asıl hatayı görün;
 gerekirse tabloyu (Ara Toplam satırından önce) Excel'de elle büyütüp tekrar deneyin.
+
+**VERİ / Zarar Detay sayfasındaki tarih sütunları yanlış görünüyor (ör. "08.mm.2026" gibi):** Bu,
+hücrenin Excel'de önceden "Metin" ya da bozuk bir özel tarih biçimiyle kilitli kalmasından
+kaynaklanıyordu. Güncel kod artık (1) hedef hücreleri veri yazılmadan ÖNCE "General"e sıfırlıyor,
+(2) float Excel seri numarasını yazıyor, (3) hem `NumberFormat` ("dd.mm.yyyy") hem
+`NumberFormatLocal` ("gg.aa.yyyy") olarak biçimi uyguluyor ve sonucu doğruluyor. Rapor sonunda hâlâ
+bozuk görünüyorsa konsoldaki `Uyarı: ... tarih biçimi doğrulanamadı` satırını arayın — hangi kolonun
+sorunlu olduğunu doğrudan gösterir.
