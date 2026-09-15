@@ -527,13 +527,56 @@ def _com_sayfaya_yaz(
         except Exception:
             pass
 
+    # Tarih kolonlarını veri yazılmadan ÖNCE 'General'e sıfırla (bkz.
+    # _com_bicim_genel_yap docstring'i — sıralama önemli: hücre önceden 'Metin'
+    # veya bozuk bir özel biçimde kilitliyse, format değişikliği yazımdan SONRA
+    # yapılırsa bazı Excel/COM senaryolarında görünüm beklendiği gibi
+    # güncellenmeyebiliyor). `dd.mm.yyyy` biçiminin kendisi yazımdan SONRA
+    # `_com_tarih_bicimi_uygula` ile ayrıca uygulanıyor.
+    for col_idx, oracle_kolon in esleme.items():
+        if not str(oracle_kolon).upper().endswith("TARIHI"):
+            continue
+        try:
+            _com_bicim_genel_yap(
+                sheet.Range(
+                    sheet.Cells(baslik_satiri + 1, col_idx),
+                    sheet.Cells(son_satir, col_idx),
+                )
+            )
+        except Exception:
+            pass
+
     _com_araliga_yaz(hedef, matris)
 
     return len(satirlar), esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
 
-def _com_tarih_bicimi_zorla(araligi) -> None:
-    """Bir aralığa 'dd.mm.yyyy' biçimini GARANTİLİ uygular.
+def _com_bicim_genel_yap(araligi) -> None:
+    """Bir aralığın biçimini 'General'e sıfırlar (hem NumberFormat hem NumberFormatLocal).
+
+    ÖNEMLİ SIRALAMA KURALI [kullanıcı isteğiyle netleştirildi]: bu fonksiyon veri
+    YAZILMADAN ÖNCE çağrılmalı. Hücre önceden 'Metin' (@) biçiminde ya da bozuk
+    bir özel tarih biçiminde kilitli kalmışsa (bkz. _com_tarih_bicimi_zorla
+    docstring'i), format değişikliği YENİ değer yazıldıktan SONRA yapılırsa bazı
+    Excel/COM senaryolarında hücrenin GÖRÜNÜMÜ beklenen şekilde güncellenmeyebilir.
+    Güvenli sıra: (1) hedef aralığı 'General'e sıfırla (bu fonksiyon), (2) float
+    seri numarasını yaz, (3) 'dd.mm.yyyy' uygula (bkz. _com_tarih_bicimi_zorla).
+    Bu yüzden hem `_com_sayfaya_yaz`/`_com_zarar_detay_tablo_yaz` veri yazımından
+    ÖNCE, hem `_com_tarih_bicimi_uygula`/`_com_tarih_bicimi_zorla` veri yazımından
+    SONRA bu sıfırlamayı çift güvence olarak uyguluyor.
+    """
+    for _ in range(2):
+        try:
+            araligi.NumberFormat = "General"
+            araligi.NumberFormatLocal = "General"
+            return
+        except Exception:
+            continue
+
+
+def _com_tarih_bicimi_zorla(araligi) -> bool:
+    """Bir aralığa 'dd.mm.yyyy' biçimini GARANTİLİ uygulamaya çalışır, başarılı
+    olup olmadığını (doğrulanmış) bool olarak döner.
 
     Bilinen kırılma [DOĞRULANMIŞ — kullanıcı canlı ekran görüntüsüyle teyit
     etti]: bazı tarih hücrelerinin (VERİ sayfası SEVK_TARIHI/YUK_TARIHI vb.)
@@ -544,27 +587,62 @@ def _com_tarih_bicimi_zorla(araligi) -> None:
     tüm satırlar aynı aydaysa hepsi birbirinin AYNI görünüyor, sanki hiç
     değişmiyor). Bu bozuk kalıp muhtemelen şablondan (kpi_sablon.xlsx'te
     elle/yanlışlıkla oluşturulmuş özel bir biçim) veya önceki bir
-    çalıştırmadan kalıyor; doğrudan '.NumberFormat = "dd.mm.yyyy"' ataması
-    HER ZAMAN üzerine yazmayabiliyor (gözlemsel). Çözüm: önce 'General'e
-    resetleyip SONRA istenen biçimi uygula — gerekirse ikinci kez dene.
+    çalıştırmadan kalıyor.
+
+    Bu fonksiyon önceki turdaki tek denemeli ('General'e resetle + 'dd.mm.yyyy'
+    ata, hatayı sessizce yut) yaklaşımına rağmen sorun DEVAM ETTİĞİ için
+    [kullanıcı teyidi] sertleştirildi:
+    1. Önce `_com_bicim_genel_yap` ile General'e sıfırlanır (veri yazımından
+       SONRA çağrılsa bile — hücre içeriği zaten sayısal seri numarası olduğu
+       için bu noktada zararsız, ek bir güvence).
+    2. Hem `.NumberFormat` (İngilizce/locale-bağımsız kod, "dd.mm.yyyy") HEM
+       `.NumberFormatLocal` (kullanıcının Excel arayüz diline göre kod —
+       Türkçe Excel'de "gg.aa.yyyy") AÇIKÇA ayarlanır. `.NumberFormat` teorik
+       olarak locale'den bağımsız olmalı, ama önceki turda '08.mm.2026' gibi
+       bir kaçış/locale sorunu yaşandığı için ikisi birden ayarlanarak çift
+       güvence sağlanıyor.
+    3. Doğrulama başarısız olursa, noktaların açıkça kaçışlandığı ('\\.')
+       alternatif bir kalıp ikinci bir deneme olarak uygulanır (bazı Excel
+       sürümlerinde '.' karakteri özel bir ayraç kodu gibi yorumlanabiliyor
+       ihtimaline karşı).
+    4. Sonuç HER ZAMAN doğrulanır (hücrenin gerçek NumberFormat'ı okunarak) —
+       eskiden olduğu gibi hatayı sessizce yutup "başarılı" varsaymıyor;
+       başarısızsa çağıran tarafa bool ile bildiriyor ki bu bir uyarı olarak
+       kullanıcıya (Excel'de elle kontrol etmesi için) yansıtılabilsin.
     """
-    for _ in range(2):
+    _com_bicim_genel_yap(araligi)
+
+    denemeler = (
+        ("dd.mm.yyyy", "gg.aa.yyyy"),
+        (r"dd\.mm\.yyyy", r"gg\.aa\.yyyy"),
+    )
+    for numberformat, numberformat_local in denemeler:
         try:
-            araligi.NumberFormat = "General"
-            araligi.NumberFormat = "dd.mm.yyyy"
+            araligi.NumberFormat = numberformat
         except Exception:
             continue
         try:
-            if str(araligi.Cells(1, 1).NumberFormat) == "dd.mm.yyyy":
-                return
+            araligi.NumberFormatLocal = numberformat_local
         except Exception:
-            return
+            pass  # NumberFormat (locale-bağımsız) zaten denendi, bu sadece ek güvence
+
+        try:
+            uygulanan = str(araligi.Cells(1, 1).NumberFormat)
+        except Exception:
+            return True  # atama hata vermedi ama doğrulama okunamadı — iyimser kabul et
+
+        if uygulanan.replace("\\", "") == "dd.mm.yyyy":
+            return True
+
+    return False
 
 
 def _com_tarih_bicimi_uygula(
     sheet, baslik_satiri: int, satir_sayisi: int, esleme: dict[int, str]
-) -> None:
-    """Tarih kolonlarına açık 'dd.mm.yyyy' biçimi uygular.
+) -> list[str]:
+    """Tarih kolonlarına açık 'dd.mm.yyyy' biçimi uygular, başarısız olan
+    kolonları (varsa) liste olarak döner ki çağıran taraf bunu kullanıcıya
+    bir uyarı olarak gösterebilsin (eskiden olduğu gibi sessizce yutmaz).
 
     hucre_degeri() artık tarihleri Excel seri sayısına (düz float) çeviriyor
     (bkz. kpi_veri.py — pywin32'nin datetime->COM dönüşümündeki saat dilimi
@@ -572,10 +650,17 @@ def _com_tarih_bicimi_uygula(
     sayı düz bir rakam olarak görünür; bu yüzden ORACLE kolonu "...TARIHI" ile
     bitenler için biçim burada açıkça ayarlanır (bkz. _com_tarih_bicimi_zorla
     — bilinen 'mm/\\m\\m/yyyy' bozuk kalıp sorunu için General'e resetleyip
-    yeniden uyguluyor).
+    yeniden uyguluyor, hem NumberFormat hem NumberFormatLocal ayarlıyor).
+
+    NOT: Bu fonksiyon veri YAZILDIKTAN SONRA çağrılır (biçimi son kez
+    doğrulayıp/garantilemek için). Veri yazılmadan ÖNCEKİ 'General'e sıfırlama
+    adımı ayrıca `_com_sayfaya_yaz` içinde (aynı kolonlar için) yapılıyor —
+    bkz. o fonksiyondaki `_com_bicim_genel_yap` çağrısı ve modülün sıralama
+    notu ("önce sıfırla, sonra yaz, sonra biçimi uygula").
     """
+    basarisiz: list[str] = []
     if satir_sayisi <= 0:
-        return
+        return basarisiz
     son_satir = baslik_satiri + satir_sayisi
     for col_idx, oracle_kolon in esleme.items():
         if not str(oracle_kolon).upper().endswith("TARIHI"):
@@ -585,9 +670,11 @@ def _com_tarih_bicimi_uygula(
                 sheet.Cells(baslik_satiri + 1, col_idx),
                 sheet.Cells(son_satir, col_idx),
             )
-            _com_tarih_bicimi_zorla(araligi)
-        except Exception:
-            pass
+            if not _com_tarih_bicimi_zorla(araligi):
+                basarisiz.append(f"{oracle_kolon} (sütun {col_idx})")
+        except Exception as exc:
+            basarisiz.append(f"{oracle_kolon} (sütun {col_idx}): {exc}")
+    return basarisiz
 
 
 def _com_pivot_kaynak_guncelle(
@@ -988,7 +1075,13 @@ def _excel_sablon_doldur(
         veri_adet, veri_esleme, eslesmeyen_veri, veri_kolon, veri_tablo_sol = _com_sayfaya_yaz(
             ws_veri, veri_baslik_satiri, veri_satirlari
         )
-        _com_tarih_bicimi_uygula(ws_veri, veri_baslik_satiri, veri_adet, veri_esleme)
+        tarih_basarisiz = _com_tarih_bicimi_uygula(
+            ws_veri, veri_baslik_satiri, veri_adet, veri_esleme
+        )
+        if tarih_basarisiz:
+            uyarilar.append(
+                "VERİ tarih biçimi doğrulanamadı: " + ", ".join(tarih_basarisiz)
+            )
         _com_pivot_kaynak_guncelle(
             wb, ws_veri.Name, veri_baslik_satiri, veri_adet, veri_kolon, veri_tablo_sol
         )
