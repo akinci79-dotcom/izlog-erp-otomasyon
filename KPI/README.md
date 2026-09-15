@@ -208,6 +208,14 @@ kez kısa aralıkla otomatik tekrar deniyor; hâlâ başarısızsa: (1) `kpi_rap
 olmasa bile — Excel COM otomasyonu gizli/`Visible=False` çalışır, önceki bir çalıştırma çökmüşse arkada
 kalabilir) sonlandırın, (3) `python kpi_rapor_olustur.py`'yi tekrar çalıştırın.
 
+**Konsol "`[Excel] Zarar Detay güncelleniyor...`" satırında uzun süre donuyor/takılıyor gibi
+görünüyor:** Bu, eski koddaki bir performans hatasıydı — Zarar Detay tablosundaki her hücreye TEK TEK
+(satır satır, hücre hücre) yazılıyordu; her biri ayrı bir Excel COM çağrısı olduğu için yüzlerce satırlık
+bir tabloda bu binlerce ayrı çağrıya (ve dakikalarca sürebilen bir beklemeye) yol açabiliyordu. Kod artık
+diğer sayfalarda (VERİ/Filo) olduğu gibi tüm bloğu TEK bir toplu (bulk) yazma işlemiyle dolduruyor — bu
+adım artık saniyeler içinde bitmeli. Güncel kodu çektiğiniz halde hâlâ uzun sürüyorsa, muhtemelen normal
+Excel/Oracle gecikmesidir; sabırla bekleyin veya konsoldaki en son satırın hangi adımda kaldığına bakın.
+
 **"Zarar Detay" sayfasındaki rakamlar / Özet'teki "Toplam zarar büyüklüğü" hep 0:** Bu, eski
 (elle doldurulan) tasarımın bilinen bir sorunuydu — bkz. yukarıdaki "Zarar Detay sayfası otomatik
 tazeleme" bölümü. Güncel koddan sonra hâlâ 0 görüyorsanız: (1) `KPI_ZARAR_DETAY_GUNCELLE` yanlışlıkla

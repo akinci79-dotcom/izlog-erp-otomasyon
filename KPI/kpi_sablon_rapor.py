@@ -660,25 +660,40 @@ def _com_zarar_detay_tablo_yaz(
     tasan = len(satirlar) - yazilan
     metin_kolon_sayisi = len(ZARAR_DETAY_METIN_SUTUNLARI)
 
+    # ÖNEMLİ (performans): Buradaki her hücreye TEK TEK `sheet.Cells(r, c).Value = ...`
+    # ile yazmak eskiden yüzlerce/binlerce ayrı COM çağrısına yol açıyordu — her çağrının
+    # kendi gidiş-dönüş gecikmesi olduğu için (özellikle yavaş/uzak bir makinede) bu,
+    # kullanıcıya sanki script "asılı kalmış" gibi görünen çok uzun bir bekleme yaratıyordu
+    # (bkz. "[Excel] Zarar Detay güncelleniyor..." adımında donma şikayeti). Diğer
+    # sayfalarda (VERİ/Filo, `_com_sayfaya_yaz`) olduğu gibi TÜM bloğu tek bir matris
+    # halinde TEK BİR Range.Value atamasıyla yazmak, aynı işi tek (veya iki) COM
+    # çağrısına indirip bu donmayı ortadan kaldırıyor.
+    metin_matrisi: list[tuple[Any, ...]] = []
     for i in range(kapasite):
-        row_no = veri_ilk_satir + i
         if i < yazilan:
-            degerler = [hucre_degeri(satirlar[i].get(k)) for k in ZARAR_DETAY_METIN_SUTUNLARI]
+            metin_matrisi.append(
+                tuple(hucre_degeri(satirlar[i].get(k)) for k in ZARAR_DETAY_METIN_SUTUNLARI)
+            )
         else:
-            degerler = [None] * metin_kolon_sayisi
-            # Kullanılmayan satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı
-            # formüllerini sıfırla — Tablo5'te boş Sevk No eşleşmesiyle Ara
-            # Toplam'a hatalı katkı yapmasınlar diye (bkz. modül docstring'i).
-            for offset in range(metin_kolon_sayisi, metin_kolon_sayisi + 5):
-                try:
-                    sheet.Cells(row_no, tablo_sol + offset).Value = 0
-                except Exception:
-                    pass
-        for offset, deger in enumerate(degerler):
-            try:
-                sheet.Cells(row_no, tablo_sol + offset).Value = deger
-            except Exception:
-                pass
+            metin_matrisi.append(tuple([None] * metin_kolon_sayisi))
+
+    metin_araligi = sheet.Range(
+        sheet.Cells(veri_ilk_satir, tablo_sol),
+        sheet.Cells(veri_son_satir, tablo_sol + metin_kolon_sayisi - 1),
+    )
+    _com_araliga_yaz(metin_araligi, metin_matrisi)
+
+    # Kullanılmayan satırların Alış/Satış/Kâr-Zarar/Zarar %/Zarar Payı formüllerini
+    # sıfırla — Tablo5'te boş Sevk No eşleşmesiyle Ara Toplam'a hatalı katkı yapmasınlar
+    # diye (bkz. modül docstring'i). Bu da tek bir bulk yazma ile yapılıyor.
+    bos_satir_sayisi = kapasite - yazilan
+    if bos_satir_sayisi > 0:
+        sifir_matrisi = [tuple([0] * 5) for _ in range(bos_satir_sayisi)]
+        sifir_araligi = sheet.Range(
+            sheet.Cells(veri_ilk_satir + yazilan, tablo_sol + metin_kolon_sayisi),
+            sheet.Cells(veri_son_satir, tablo_sol + metin_kolon_sayisi + 4),
+        )
+        _com_araliga_yaz(sifir_araligi, sifir_matrisi)
 
     try:
         tarih_kolon = tablo_sol + ZARAR_DETAY_METIN_SUTUNLARI.index("Tarih")
