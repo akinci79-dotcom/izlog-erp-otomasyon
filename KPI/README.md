@@ -99,7 +99,12 @@ python kpi_rapor_olustur.py
 ```
 
 **Ne yapar:**
-1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/kpi_rapor.xlsx` (veya şablon `.xlsm` ise `.xlsm`)
+1. `referans/kpi_sablon.xlsx` kopyalanır → `raporlar/<Dönem> İzlog Lojistik Raporları.xlsx` (örn. tek ay için
+   `Ağustos 2026 İzlog Lojistik Raporları.xlsx`, tam yıl için `2026 İzlog Lojistik Raporları.xlsx`, aksi
+   (ay aralığı) durumda `01.01.2026 – 30.04.2026 İzlog Lojistik Raporları.xlsx` — şablonun uzantısı `.xlsm`
+   ise çıktı da `.xlsm` olur). Sabit bir isim istiyorsanız `ayarlar.py`'ye `KPI_RAPOR_DOSYASI = "..."` ekleyin
+   (bu, otomatik adlandırmayı devre dışı bırakır); dönem etiketinin sonundaki metni değiştirmek isterseniz
+   `KPI_RAPOR_ADI_SONEKI = "..."` ile özelleştirebilirsiniz (varsayılan: `"İzlog Lojistik Raporları"`).
 2. **VERİ** ve **Filo Detay** sayfalarına Oracle verisi **Excel COM** ile yazılır (pivot şablonu bozulmaz)
 3. **Zarar Detay** sayfası (varsa) — VERİ'den o ayın zarar eden sevkleri otomatik hesaplanıp `ZararTedarikci`/`ZararKiralik` tablolarına yazılır (bkz. aşağıdaki bölüm)
 4. Pivotlar yenilenir, sütunlar genişletilir
@@ -195,10 +200,10 @@ Başarısız olursa rapor yine oluşur; Excel'de manuel yenileyin.
 Bir sayfada (örn. **Özet**) genişlikleri elle mükemmel hale getirdiyseniz, bir daha
 hiç değişmesin diye kalıcı yapabilirsiniz:
 
-1. Ayarladığınız `kpi_rapor.xlsx`'i KPI klasörüne kopyalayın (veya `raporlar\` altındaysa oradan kullanın).
-2. Genişlikleri okuyun:
+1. Ayarladığınız rapor dosyasını (`raporlar\` klasöründeki, artık dönem adıyla üretilen `.xlsx`) kullanın.
+2. Genişlikleri okuyun (dosya adını kendi çıktınıza göre değiştirin):
    ```powershell
-   python kpi_sutun_genislik_oku.py "raporlar\kpi_rapor.xlsx" "Özet"
+   python kpi_sutun_genislik_oku.py "raporlar\Ağustos 2026 İzlog Lojistik Raporları.xlsx" "Özet"
    ```
 3. Çıktıyı olduğu gibi `ayarlar.py`'ye yapıştırın:
    ```python
@@ -248,8 +253,8 @@ Eşleşmeyen kolonları `ayarlar.py` → `KPI_KOLON_ESLEME` ile tanımlayın.
 **ORA-00933:** Güncel KPI kodunu git clone ile alın (Oracle 11g uyumlu).
 
 **`[WinError 32] The process cannot access the file because it is being used by another process`:**
-`raporlar\kpi_rapor.xlsx` (veya şablon) başka bir işlem tarafından açık tutuluyor. Kod artık bunu birkaç
-kez kısa aralıkla otomatik tekrar deniyor; hâlâ başarısızsa: (1) `kpi_rapor.xlsx` Excel'de açıksa kapatın,
+`raporlar\` klasöründeki çıktı dosyası (veya şablon) başka bir işlem tarafından açık tutuluyor. Kod artık
+bunu birkaç kez kısa aralıkla otomatik tekrar deniyor; hâlâ başarısızsa: (1) çıktı dosyası Excel'de açıksa kapatın,
 (2) Görev Yöneticisi'nde (`Ctrl+Shift+Esc`) arkada kalmış bir `EXCEL.EXE` süreci varsa (görünür pencere
 olmasa bile — Excel COM otomasyonu gizli/`Visible=False` çalışır, önceki bir çalıştırma çökmüşse arkada
 kalabilir) sonlandırın, (3) `python kpi_rapor_olustur.py`'yi tekrar çalıştırın.

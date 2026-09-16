@@ -131,15 +131,42 @@ def _raporlar_klasoru() -> Path:
     return klasor
 
 
-def _cikti_yolu(sablon: Path | None = None) -> Path:
+_RAPOR_ADI_SONEKI_VARSAYILAN = "İzlog Lojistik Raporları"
+_DOSYA_ADI_GECERSIZ_KARAKTERLER = re.compile(r'[\\/:*?"<>|]')
+
+
+def _dosya_adi_icin_temizle(metin: str) -> str:
+    """Windows'ta dosya adında YASAK olan karakterleri (\\ / : * ? " < > |)
+    tire ile değiştirir, baştaki/sondaki boşlukları/nokta'ları kırpar (Windows
+    dosya adının sonunda nokta/boşluk bırakmaz)."""
+    temiz = _DOSYA_ADI_GECERSIZ_KARAKTERLER.sub("-", metin).strip()
+    return temiz.rstrip(". ") or "KPI Raporu"
+
+
+def _cikti_yolu(sablon: Path | None = None, bas: str = "", bit: str = "") -> Path:
+    """Çıktı dosyasının yolu. `KPI_RAPOR_DOSYASI` ayarlar.py'de tanımlıysa
+    [kullanıcı isteğiyle KALDIRILMADI — elle sabit bir isim isteyen için hâlâ
+    öncelikli] o kullanılır. Aksi halde [kullanıcı isteği]: dosya adı rapor
+    dönemine göre OTOMATİK üretilir — örn. tek ay için 'Ağustos 2026 İzlog
+    Lojistik Raporları.xlsx', tam yıl için '2026 İzlog Lojistik Raporları.xlsx',
+    aksi (aralık) durumda '01.08.2026 – 31.08.2026 İzlog Lojistik
+    Raporları.xlsx'. `bas`/`bit` verilmezse (örn. çok eski bir çağrı yeri)
+    eski sabit 'kpi_rapor.xlsx' adına düşer."""
     dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", None)
     if dosya:
         yol = Path(dosya)
         if yol.is_absolute():
             return yol
         return _raporlar_klasoru() / dosya
+
     suffix = (sablon or sablon_yolu()).suffix or ".xlsx"
-    return _raporlar_klasoru() / f"kpi_rapor{suffix}"
+    if not bas or not bit:
+        return _raporlar_klasoru() / f"kpi_rapor{suffix}"
+
+    soneki = getattr(ayarlar, "KPI_RAPOR_ADI_SONEKI", _RAPOR_ADI_SONEKI_VARSAYILAN)
+    etiket = _donem_etiketi(bas, bit)
+    dosya_adi = _dosya_adi_icin_temizle(f"{etiket} {soneki}".strip())
+    return _raporlar_klasoru() / f"{dosya_adi}{suffix}"
 
 
 def _sablon_hedefe_kopyala(kaynak: Path, hedef: Path, deneme: int = 5, bekleme_sn: float = 2.0) -> None:
@@ -1764,7 +1791,6 @@ def sablon_rapor_olustur(
     pivot_yenile_calistir: bool | None = None,
 ) -> str:
     kaynak = sablon or sablon_yolu()
-    hedef = cikti or _cikti_yolu(kaynak)
 
     if not kaynak.exists():
         raise FileNotFoundError(
@@ -1774,6 +1800,10 @@ def sablon_rapor_olustur(
 
     bas, bit = _tarih_araligi()
     bind = _bind_olustur(bas, bit)
+    # Çıktı dosyasının adı [kullanıcı isteği] artık dönemden otomatik üretiliyor
+    # (bkz. _cikti_yolu docstring'i) — bu yüzden bas/bit hesaplandıktan SONRA
+    # çağrılıyor (eskiden şablonun suffix'i dışında döneme dair bilgisi yoktu).
+    hedef = cikti or _cikti_yolu(kaynak, bas, bit)
 
     _progress(f"KPI raporu — dönem: {bas} — {bit}")
     _progress(f"  Şablon: {kaynak.name}")
