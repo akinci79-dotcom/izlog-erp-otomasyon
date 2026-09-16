@@ -1,8 +1,12 @@
 @echo off
 chcp 65001 >nul
-title IZLOG KPI Kurulum
+title IZLOG KPI Guncelleme
 echo.
-echo === IZLOG KPI KURULUM (tek tik) ===
+echo === IZLOG KPI GUNCELLEME (tek tik) ===
+echo GitHub'dan son kod cekilir. ayarlar.py ve SQL korunur.
+echo Eski sablon varsa otomatik yeni formullu sablon alinir.
+echo.
+echo Rapor uretmek icin: kpi_rapor_olustur.bat
 echo.
 
 REM Bu .bat dosyasinin bulundugu klasor = KPI klasoru
