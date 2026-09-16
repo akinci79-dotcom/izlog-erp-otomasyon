@@ -240,7 +240,37 @@ Konsolda böyle bir güncelleme olduğunda şunu görürsünüz:
 [Excel] Filo Analizi: Araç Tipi Performansı'na 2 yeni araç tipi eklendi (Lowbed, Panelvan).
 ```
 
-### "Özet" sayfası manuel tablolar otomatik yenileniyor
+### Yeni şablon (Ağustos 2026+) — Excel formülleri ile otomatik Özet + Zarar Detay
+
+Ağustos 2026 raporunda manuel tablolar **dinamik dizi formülleriyle** (LET, LAMBDA,
+MAP, TAKE, ANCHORARRAY) Tablo5'e bağlandı. Otomasyon artık yalnızca **VERİ + Filo
+Detay** yazar ve pivotları yeniler; Özet ve Zarar Detay Excel'de kendini günceller.
+
+| Blok | Nasıl çalışır |
+|---|---|
+| Şube Performansı | A7 — UNIQUE(PROJE_KODU) + SUMIF, Genel Toplam dahil |
+| Yönetim Alarmları | Zarar Detay!A5 spill'inden Kiralık/Tedarikçi toplamı |
+| Mülkiyet Performansı | COUNTIF/SUMIF(Tablo5[MÜLKİYET], …) |
+| En Kârlı Müşteriler | A43 — top-5 SORTBY kâr |
+| En Kârlı Rotalar | A52 + en büyük müşteri (B52), sefer/satış/kâr (C52 spill) |
+| Kritik Zarar Rotaları | H52 — rota+müşteri bazında en negatif top-5 |
+| Zarar Detay | A5 — SEVK_NO+MÜLKİYET birleştirme, sevk toplam kâr/zarar < 0 |
+
+**Gereksinim:** Microsoft 365 Excel (dinamik dizi formülleri). Eski Excel sürümlerinde
+çalışmaz.
+
+**ayarlar.py (yeni şablon için):**
+```python
+KPI_ZARAR_DETAY_GUNCELLE = False
+KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = False
+KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = False
+```
+
+Şablon dosyası: `referans/kpi_sablon.xlsx` (Ağustos 2026 raporundan türetildi).
+
+---
+
+### "Özet" sayfası manuel tablolar — ESKİ şablon (Python yedek yolu)
 
 **Geçmişte olan sorun:** "Özet" sayfasının alt bölümündeki tablolar (Şube Performansı, Mülkiyet
 Performansı, En Kârlı Müşteriler, Dönüş Yükü Katkısı, En Kârlı Rotalar, Kritik Zarar Rotaları)
