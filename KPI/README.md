@@ -240,13 +240,39 @@ Konsolda böyle bir güncelleme olduğunda şunu görürsünüz:
 [Excel] Filo Analizi: Araç Tipi Performansı'na 2 yeni araç tipi eklendi (Lowbed, Panelvan).
 ```
 
-**Not — benzer risk taşıyabilecek diğer sayfalar:** Bu proje "statik kategori listesi + SUMIF, veri
-büyüdükçe büyümüyor" sınıfından bir sorunu şimdiye kadar üç kez (Zarar Detay, VERİ/Filo Detay tablo
-kapasitesi, şimdi Araç Tipi Performansı) çözdü. Workbook'ta ayrıca "Şube KZ", "Müşteri KZ", "Sakarya
-Özet", "Konya Özet", "Karaman Özet", "İzmir Özet", "İthalat-İhracat Özet" gibi sayfalar da var — bunlar
-da benzer bir statik kategori listesi + SUMIF deseni kullanıyorsa (yeni bir şube/müşteri çıktığında
-aynı risk), aynı yaklaşım (başlık arama + eksik kategori tespiti + satır ekleme) onlara da
-uygulanabilir. Bu henüz yapılmadı (kapsam dışı) — ihtiyaç olursa bildirin.
+### "Özet" sayfası manuel tablolar otomatik yenileniyor
+
+**Geçmişte olan sorun:** "Özet" sayfasının alt bölümündeki tablolar (Şube Performansı, Mülkiyet
+Performansı, En Kârlı Müşteriler, Dönüş Yükü Katkısı, En Kârlı Rotalar, Kritik Zarar Rotaları)
+şablonda **elle yazılmış sabit listelerdi**. VERİ (Tablo5) her ay güncellenince:
+
+- Yeni bir **şube** (PROJE_KODU) listede yoksa o şubenin tüm verisi tablodan kayboluyordu.
+- Müşteri/rota tablolarındaki SUMIF formülleri **sabit müşteri/rota adlarına** bakıyordu — geçen ayın
+  top-5 listesi bu ayın verisini yansıtmıyordu; sefer sayıları bile bazen elle yazılmış sabit
+  rakamlardı.
+
+**Düzeltme:** `kpi_rapor_olustur.py` her çalıştığında `_com_ozet_manuel_tablolari_guncelle`:
+
+1. **Şube / Mülkiyet Performansı** — VERİ'deki benzersiz PROJE_KODU / PLAKA_MULKIYET değerlerini
+   mevcut listeyle karşılaştırır, eksik kategoriler için satır ekler ve COUNTIF/SUMIF formüllerini
+   kopyalar (Araç Tipi Performansı ile aynı desen).
+2. **Top-5 müşteri ve rota blokları** — Python'da VERİ satırlarından sıralama hesaplanır, etiket +
+   sefer/alış/satış/kâr-zarar değerleri doğrudan yazılır; Kâr % gibi türetilmiş sütunlar ilk
+   satırdan `FormulaR1C1` ile kopyalanır.
+
+Konsolda güncelleme olduğunda örnek:
+
+```
+[Excel] Özet/Şube Performansı: 1 yeni kategori eklendi (Adana).
+[Excel] Özet/En Kârlı Müşteriler: 5 satır VERİ analizine göre güncellendi.
+```
+
+`KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = False` ile kapatılabilir; top-N satır sayısı
+`KPI_OZET_SIRALAMA_SATIR_SAYISI` (varsayılan 5) ile ayarlanır.
+
+**Not — pivot özet sayfaları:** "Şube KZ", "Müşteri KZ", "Sakarya Özet", "Konya Özet" vb. sayfalar
+PivotTable çıktısıdır — Tablo5 yenilendiğinde `RefreshAll()` ile güncellenmeleri beklenir. Özet
+sayfasındaki **manuel** tablolar ise yukarıdaki adımla ayrıca yönetilir.
 
 ## Eski analiz raporu (isteğe bağlı)
 

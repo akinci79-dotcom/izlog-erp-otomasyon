@@ -88,6 +88,13 @@ KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = True
 # KPI_FILO_ANALIZ_SAYFA_ADLARI = ["Filo Analizi"]
 # KPI_ARAC_TIPI_PERFORMANS_BASLIK_METNI = "Araç Tipi"
 
+# "Özet" sayfasındaki manuel tablolar (Şube/Mülkiyet performansı, en kârlı
+# müşteriler, dönüş yükü, rota sıralamaları) — VERİ'den hesaplanıp her ay
+# otomatik yeniden doldurulur. Sayfa yoksa sessizce atlanır.
+KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = True
+# KPI_OZET_SAYFA_ADLARI = ["Özet"]
+# KPI_OZET_SIRALAMA_SATIR_SAYISI = 5  # top-N satır sayısı (müşteri/rota blokları)
+
 # Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
 CO_CODE = "IZLOG"
 BRANCH_CODE = "MERKEZ"
