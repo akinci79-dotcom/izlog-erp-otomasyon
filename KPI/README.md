@@ -268,11 +268,22 @@ tazeleme" bölümü. Güncel koddan sonra hâlâ 0 görüyorsanız: (1) `KPI_ZAR
 `False` yapılmış olabilir, (2) konsolda `Zarar Detay güncellendi: ...` satırını arayın — hiç
 görünmüyorsa sayfa adı eşleşmiyordur (`KPI_ZARAR_DETAY_SAYFA_ADLARI`'nı kontrol edin).
 
-**"...otomatik satır ekleme denendi ama X tanesi yine de sığmadı" uyarısı:** Tablo kapasitesi artık
-otomatik büyütülüyor (bkz. yukarıdaki "Tablo kapasitesi artık otomatik büyüyor" bölümü); bu uyarı
-SADECE otomatik büyütmenin kendisi başarısız olduğunda çıkar (ör. sayfa korumalı, tabloda birleştirilmiş
-hücre var). Konsol logunda `kapasitesi otomatik büyütülemedi (...)` satırını arayıp asıl hatayı görün;
-gerekirse tabloyu (Ara Toplam satırından önce) Excel'de elle büyütüp tekrar deneyin.
+**"...otomatik satır ekleme denendi ama X tanesi yine de sığmadı" uyarısı / "Range sınıfının Insert
+yöntemi başarısız" hatası:** Tablo kapasitesi artık otomatik büyütülüyor (bkz. yukarıdaki "Tablo
+kapasitesi artık otomatik büyüyor" bölümü); bu uyarı SADECE otomatik büyütmenin kendisi başarısız
+olduğunda çıkar. **Bilinen kök neden** [WebSearch ile teyit edildi]: ZararTedarikci/ZararKiralik
+tablolarından biri Excel'in NATİF "Toplam Satırı" (Table Style Options → **Total Row**,
+`ListObject.ShowTotals`) özelliğiyle kurulmuş olabilir — bu AÇIKKEN tablonun kendi "Ara Toplam" satırı
+aslında bu native Toplam Satırıdır. Kod artık satır sayısını `ListObject.ListRows.Count` ile hesaplıyor
+(bu, native Toplam Satırını HİÇ saymaz), bu yüzden yeni satırlar her zaman GERÇEK son veri satırının
+üzerine ekleniyor, Toplam Satırının kendisine değil — "Insert method of Range class failed" hatasının
+asıl nedeni buydu (bir tablonun Toplam Satırının üzerine/içine satır eklenemez). Ayrıca bir güvenlik ağı
+var: `Rows.Insert` yine de başarısız olursa kod otomatik olarak `ListObject.ListRows.Add(AlwaysInsert=True)`
+(UI'daki "Tablo Satırlarını Üstte Ekle" ile birebir aynı davranış) yöntemine geçer. Bu ikisi de
+başarısız olursa (çok nadir — ör. sayfa korumalı, tabloda birleştirilmiş hücre var), eski davranışa
+(kapasiteyi aşan sevkler gösterilmez, konsolda ve raporun uyarı mesajında bu belirtilir) geri dönülür.
+Konsol logunda `kapasitesi otomatik büyütülemedi (...)` satırını arayıp asıl hatayı görün; gerekirse
+tabloyu (Ara Toplam/Toplam Satırından önce) Excel'de elle büyütüp tekrar deneyin.
 
 **VERİ / Zarar Detay sayfasındaki tarih sütunları yanlış görünüyor (ör. "08.mm.2026" gibi):** Bu,
 hücrenin Excel'de önceden "Metin" ya da bozuk bir özel tarih biçimiyle kilitli kalmasından

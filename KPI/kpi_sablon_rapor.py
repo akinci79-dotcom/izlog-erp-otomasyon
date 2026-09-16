@@ -892,6 +892,30 @@ def _com_zarar_detay_kapasite_arttir(
     genişler, aralığın TAM ALTINA eklenirse genişlemez" kuralı bu ADIM için
     geçerli olmalı — ama bu kurala artık KÖRÜ KÖRÜNE güvenilmiyor (bkz. 3. madde).
 
+    ✅ ÇÖZÜLDÜ — "ZararTedarikci başarısız, ZararKiralik başarılı" asimetrisi
+    [WebSearch ile teyit edildi, bkz. r/vba "Utility to Add Rows to
+    ListObjects" ve "Insert method of Range class failed" ile ilgili
+    forum gönderileri]: `veri_son_satir` çağıran (`_com_zarar_detay_tablo_yaz`)
+    tarafında artık `lo.ListRows.Count` üzerinden hesaplanıyor (Range.Rows.Count
+    DEĞİL) — bu, ListObject'in NATİF "Toplam Satırı" (`lo.ShowTotals`) AÇIKSA
+    onu HİÇ saymıyor. Eskiden `Range.Rows.Count` kullanıldığı için ShowTotals
+    açık bir tabloda `veri_son_satir` yanlışlıkla NATİF Toplam Satırının
+    kendisini işaret ediyordu; bir sonraki adımda `Rows.Insert` TAM O SATIRA
+    (native Toplam Satırının üzerine) çağrılıyordu ki Excel bunu YAPISAL
+    olarak REDDEDİYOR ("Insert method of Range class failed", 0x800A03D4) —
+    ZararKiralik'te ShowTotals kapalıysa bu sorun hiç oluşmuyordu, tam
+    gözlemlenen asimetriyi açıklıyor. Not: bu, bizim kendi elle yazdığımız
+    'Ara Toplam' SUM formülü satırından (tablonun DIŞINDA, ayrı bir satır)
+    TAMAMEN farklı bir şey.
+
+    Ayrıca bir GÜVENLİK AĞI eklendi: `Rows.Insert` yukarıdaki düzeltmeye
+    rağmen (beklenmedik bir şablon/Excel durumu için) yine de başarısız
+    olursa, kod otomatik olarak Excel'in Tablo-farkında satır ekleme API'sine
+    (`lo.ListRows.Add(Position=..., AlwaysInsert=True)`) düşer — bu, UI'daki
+    "Tablo Satırlarını Üstte Ekle" ile birebir aynı davranışı taklit eder. O
+    da başarısız olursa (iki ayrı hata mesajı birleştirilerek) net bir
+    `RuntimeError` fırlatılır.
+
     1. Performans: `N` satır gerekiyorsa `N` kere ayrı `ListRows.Add()`/`Insert()`
        çağrısı YAPILMAZ (bkz. bu dosyadaki "hücre hücre yazma donması" dersi) —
        TEK bir `sheet.Rows("a:b").Insert()` çağrısıyla tüm eksik satırlar birden
