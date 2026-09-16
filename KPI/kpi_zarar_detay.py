@@ -80,7 +80,12 @@ def zarar_eden_sevkleri_hesapla(
     """VERİ satırlarını SEVK_NO'ya göre gruplar (aynı sevk no'daki satırlar
     birleştirilir — birden fazla yük taşıyan sevkler için), toplam
     TOPLAM_KAR_ZARAR'ı negatif olan (zarar eden) sevkleri PLAKA_MULKIYET'e göre
-    Tedarikçi/Kiralık listelerine ayırır, en büyük zarardan küçüğe sıralar.
+    Tedarikçi/Kiralık listelerine ayırır. Sıralama [kullanıcı isteği]: önce
+    "Şube" (Excel B sütunu — bu alan aslında PROJE_KODU'ndan geliyor, aşağıya
+    bkz.) adına göre alfabetik gruplanır, AYNI şube içinde en büyük zarardan
+    küçüğe (Kâr/Zarar artan, yani en negatif önce) sıralanır — böylece her
+    proje/şube kendi bloğunda bir arada görünür ve o blok içinde en can yakıcı
+    zarar en üstte olur.
 
     Dönüş: (tedarikci_satirlari, kiralik_satirlari, uyarilar). Her satır dict'i
     ZARAR_DETAY_METIN_SUTUNLARI + "Alış"/"Satış"/"Kâr/Zarar"/"Zarar %"/
@@ -158,8 +163,9 @@ def zarar_eden_sevkleri_hesapla(
         hedef = kiralik if baskin == "Kiralık" else tedarikci
         hedef.append((kar_zarar, satir_out))
 
-    tedarikci.sort(key=lambda x: x[0])
-    kiralik.sort(key=lambda x: x[0])
+    # Önce Şube (B sütunu) alfabetik, aynı şube içinde en büyük zarardan küçüğe.
+    tedarikci.sort(key=lambda x: (str(x[1]["Şube"]), x[0]))
+    kiralik.sort(key=lambda x: (str(x[1]["Şube"]), x[0]))
 
     uyarilar: list[str] = []
     if siniflanmayan:

@@ -574,6 +574,55 @@ def _com_bicim_genel_yap(araligi) -> None:
             continue
 
 
+_TARIH_BICIM_GECERLI_DESEN = re.compile(
+    r"^(?:d{1,2}|g{1,2})(?:\\?[./\-])+(?:m{1,2}|a{1,2})(?:\\?[./\-])+y{2,4}$",
+    re.IGNORECASE,
+)
+
+
+def _tarih_bicimi_gecerli_mi(numberformat: Any) -> bool:
+    """`numberformat`'ın (Excel'den GERİ OKUNAN ham `.NumberFormat`/
+    `.NumberFormatLocal` metni) GERÇEKTEN bir 'gün.ay.yıl' tarih biçimi olup
+    olmadığını YAPISAL olarak denetler — TAM literal string eşitliği ARAMAZ.
+
+    ARKA PLAN [WebSearch ile araştırıldı — bkz. modül/README'deki not]:
+    Microsoft'un resmi dokümantasyonu `.NumberFormat`'ın locale-BAĞIMSIZ
+    (her zaman US-English 'd'/'m'/'y' kodlarıyla) olacağını söylüyor ve VBA
+    içinden (Excel'in kendi makro motorundan) çalıştırıldığında bu genellikle
+    doğru. AMA harici bir COM istemcisinden (bu projede olduğu gibi
+    Python/pywin32) sürüldüğünde, ÖZELLİKLE Excel arayüz dili Türkçe
+    olduğunda, `.NumberFormat`'ı OKURKEN Excel'in kodu Türkçe karşılığına
+    ('dd'->'gg', 'mm'->'aa') çevirerek döndürdüğü bilinen bir tuhaflık var
+    (bkz. stackoverflow.com/questions/19839047 ve oaltd.co.uk Excel VBA
+    Programcı Referansı Böl. 22 — ikisi de NumberFormat'ın "İngilizce
+    döndürülmesi gerekir" kuralının bazı locale/otomasyon senaryolarında
+    beklendiği gibi çalışmadığını doğruluyor). Önceki turdaki doğrulama
+    SADECE literal 'dd.mm.yyyy' dizisine tam eşitlik arıyordu; format
+    GERÇEKTE doğru uygulanmış olsa da (Excel'de doğru görünüyor) Türkçe
+    'gg.aa.yyyy' döndüğünde HER ZAMAN "başarısız" sanılıyor ve kullanıcıya
+    YANLIŞ ALARM ('doğrulanamadı') gösteriliyordu — konsol logundaki 4
+    tarih sütununun HEPSİNİN AYNI ANDA başarısız olması da (veri/hücre bazlı
+    bir sorun değil, sistemsel bir doğrulama hatası) bu teoriyle uyumlu.
+
+    Bu fonksiyon artık TAM literal eşitlik yerine YAPISAL bir kontrol yapıyor:
+    "gün(gg/dd) + ayraç + ay(aa/mm) + ayraç + yıl(yyyy)" SIRASINI ve ŞEKLİNİ
+    doğrular — İngilizce VEYA Türkçe kod harflerini, '.'/'/'/'-' ayraçlarını
+    ve (bazı Excel sürümlerinde görülen) kaçışlı ayraçları ('\\.') kabul eder.
+
+    AMA gerçekten bozuk bir kalıbı YAKALAMAYA devam eder (yanlış negatife
+    DÖNMEZ): bilinen 'mm/\\m\\m/yyyy' kırılması (kaçışlı '\\m' İÇİNDE literal
+    'm' harfi barındırıyor, GÜN bileşeni tamamen kayıp — biçim GÜN yerine
+    doğrudan AY ile başlıyor) bu yapısal desenle EŞLEŞMEZ (desen '^' hemen
+    gün/`d`/`g` grubunu zorunlu kılar, 'mm...' ile başlayan bir dize bu
+    grupla asla eşleşmez) — fonksiyon False döner, tıpkı gün/ay/yıl
+    gruplarının HERHANGİ birinin içine kaçışlı bir harf sızdığı (ayraç
+    DIŞINDA bir yerde '\\' göründüğü) diğer olası bozuk kalıplar için de.
+    """
+    if not numberformat or not isinstance(numberformat, str):
+        return False
+    return bool(_TARIH_BICIM_GECERLI_DESEN.fullmatch(numberformat.strip()))
+
+
 def _com_tarih_bicimi_zorla(araligi) -> bool:
     """Bir aralığa 'dd.mm.yyyy' biçimini GARANTİLİ uygulamaya çalışır, başarılı
     olup olmadığını (doğrulanmış) bool olarak döner.
@@ -609,6 +658,20 @@ def _com_tarih_bicimi_zorla(araligi) -> bool:
        eskiden olduğu gibi hatayı sessizce yutup "başarılı" varsaymıyor;
        başarısızsa çağıran tarafa bool ile bildiriyor ki bu bir uyarı olarak
        kullanıcıya (Excel'de elle kontrol etmesi için) yansıtılabilsin.
+
+    5. [YENİ — YANLIŞ ALARM düzeltmesi, bkz. `_tarih_bicimi_gecerli_mi`
+       docstring'i] Doğrulama artık okunan `.NumberFormat` dizisine TAM
+       literal eşitlik ('== "dd.mm.yyyy"') ARAMIYOR — bu, format GERÇEKTE
+       doğru uygulanmış olsa bile (örn. Excel Türkçe arayüzde okurken
+       'gg.aa.yyyy' döndürdüğünde) HER ZAMAN "başarısız" diye YANLIŞ ALARM
+       veriyordu (canlı loglarda 4 farklı tarih sütununun HEPSİNİN TEK
+       SEFERDE başarısız olması bunun bir veri sorunu değil, bir doğrulama
+       mantığı hatası olduğuna işaret ediyordu). Artık `.NumberFormat` HEM
+       `.NumberFormatLocal` okunup ikisinden biri "gün.ay.yıl YAPISINA"
+       (İngilizce veya Türkçe kod harfleriyle, olası ayraç/kaçış
+       varyasyonlarıyla) uyuyorsa başarılı sayılıyor — ama bilinen bozuk
+       'mm/\\m\\m/yyyy' kalıbı (gerçekten gün bilgisini kaybeden) hâlâ
+       YAKALANIYOR, çünkü o kalıp gün bileşeniyle BAŞLAMIYOR.
     """
     _com_bicim_genel_yap(araligi)
 
@@ -631,7 +694,19 @@ def _com_tarih_bicimi_zorla(araligi) -> bool:
         except Exception:
             return True  # atama hata vermedi ama doğrulama okunamadı — iyimser kabul et
 
-        if uygulanan.replace("\\", "") == "dd.mm.yyyy":
+        if _tarih_bicimi_gecerli_mi(uygulanan):
+            return True
+
+        # `.NumberFormat` teorik olarak locale-bağımsız olmalı ama COM
+        # otomasyonunda okurken Türkçeleştirilmiş bir varyant döndürebiliyor
+        # (bkz. yukarıdaki docstring) — bazı Excel sürümlerinde bu çeviri
+        # sadece `.NumberFormatLocal` üzerinde tutarlı olabilir, o yüzden
+        # ikinci bir güvence olarak onu da deniyoruz.
+        try:
+            uygulanan_local = str(araligi.Cells(1, 1).NumberFormatLocal)
+        except Exception:
+            uygulanan_local = ""
+        if _tarih_bicimi_gecerli_mi(uygulanan_local):
             return True
 
     return False
@@ -864,10 +939,37 @@ def _com_zarar_detay_kapasite_arttir(
 
     # TEK bir Insert() çağrısıyla `eksik` satırı, mevcut son veri satırının TAM
     # ÜZERİNE ekle (yukarıdaki docstring'deki "aralık içine ekleme" kuralı için).
+    # `sheet.Rows(...)` (EntireRow, TAM satır aralığı) kullanılıyor — sadece
+    # belirli sütunları kapsayan bir Range'e Insert çağırmak Excel'in Shift
+    # yönünü otomatik tahmin etmesini bazı durumlarda başarısız kılabiliyor;
+    # EntireRow bu belirsizliği tamamen ortadan kaldırıyor.
     try:
         sheet.Rows(f"{veri_son_satir}:{veri_son_satir + eksik - 1}").Insert()
-    except Exception as exc:
-        raise RuntimeError(f"satır ekleme (Rows.Insert) başarısız: {exc}") from exc
+    except Exception as ilk_hata:
+        # GÜVENLİK AĞI [WebSearch ile teyit edilen ShowTotals düzeltmesine
+        # RAĞMEN beklenmedik bir Excel/şablon durumu için]: `Rows.Insert`
+        # yine de başarısız olursa, Excel'in kendi Tablo-farkında satır
+        # ekleme API'sine (`ListRows.Add`, UI'daki "Tablo Satırlarını Üstte
+        # Ekle" ile birebir aynı davranış — `AlwaysInsert=True` altındaki
+        # her şeyi aşağı kaydırır) düş. `Position`, eski son veri satırının
+        # ListRows'taki (1-tabanlı, başlık HARİÇ) konumuna sabitleniyor ki
+        # `eksik` adet yeni satır TAM ANA Insert() yolunun bıraktığı yere
+        # (eski son satırın YERİNE, eski veriyi aşağı iterek) eklensin —
+        # aşağıdaki formül kopyalama adımının satır aralığı beklentisiyle
+        # birebir uyumlu kalsın.
+        try:
+            konum = veri_son_satir - veri_ilk_satir + 1
+            for _ in range(eksik):
+                lo.ListRows.Add(Position=konum, AlwaysInsert=True)
+        except Exception as ikinci_hata:
+            raise RuntimeError(
+                f"satır ekleme (Rows.Insert) başarısız: {ilk_hata}; alternatif "
+                f"yöntem (ListRows.Add) da başarısız: {ikinci_hata}"
+            ) from ikinci_hata
+        _progress(
+            f"  [Excel] {tablo_adi}: Rows.Insert başarısız oldu ({ilk_hata}), "
+            f"alternatif yöntemle (ListRows.Add) {eksik} satır eklendi."
+        )
 
     yeni_veri_son_satir = veri_son_satir + eksik
     yeni_kapasite = kapasite + eksik
@@ -958,8 +1060,40 @@ def _com_zarar_detay_tablo_yaz(
         hdr = lo.HeaderRowRange
         tablo_sol = int(hdr.Column)
         veri_ilk_satir = int(hdr.Row) + 1
-        veri_son_satir = int(lo.Range.Row) + int(lo.Range.Rows.Count) - 1
-        kapasite = veri_son_satir - veri_ilk_satir + 1
+
+        # ⚠️ ShowTotals (ListObject'in NATİF "Toplam Satırı") düzeltmesi
+        # [WebSearch ile teyit edildi — bkz. r/vba "Utility to Add Rows to
+        # ListObjects" ve ilgili forum gönderileri]: `lo.Range.Rows.Count`
+        # tabloyu BAŞLIK + VERİ + (varsa) native Toplam Satırının TAMAMINI
+        # sayar; ShowTotals AÇIKSA bu, "son VERİ satırı" hesabını YANLIŞLIKLA
+        # Toplam Satırının kendisine kaydırıyordu — bir sonraki adımda
+        # `Rows.Insert` TAM O SATIRA (native Toplam Satırının üzerine/içine)
+        # çağrılıyordu, ki Excel bunu YAPISAL olarak REDDEDİYOR ("Insert
+        # method of Range class failed", hata kodu 0x800A03D4). Bu, kod
+        # incelemesinde ZararTedarikci'nin başarısız olup ZararKiralik'in
+        # başarılı olmasının TAM olası açıklaması: iki tablonun ShowTotals
+        # ayarı şablonda farklı bırakılmış olabilir.
+        #
+        # `lo.ListRows.Count` ise ListObject'in native Toplam Satırını HİÇ
+        # SAYMAZ (sadece gerçek veri satırlarını sayar) — bu yüzden
+        # `Range.Rows.Count`'tan daha güvenilir bir "gerçek veri satırı
+        # sayısı" kaynağı. Birincil olarak bunu kullanıyoruz; sadece COM
+        # bu özelliği hiç desinlemezse (çok eski bir Excel sürümü ihtimaline
+        # karşı) `Range.Rows.Count`'tan ShowTotals'a göre düzeltilmiş bir
+        # değer türetip devam ediyoruz.
+        try:
+            gosterilen_toplam_satiri = bool(lo.ShowTotals)
+        except Exception:
+            gosterilen_toplam_satiri = False
+        try:
+            veri_satir_sayisi = int(lo.ListRows.Count)
+        except Exception:
+            veri_satir_sayisi = (
+                int(lo.Range.Rows.Count) - 1 - (1 if gosterilen_toplam_satiri else 0)
+            )
+
+        veri_son_satir = veri_ilk_satir + veri_satir_sayisi - 1
+        kapasite = veri_satir_sayisi
     except Exception:
         return 0, 0
 
