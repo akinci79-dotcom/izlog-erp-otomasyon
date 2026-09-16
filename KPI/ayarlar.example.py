@@ -78,6 +78,16 @@ KPI_ZARAR_DETAY_GUNCELLE = True
 # KPI_ZARAR_TEDARIKCI_TABLO_ADI = "ZararTedarikci"
 # KPI_ZARAR_KIRALIK_TABLO_ADI = "ZararKiralik"
 
+# "Filo Analizi" sayfasındaki "Araç Tipi Performansı" bloğu (statik araç tipi
+# kategori listesi + COUNTIF/SUMIF formülleri, Excel Tablosu DEĞİL düz hücre
+# aralığı) — VERİ'de o ay GERÇEKTEN görülen araç tiplerini bu listeyle
+# karşılaştırıp EKSİK olanları (ör. "Lowbed", "Panelvan") otomatik satır
+# ekleyerek tamamlar. Sayfa/blok bulunamazsa sessizce atlanır.
+KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = True
+# Sayfa adı / blok başlık metni farklıysa (varsayılan: "Filo Analizi" / "Araç Tipi")
+# KPI_FILO_ANALIZ_SAYFA_ADLARI = ["Filo Analizi"]
+# KPI_ARAC_TIPI_PERFORMANS_BASLIK_METNI = "Araç Tipi"
+
 # Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
 CO_CODE = "IZLOG"
 BRANCH_CODE = "MERKEZ"

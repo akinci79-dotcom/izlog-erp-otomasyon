@@ -899,17 +899,23 @@ def _com_tablo_satir_ekle(
     satır gerekiyorsa `N` kere ayrı `Insert()`/`ListRows.Add()` çağrısı
     YAPILMAZ, bkz. bu dosyadaki "hücre hücre yazma donması" dersi). Bu
     başarısız olursa (örn. korumalı sayfa, birleştirilmiş hücre, beklenmedik
-    bir şablon durumu) Excel'in Tablo-farkında satır ekleme API'sine
-    (`lo.ListRows.Add(Position=..., AlwaysInsert=True)`, UI'daki "Tablo
-    Satırlarını Üstte Ekle" ile birebir aynı davranış) düşer. İkisi de
-    başarısız olursa iki hata mesajı birleştirilip `RuntimeError` fırlatılır.
+    bir şablon durumu) VE bir `lo` (ListObject) verilmişse, Excel'in
+    Tablo-farkında satır ekleme API'sine (`lo.ListRows.Add(Position=...,
+    AlwaysInsert=True)`, UI'daki "Tablo Satırlarını Üstte Ekle" ile birebir
+    aynı davranış) düşer. İkisi de başarısız olursa iki hata mesajı
+    birleştirilip `RuntimeError` fırlatılır. `lo=None` verilirse (örn. "Filo
+    Analizi" sayfasındaki "Araç Tipi Performansı" bloğu gibi bir Excel
+    Tablosu/ListObject OLMAYAN, düz hücre aralığı durumunda) yedek yöntem hiç
+    denenmez — `Rows.Insert` başarısız olursa doğrudan `RuntimeError`.
 
     Bu fonksiyon önceden SADECE Zarar Detay'a özgü `_com_zarar_detay_
     kapasite_arttir` içinde vardı; artık VERİ/Filo Detay'ı yazan
-    `_com_sayfaya_yaz` ile de PAYLAŞILIYOR (kod tekrarını önlemek için buraya
-    çıkarıldı) — Zarar Detay tarafı bu satır ekleme adımından SONRA ayrıca
-    kendine özgü formül kopyalama + 'Ara Toplam' doğrulama adımlarını yapmaya
-    devam ediyor (bkz. `_com_zarar_detay_kapasite_arttir`).
+    `_com_sayfaya_yaz` VE "Araç Tipi Performansı" bloğunu güncelleyen
+    `_com_arac_tipi_performans_guncelle` ile de PAYLAŞILIYOR (kod tekrarını
+    önlemek için buraya çıkarıldı) — Zarar Detay tarafı bu satır ekleme
+    adımından SONRA ayrıca kendine özgü formül kopyalama + 'Ara Toplam'
+    doğrulama adımlarını yapmaya devam ediyor (bkz.
+    `_com_zarar_detay_kapasite_arttir`).
     """
     if eksik <= 0:
         return
@@ -917,6 +923,10 @@ def _com_tablo_satir_ekle(
         sheet.Rows(f"{veri_son_satir}:{veri_son_satir + eksik - 1}").Insert()
         return
     except Exception as ilk_hata:
+        if lo is None:
+            raise RuntimeError(
+                f"satır ekleme (Rows.Insert) başarısız: {ilk_hata}"
+            ) from ilk_hata
         try:
             konum = veri_son_satir - veri_ilk_satir + 1
             for _ in range(eksik):
@@ -932,46 +942,61 @@ def _com_tablo_satir_ekle(
         )
 
 
-def _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
+def _com_alt_toplam_formulu_dogrula_ve_duzelt(
     sheet,
-    tablo_adi: str,
+    blok_adi: str,
     formul_sol: int,
     formul_sag: int,
     eski_veri_son_satir: int,
     yeni_veri_son_satir: int,
+    toplam_satir: int | None = None,
+    toplam_etiketi: str = "Ara Toplam",
 ) -> None:
-    """'Ara Toplam' satırındaki SUM formüllerinin, satır eklendikten SONRA
-    GERÇEKTEN yeni veri aralığını (...son satır=yeni_veri_son_satir) kapsayıp
-    kapsamadığını DOĞRULAR; Excel'in "aralığın İÇİNE satır eklenirse ona bakan
-    formüller otomatik genişler" kuralına KÖRÜ KÖRÜNE güvenmek yerine (bu proje
-    kapsamında henüz gerçek Excel'de canlı doğrulanmamış bir davranış), formülü
-    okuyup GEREKTİĞİNDE açıkça düzeltir — böylece davranış artık "umulan Excel
+    """Bir "dip toplam" satırındaki SUM (veya başka bir aralık-referanslı)
+    formülün, satır eklendikten SONRA GERÇEKTEN yeni veri aralığını
+    (...son satır=yeni_veri_son_satir) kapsayıp kapsamadığını DOĞRULAR;
+    Excel'in "aralığın İÇİNE satır eklenirse ona bakan formüller otomatik
+    genişler" kuralına KÖRÜ KÖRÜNE güvenmek yerine (bu proje kapsamında henüz
+    gerçek Excel'de canlı doğrulanmamış bir davranış), formülü okuyup
+    GEREKTİĞİNDE açıkça düzeltir — böylece davranış artık "umulan Excel
     büyüsüne" değil, kodun kendi doğrulamasına dayanıyor.
 
-    Yöntem: Satır ekleme sonrası 'Ara Toplam' satırı fiziksel olarak
-    `yeni_veri_son_satir + 1` konumuna kaymış olmalı (Excel'in satır ekleme
-    sonrası alttaki HER ŞEYİ aşağı kaydırması temel/kesin bir davranıştır, bu
-    kısımda belirsizlik yok — belirsiz olan tek şey, formülün İÇİNDEKİ ARALIK
-    REFERANSININ da otomatik büyüyüp büyümediğidir). O satırdaki her J-N
-    hücresinin (locale-bağımsız `.Formula`, A1 stili) metni okunur; formülde
-    KENDİ sütununa ait ESKİ son satır numarası (ör. 'J93' veya '$J$93') hâlâ
-    geçiyorsa, bu aralığın OTOMATİK genişlemediği anlamına gelir — bu durumda
-    SADECE o satır numarası, sütun harfiyle birlikte YENİ son satır numarasıyla
-    ('J97') değiştirilir; formülün geri kalanı (SUM, başka sarmalayan
-    fonksiyonlar, diğer sütunlara ait referanslar vb.) OLDUĞU GİBİ korunur —
-    formül körü körüne '=SUM(...)' ile YENİDEN YAZILMAZ (şablondaki formülün
-    tam yapısını bilmediğimiz için bu, bilinmeyen bir davranışı/eki kaybetme
-    riskini taşırdı). Formülde eski satır numarası hiç geçmiyorsa (Excel zaten
-    doğru genişletmiş demektir), hiçbir şey değiştirilmez — bu fonksiyon hem
-    "genişledi" hem "genişlemedi" senaryosunda güvenli ve idempotenttir.
+    Bu fonksiyon önceden SADECE Zarar Detay'a özgü (`_com_zarar_detay_ara_
+    toplam_dogrula_ve_duzelt`) idi; artık "Filo Analizi" sayfasındaki "Araç
+    Tipi Performansı" bloğu gibi BENZER bir "dip toplam satırı" ihtiyacı olan
+    her yer için GENELLEŞTİRİLDİ (kod tekrarını önlemek için) — `blok_adi`
+    (log/hata mesajlarında görünen ad) ve `toplam_satir`/`toplam_etiketi`
+    parametreleriyle her iki kullanım da desteklenir.
+
+    Yöntem: Satır ekleme sonrası dip toplam satırı fiziksel olarak
+    `toplam_satir` (varsayılan: `yeni_veri_son_satir + 1`) konumuna kaymış
+    olmalı (Excel'in satır ekleme sonrası alttaki HER ŞEYİ aşağı kaydırması
+    temel/kesin bir davranıştır, bu kısımda belirsizlik yok — belirsiz olan
+    tek şey, formülün İÇİNDEKİ ARALIK REFERANSININ da otomatik büyüyüp
+    büyümediğidir). O satırdaki her hücrenin (locale-bağımsız `.Formula`, A1
+    stili) metni okunur; formülde KENDİ sütununa ait ESKİ son satır numarası
+    (ör. 'J93' veya '$J$93') hâlâ geçiyorsa, bu aralığın OTOMATİK genişlemediği
+    anlamına gelir — bu durumda SADECE o satır numarası, sütun harfiyle
+    birlikte YENİ son satır numarasıyla ('J97') değiştirilir; formülün geri
+    kalanı (SUM, başka sarmalayan fonksiyonlar, diğer sütunlara ait
+    referanslar vb.) OLDUĞU GİBİ korunur — formül körü körüne '=SUM(...)' ile
+    YENİDEN YAZILMAZ (şablondaki formülün tam yapısını bilmediğimiz için bu,
+    bilinmeyen bir davranışı/eki kaybetme riskini taşırdı). Formülde eski
+    satır numarası hiç geçmiyorsa (Excel zaten doğru genişletmiş demektir),
+    hiçbir şey değiştirilmez — bu fonksiyon hem "genişledi" hem "genişlemedi"
+    senaryosunda güvenli ve idempotenttir. Dip toplam satırında hiç formül
+    yoksa (blok altında böyle bir satır hiç yoksa) sessizce hiçbir şey
+    yapılmaz — bu bir hata değildir (bkz. `_com_arac_tipi_performans_
+    guncelle` — "Araç Tipi Performansı" altında dip toplam satırı olmayabilir).
     """
     if eski_veri_son_satir == yeni_veri_son_satir:
         return
-    ara_toplam_satir = yeni_veri_son_satir + 1
+    if toplam_satir is None:
+        toplam_satir = yeni_veri_son_satir + 1
     for col in range(formul_sol, formul_sag + 1):
         col_harf = get_column_letter(col)
         try:
-            hucre = sheet.Cells(ara_toplam_satir, col)
+            hucre = sheet.Cells(toplam_satir, col)
             mevcut_formul = hucre.Formula
         except Exception:
             continue
@@ -989,11 +1014,11 @@ def _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
             hucre.Formula = yeni_formul
         except Exception as exc:
             raise RuntimeError(
-                f"'{tablo_adi}' Ara Toplam {col_harf} sütunu formülü "
+                f"'{blok_adi}' {toplam_etiketi} {col_harf} sütunu formülü "
                 f"düzeltilemedi: {exc}"
             ) from exc
         _progress(
-            f"  [Excel] {tablo_adi} 'Ara Toplam' {col_harf} sütunu Excel "
+            f"  [Excel] {blok_adi} '{toplam_etiketi}' {col_harf} sütunu Excel "
             f"tarafından otomatik genişletilmemişti — açıkça düzeltildi: "
             f"{mevcut_formul} → {yeni_formul}"
         )
@@ -1150,7 +1175,7 @@ def _com_zarar_detay_kapasite_arttir(
     # 'Ara Toplam' formülünün GERÇEKTEN yeni aralığı kapsadığını doğrula,
     # kapsamıyorsa açıkça düzelt (bkz. yukarıdaki docstring 3. madde — bu,
     # Excel'in zımni genişletme davranışına duyulan güveni ortadan kaldırır).
-    _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
+    _com_alt_toplam_formulu_dogrula_ve_duzelt(
         sheet, tablo_adi, formul_sol, formul_sag, eski_veri_son_satir, yeni_veri_son_satir
     )
 
@@ -1407,6 +1432,236 @@ def _com_zarar_detay_guncelle(
     return uyarilar
 
 
+_FILO_ANALIZ_SAYFA_ADLARI_VARSAYILAN = [
+    "Filo Analizi", "Filo analizi", "FİLO ANALİZİ", "FILO ANALIZI",
+]
+_ARAC_TIPI_PERFORMANS_BASLIK_METNI_VARSAYILAN = "Araç Tipi"
+
+
+def _com_hucre_arama_baslik_bul(
+    sheet, arama_metni: str, max_satir: int = 300, max_sutun: int = 40
+) -> tuple[int, int] | None:
+    """Sayfada, normalize edilmiş metni `arama_metni` ile eşleşen İLK hücreyi
+    arar (Türkçe karakter/encoding riskine karşı `_normalize_kolon` ile
+    normalize ederek karşılaştırır — bkz. bu dosyadaki diğer Türkçe metin
+    eşleştirme örnekleri). Bulunursa `(satır, sütun)` (1-tabanlı), bulunamazsa
+    `None` döner.
+
+    Performans: sabit satır numarasına GÜVENMEK yerine (şablon değişebilir)
+    aranıyor, ama hücre hücre COM çağrısı YAPILMIYOR — TEK bir toplu
+    `Range.Value` okumasıyla (`max_satir` x `max_sutun` bloğu) taranıyor.
+    """
+    try:
+        blok = sheet.Range(sheet.Cells(1, 1), sheet.Cells(max_satir, max_sutun)).Value
+    except Exception:
+        return None
+    hedef = _normalize_kolon(arama_metni)
+    if not hedef or not blok:
+        return None
+    for r_ofs, satir in enumerate(blok):
+        if not satir:
+            continue
+        for c_ofs, deger in enumerate(satir):
+            if deger is None:
+                continue
+            if _normalize_kolon(str(deger)) == hedef:
+                return r_ofs + 1, c_ofs + 1
+    return None
+
+
+def _com_baslik_satiri_sutun_sayisi(
+    sheet, header_row: int, baslangic_col: int, max_sutun: int = 60
+) -> int:
+    """`header_row` satırında, `baslangic_col`'dan başlayarak sağa doğru
+    ARDIŞIK dolu hücre sayısını döner (ilk boş hücrede durur) — bloğun kaç
+    sütun genişliğinde olduğunu (ör. Araç Tipi + Sefer + Alış + ... = 7)
+    sabit bir sayıya güvenmeden tespit etmek için."""
+    sutun = baslangic_col
+    while sutun - baslangic_col < max_sutun:
+        try:
+            deger = sheet.Cells(header_row, sutun).Value
+        except Exception:
+            break
+        if deger is None or str(deger).strip() == "":
+            break
+        sutun += 1
+    return sutun - baslangic_col
+
+
+def _com_dikey_liste_oku(
+    sheet, ilk_satir: int, col: int, max_satir: int = 500
+) -> tuple[list[str], int]:
+    """`col` sütununda `ilk_satir`'dan başlayarak, ilk boş hücreye kadar
+    (dikey) metin listesi okur. Dönüş: `(değerler, son_dolu_satir)` — hiç
+    değer yoksa `son_dolu_satir = ilk_satir - 1` (boş liste, "başlığın hemen
+    altı boş" durumu için)."""
+    degerler: list[str] = []
+    row = ilk_satir
+    while row - ilk_satir < max_satir:
+        try:
+            deger = sheet.Cells(row, col).Value
+        except Exception:
+            break
+        if deger is None or str(deger).strip() == "":
+            break
+        degerler.append(str(deger).strip())
+        row += 1
+    son_dolu_satir = row - 1 if degerler else ilk_satir - 1
+    return degerler, son_dolu_satir
+
+
+def _com_arac_tipi_performans_guncelle(wb, veri_satirlari: list[dict[str, Any]]) -> list[str]:
+    """"Filo Analizi" sayfasındaki "Araç Tipi Performansı" bloğunu (statik bir
+    araç tipi kategorisi listesi + COUNTIF/SUMIF formülleri — bir Excel
+    Tablosu/ListObject DEĞİL, düz hücre aralığı) bu dönemin VERİ'sinde
+    GERÇEKTEN görülen araç tiplerine göre tazeler.
+
+    KÖK NEDEN [kullanıcı openpyxl ile gerçek rapor dosyasını inceleyip
+    doğruladı]: Bu blok kod tarafından hiç yönetilmiyordu, tamamen şablonda
+    elle yazılmış sabit bir kategori listesiydi (ör. 10 araç tipi). VERİ
+    sayfasındaki (Tablo5) ARAC_TIPI sütununda YENİ bir araç tipi (ör.
+    "Lowbed", "Panelvan") ortaya çıktığında, bu blok bunu hiç İÇERMEDİĞİ için
+    o araç tipine ait TÜM sefer/alış/satış/kâr-zarar verisi tablodan (ve
+    varsa altındaki bir dip toplam satırından) TAMAMEN GÖRÜNMEZ kalıyordu —
+    "Zarar Detay" sayfasında ÖNCEDEN çözülen "sabit kategori listesi, veri
+    büyüdükçe büyümüyor" probleminin AYNI SINIFTAN bir başka örneği, ama
+    burada blok bir ListObject değil düz hücre aralığı (bkz. `_com_tablo_
+    satir_ekle`'ye `lo=None` verilerek bu senaryonun da desteklenmesi).
+
+    Adımlar:
+    1. "Filo Analizi" sayfasını bul (`KPI_FILO_ANALIZ_SAYFA_ADLARI`).
+    2. "Araç Tipi" başlık hücresini ARAYARAK bul (`KPI_ARAC_TIPI_PERFORMANS_
+       BASLIK_METNI`) — sabit satır/sütun numarasına GÜVENMEZ.
+    3. Başlığın ALTINDAKİ (aynı sütunda) mevcut araç tipi isimlerini oku.
+    4. `veri_satirlari`'ndaki (Python'da, Excel'e hiç gitmeden) benzersiz
+       ARAC_TIPI değerlerini bu MEVCUT listeyle karşılaştır, eksik olanları bul.
+    5. Eksik her araç tipi için GERÇEK bir satır ekle (`_com_tablo_satir_ekle`,
+       `lo=None` — burada bir ListObject yok, sadece `Rows.Insert` yeterli),
+       TEK bir bulk Insert() ile (performans). Bu, blok altında varsa bir "dip
+       toplam" satırını KAYBETMEDEN aşağı kaydırır.
+    6. Yeni satırların A sütununa eksik araç tipinin adını yaz, diğer
+       sütunlara (Sefer/Alış/Satış/...) komşu (mevcut, değişmeyen) satırın
+       formüllerini `FormulaR1C1` ile (göreli referans otomatik kayar) kopyala.
+    7. Varsa dip toplam formülünün yeni aralığı kapsayıp kapsamadığını
+       doğrula/düzelt (`_com_alt_toplam_formulu_dogrula_ve_duzelt` — Zarar
+       Detay ile PAYLAŞILAN yardımcı).
+
+    Sayfa/blok bulunamazsa (ör. kullanıcı adları değiştirmişse) ya da mevcut
+    liste zaten güncel ise SESSİZCE atlanır (Zarar Detay'daki "sayfa/tablo
+    bulunamazsa sessizce atlanır" felsefesiyle AYNI) — rapor oluşumu asla
+    durdurulmaz.
+    """
+    uyarilar: list[str] = []
+
+    if getattr(ayarlar, "KPI_ARAC_TIPI_PERFORMANS_GUNCELLE", True) is False:
+        return uyarilar
+
+    sayfa_adlari = getattr(
+        ayarlar, "KPI_FILO_ANALIZ_SAYFA_ADLARI", _FILO_ANALIZ_SAYFA_ADLARI_VARSAYILAN
+    )
+    ws = _excel_sayfa_bul(wb, sayfa_adlari)
+    if ws is None:
+        return uyarilar
+
+    baslik_metni = getattr(
+        ayarlar,
+        "KPI_ARAC_TIPI_PERFORMANS_BASLIK_METNI",
+        _ARAC_TIPI_PERFORMANS_BASLIK_METNI_VARSAYILAN,
+    )
+    konum = _com_hucre_arama_baslik_bul(ws, baslik_metni)
+    if konum is None:
+        return uyarilar
+    header_row, header_col = konum
+
+    kolon_sayisi = _com_baslik_satiri_sutun_sayisi(ws, header_row, header_col)
+    if kolon_sayisi <= 1:
+        return uyarilar  # sadece başlık hücresi var, formül sütunu (Sefer/Alış/...) yok
+
+    veri_ilk_satir = header_row + 1
+    mevcut_liste, son_dolu_satir = _com_dikey_liste_oku(ws, veri_ilk_satir, header_col)
+    if not mevcut_liste:
+        uyarilar.append(
+            f"Filo Analizi/{baslik_metni}: mevcut araç tipi listesi boş görünüyor "
+            "(başlığın altı boş) — otomatik güncelleme atlandı."
+        )
+        return uyarilar
+
+    mevcut_norm = {_normalize_kolon(v) for v in mevcut_liste}
+    benzersiz_veri_tipleri: list[str] = []
+    gorulen_norm: set[str] = set()
+    for satir in veri_satirlari:
+        deger = satir.get("ARAC_TIPI")
+        if deger is None:
+            continue
+        metin = str(deger).strip()
+        if not metin:
+            continue
+        norm = _normalize_kolon(metin)
+        if norm in gorulen_norm:
+            continue
+        gorulen_norm.add(norm)
+        benzersiz_veri_tipleri.append(metin)
+
+    eksik_tipler = [t for t in benzersiz_veri_tipleri if _normalize_kolon(t) not in mevcut_norm]
+    if not eksik_tipler:
+        return uyarilar
+
+    eksik_sayisi = len(eksik_tipler)
+    eski_veri_son_satir = son_dolu_satir
+    kaynak_satir = veri_ilk_satir  # şablondan gelen, her zaman dolu ilk kategori satırı
+
+    try:
+        _com_tablo_satir_ekle(
+            ws, None, f"Filo Analizi/{baslik_metni}",
+            veri_ilk_satir, eski_veri_son_satir, eksik_sayisi,
+        )
+    except Exception as exc:
+        uyarilar.append(
+            f"Filo Analizi/{baslik_metni}: {eksik_sayisi} yeni araç tipi "
+            f"({', '.join(eksik_tipler)}) için satır eklenemedi ({exc}) — eski "
+            "liste korunuyor, bu araç tiplerinin verisi tabloda GÖRÜNMEYECEK."
+        )
+        return uyarilar
+
+    yeni_veri_son_satir = eski_veri_son_satir + eksik_sayisi
+
+    isim_araligi = ws.Range(
+        ws.Cells(eski_veri_son_satir, header_col),
+        ws.Cells(yeni_veri_son_satir - 1, header_col),
+    )
+    _com_araliga_yaz(isim_araligi, [(t,) for t in eksik_tipler])
+
+    formul_sol = header_col + 1
+    formul_sag = header_col + kolon_sayisi - 1
+    for col in range(formul_sol, formul_sag + 1):
+        try:
+            kaynak_formul = ws.Cells(kaynak_satir, col).FormulaR1C1
+            ws.Range(
+                ws.Cells(eski_veri_son_satir, col),
+                ws.Cells(yeni_veri_son_satir - 1, col),
+            ).FormulaR1C1 = kaynak_formul
+        except Exception as exc:
+            uyarilar.append(
+                f"Filo Analizi/{baslik_metni}: sütun {get_column_letter(col)} formülü "
+                f"yeni satırlara kopyalanamadı ({exc})."
+            )
+
+    try:
+        _com_alt_toplam_formulu_dogrula_ve_duzelt(
+            ws, f"Filo Analizi/{baslik_metni}", formul_sol, formul_sag,
+            eski_veri_son_satir, yeni_veri_son_satir, toplam_etiketi="Dip Toplam",
+        )
+    except Exception as exc:
+        uyarilar.append(f"Filo Analizi/{baslik_metni}: dip toplam formülü düzeltilemedi: {exc}")
+
+    _progress(
+        f"  [Excel] Filo Analizi: {baslik_metni} Performansı'na {eksik_sayisi} yeni "
+        f"araç tipi eklendi ({', '.join(eksik_tipler)})."
+    )
+
+    return uyarilar
+
+
 def _excel_uygulama_ac():
     import win32com.client  # type: ignore
 
@@ -1626,6 +1881,13 @@ def _excel_sablon_doldur(
             uyarilar.extend(zarar_uyarilari)
         except Exception as exc:
             uyarilar.append(f"Zarar Detay güncelleme: {exc}")
+
+        _progress("  [Excel] Filo Analizi (Araç Tipi Performansı) güncelleniyor...")
+        try:
+            arac_tipi_uyarilari = _com_arac_tipi_performans_guncelle(wb, veri_satirlari)
+            uyarilar.extend(arac_tipi_uyarilari)
+        except Exception as exc:
+            uyarilar.append(f"Filo Analizi Araç Tipi Performansı güncelleme: {exc}")
 
         if pivot_yenile:
             _progress("  [Excel] Pivotlar yenileniyor...")

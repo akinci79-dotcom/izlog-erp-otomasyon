@@ -211,6 +211,43 @@ Konsolda böyle bir büyütme olduğunda (Zarar Detay'dakine benzer) şu satır�
 [Excel] Filo Detay: tablo kapasitesi yetersiz (30 satır var, 38 gerekiyor) — 8 satır otomatik ekleniyor (altındaki içerik korunacak)...
 ```
 
+### "Filo Analizi" → "Araç Tipi Performansı" otomatik güncelleme (yeni araç tipleri kaybolmaz)
+
+**Geçmişte olan sorun** [kullanıcı openpyxl ile gerçek rapor dosyasını inceleyip doğruladı]: "Filo Analizi"
+sayfasındaki "Araç Tipi Performansı" bloğu (A9:G19 civarı — bir Excel Tablosu/ListObject DEĞİL, düz
+hücre aralığı) TAMAMEN STATİK bir kategori listesiydi, kod tarafından hiç yönetilmiyordu. VERİ
+sayfasında (Tablo5) yeni bir araç tipi (ör. "Lowbed", "Panelvan") ortaya çıktığında, bu blok bunu hiç
+İÇERMEDİĞİ için o araç tipine ait TÜM sefer/alış/satış/kâr-zarar verisi tablodan (ve varsa altındaki bir
+dip toplam satırından) TAMAMEN GÖRÜNMEZ kalıyordu.
+
+**Düzeltme:** `kpi_rapor_olustur.py` her çalıştığında artık `_com_arac_tipi_performans_guncelle`:
+1. "Filo Analizi" sayfasını bulur (`KPI_FILO_ANALIZ_SAYFA_ADLARI`),
+2. "Araç Tipi" başlık hücresini ARAYARAK bulur (sabit satır numarasına güvenmez,
+   `KPI_ARAC_TIPI_PERFORMANS_BASLIK_METNI`),
+3. Başlığın altındaki mevcut araç tipi listesini okur, VERİ'deki (Python'da, Excel'e gitmeden)
+   benzersiz ARAC_TIPI değerleriyle karşılaştırır,
+4. Eksik olanlar için (Zarar Detay ile **paylaşılan** `_com_tablo_satir_ekle` yardımcısıyla) gerçek
+   satır ekler — bu, blok altında varsa bir dip toplam satırını kaybetmeden aşağı kaydırır,
+5. Yeni satırların araç tipi adını yazar, diğer sütunların (Sefer/Alış/Satış/...) formüllerini komşu
+   satırdan `FormulaR1C1` ile (göreli referans otomatik kayarak) kopyalar,
+6. Varsa dip toplam formülünün yeni aralığı kapsayıp kapsamadığını doğrular/düzeltir (Zarar Detay'daki
+   'Ara Toplam' doğrulamasıyla **paylaşılan** `_com_alt_toplam_formulu_dogrula_ve_duzelt` yardımcısı).
+
+Sayfa/blok bulunamazsa (kullanıcı adları değiştirmişse) ya da liste zaten güncelse sessizce atlanır.
+Konsolda böyle bir güncelleme olduğunda şunu görürsünüz:
+
+```
+[Excel] Filo Analizi: Araç Tipi Performansı'na 2 yeni araç tipi eklendi (Lowbed, Panelvan).
+```
+
+**Not — benzer risk taşıyabilecek diğer sayfalar:** Bu proje "statik kategori listesi + SUMIF, veri
+büyüdükçe büyümüyor" sınıfından bir sorunu şimdiye kadar üç kez (Zarar Detay, VERİ/Filo Detay tablo
+kapasitesi, şimdi Araç Tipi Performansı) çözdü. Workbook'ta ayrıca "Şube KZ", "Müşteri KZ", "Sakarya
+Özet", "Konya Özet", "Karaman Özet", "İzmir Özet", "İthalat-İhracat Özet" gibi sayfalar da var — bunlar
+da benzer bir statik kategori listesi + SUMIF deseni kullanıyorsa (yeni bir şube/müşteri çıktığında
+aynı risk), aynı yaklaşım (başlık arama + eksik kategori tespiti + satır ekleme) onlara da
+uygulanabilir. Bu henüz yapılmadı (kapsam dışı) — ihtiyaç olursa bildirin.
+
 ## Eski analiz raporu (isteğe bağlı)
 
 ```powershell
