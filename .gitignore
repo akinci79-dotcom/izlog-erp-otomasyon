@@ -12,3 +12,4 @@ debug_*.png
 # Gerçek şifreleri içeren yerel dosya -- ASLA commit edilmemeli.
 # Şablonu için ayarlar.example.py'ye bakın.
 ayarlar.py
+kpi_rapor*.xlsx

@@ -1,0 +1,432 @@
+WITH YUK_SAYISI AS
+(
+SELECT TGD.TRANSPORT_ID, COUNT(*) YUK_ADEDI
+FROM LMST_L_TRANS_GOODS_DETAIL TGD
+LEFT JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = SK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = SK.BRANCH_ID
+WHERE CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (SK.TRANSPORT_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@TransportNo@'))) OR '@TransportNo@' = 'null')
+AND ((SK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (SK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null')) 
+GROUP BY TGD.TRANSPORT_ID
+),
+MAL_TIPI AS
+(select ltrim(max(sys_connect_by_path
+       (DESCRIPTION, ' + ' )), ' + ') MAL_TIP,
+        goods_id
+  from (select T.DESCRIPTION , T.goods_id,
+            row_number() over
+           (partition by T.goods_id
+            order by T.goods_id) rn
+         from (SELECT DISTINCT(C.DESCRIPTION) , D.GOODS_ID FROM LMST_L_GOODS_PACK_DET a 
+         left join lmst_l_goods d on d.goods_id = A.GOODS_ID
+         LEFT JOIN LMSD_L_GOODS_CATEGORY C ON C.GOODS_CATEGORY_ID = A.GOODS_CATEGORY_ID
+         LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = d.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = d.BRANCH_ID
+         where d.project_id = 18 and d.CUSTOMER_ID = 1036477
+         AND CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (d.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND ((d.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (d.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))) T
+          )
+start with rn = 1
+connect by prior rn = rn-1
+and prior goods_id = goods_id
+  group by goods_id
+  order by goods_id),  
+MUSTERI_HESAPLASMA AS
+(SELECT T.GOODS_ID,
+       RTRIM(XMLAGG(XMLELEMENT(E, T.ACIKLAMA || '~')).EXTRACT('//text()'),
+               '~') MH_ACIKLAMA
+FROM (SELECT YK.GOODS_ID,
+             PM.ZZ_NOTE_LARGE ACIKLAMA
+FROM LMST_L_GOODS_OP_DET OPDET
+LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = OPDET.GOODS_ID
+LEFT JOIN LMST_CUST_PAYOFF_M PM ON PM.CUST_PAYOFF_ID = OPDET.CUST_PAYOFF_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = YK.BRANCH_ID
+WHERE OPDET.CUST_PAYOFF_ID > 0
+AND CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (YK.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY YK.GOODS_ID,PM.ZZ_NOTE_LARGE 
+) T
+GROUP BY T.GOODS_ID),
+YUK_AMBALAJ AS
+(SELECT YK.GOODS_ID,SUM(PD.GROSS_WEIGHT) BRUT_AGIRLIK
+FROM LMST_L_GOODS_PACK_DET PD
+LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = PD.GOODS_ID 
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = YK.BRANCH_ID
+WHERE CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (YK.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY YK.GOODS_ID)
+SELECT  US.US_NAME || ' ' || US.US_SURNAME KULLANICI,
+        PJ.PROJECT_CODE PROJE_KODU,
+        SK.TRANSPORT_NO SEVK_NO,
+        SK.DOC_DATE     SEVK_TARIHI,
+        YK.REFERENCE_NO YUK_NO,
+        YK.DOC_DATE     YUK_TARIHI,
+        NKS.NOKTA_SAYISI NOKTA_SAYISI,
+        TGD.TRAN_WAYBILL_DOC_NO SOZLESME_NO,
+        TGD.TRAN_WAYBILL_DOCDATE SOZLESME_TARIHI,
+        YCK.ENTITY_NAME MUSTERI_ADI, 
+        (CASE
+         WHEN YK.GOODS_STATE_ID = 3 THEN
+           'GİDİŞ YÜKÜ'
+         WHEN YK.GOODS_STATE_ID = 4 THEN
+           'DÖNÜŞ YÜKÜ'
+         ELSE
+           ' '
+       end) as SEFER_TURU,
+       (CASE WHEN YK.ULOAD_CITY_ID = YK.LOAD_CITY_ID THEN 
+                'ŞEHİRİÇİ' 
+              ELSE 
+                'ŞEHİRLERARASI' 
+        END) AS SEFER_TIPI,
+        TTYPE.DESCRIPTION as ARAC_TIPI,
+        VH.LICENSE_PLATE PLAKA,
+        CASE  
+          WHEN SK.ZZ_GUEST = 1 THEN
+             'Misafir Araç'
+          WHEN ED.OWNERSHIP_STATUS = 1 THEN
+            'Kurum Malı'
+          WHEN ED.OWNERSHIP_STATUS = 2 THEN
+            'Kiralık'
+          WHEN ED.OWNERSHIP_STATUS = 3 AND ED.ZZ_KM = 1 THEN
+            'KM Araç'  
+          WHEN ED.OWNERSHIP_STATUS = 3 THEN
+            'Tedarikçi'
+        END      PLAKA_MULKIYET,
+        EDCK.ENTITY_NAME PLAKA_CARI_ADI,
+        LD.NAME || ' ' || LD.SURNAME SURUCU_ADI,
+        LD.MPHONE_NUMBER_1           SURUCU_TEL,
+        LL.LOCATION_CODE YUKLEME_YER_KODU,
+        LL.DESCRIPTION   YUKLEME_YER_ADI,
+        LLC.CITY_NAME YUKLEME_SEHIR_ADI,
+        LLT.TOWN_NAME YUKLEME_ILCE_ADI,
+        YK.LOAD_ADDRESS YUKLEME_ADRESI,
+        UL.LOCATION_CODE BOSALTMA_YER_KODU,
+        UL.DESCRIPTION   BOSALTMA_YER_ADI,
+        ULC.CITY_NAME BOSALTMA_SEHIR_ADI,
+        ULT.TOWN_NAME BOSALTMA_ILCE_ADI,
+        YK.ULOAD_ADDRESS BOSALTMA_ADRESI,
+        GS.ORDER_GIVER  SIPARIS_VEREN,
+        GS.ORDER_RECEIVER SIPARIS_ALAN,
+        GS.ORDER_NO     SIPARIS_NO,
+        GS.ORDER_DATE   SIPARIS_TARIHI,
+        GS.ORDER_NOTES  SIPARIS_NOTLARI,
+        LCK.ENTITY_NAME GONDERICI_CARI_ADI,
+        UCK.ENTITY_NAME ALICI_CARI_ADI,        
+        YK.ZZ_MUSTERI_EVRAK_NO             MUSTERI_EVRAK_NO,
+        GT.GOODS_PRICE_TYPE_CODE YUK_FIYAT_TIP_KODU,
+        SK.END_KM VARIS_KM,
+        SK.RETURN_KM BOS_KM,
+        SK.ZZ_START_KM CIKIS_KM,
+        SKT.TRANSPORT_STATUS_CODE SEVK_DURUMU,  
+        (CASE WHEN (SELECT COUNT(*) FROM GNLD_UPLOAD_FILE A WHERE A.RELATION_OBJECT = 649146112 AND A.DOCUMENT_TYPE = 1 AND A.RELATION_ID = SK.TRANSPORT_ID) > 0 THEN
+          'Arşiv kaydı var'
+        ELSE
+          ''
+        END)  ARSIV_DURUMU,
+        ROUND((NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) / NVL(YS.YUK_ADEDI,1)),2) ALIS_TUTARI,
+        ROUND((NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0)  / NVL(YS.YUK_ADEDI,1)),2) ALIS_IADE_TUTARI,
+        ROUND(NVL(YFT.YUK_SATIS_FIYAT_TOPLAM,0),2) SATIS_TUTARI,
+        ROUND(NVL(YFT.YUK_SATIS_IADE_FIYAT_TOPLAM,0),2) SATIS_IADE_TUTARI,
+        ROUND((NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) - NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0)) / NVL(YS.YUK_ADEDI,1),2) TOPLAM_ALIS,
+        ROUND((NVL(YFT.YUK_SATIS_FIYAT_TOPLAM,0) - NVL(YFT.YUK_SATIS_IADE_FIYAT_TOPLAM,0)),2) TOPLAM_SATIS,        
+        ROUND((((NVL(YFT.YUK_SATIS_FIYAT_TOPLAM,0) - NVL(YFT.YUK_SATIS_IADE_FIYAT_TOPLAM,0)) ) - 
+        ((NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) - NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0)) / NVL(YS.YUK_ADEDI,1))),2) TOPLAM_KAR_ZARAR,
+        MH.MH_ACIKLAMA MUSTERI_HESAPLASMA_ACIKLAMA,
+        NVL(YK.GOODS_ID,0)     YUK_ID,
+        NVL(SK.TRANSPORT_ID,0) SEVK_ID,
+        NVL(YA.BRUT_AGIRLIK,0) BRUT_AGIRLIK,
+        MT.MAL_TIP MAL_TIP
+FROM LMST_L_GOODS YK
+LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD ON TGD.GOODS_ID = YK.GOODS_ID
+LEFT JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TGD.TRANSPORT_ID
+LEFT JOIN LMSD_L_TRANSPORT_STATUS SKT ON SKT.TRANSPORT_STATUS_ID = SK.TRANSPORT_STATUS_ID
+LEFT JOIN YUK_SAYISI YS ON YS.TRANSPORT_ID = SK.TRANSPORT_ID
+LEFT JOIN MAL_TIPI MT ON MT.GOODS_ID = YK.GOODS_ID
+LEFT JOIN USERS US ON US.US_ID = YK.CREATE_USER_ID
+------------PLAKA BİLGİSİ VE CARİSİNE AİT BİLGİ--------------------------------------------------------------------------
+LEFT JOIN LMSW_VIEW_TRANSPORT_UNITS TU ON SK.TRACTOR_UNIT_ID = TU.TRANSPORT_UNIT_ID AND SK.TRACTOR_MAPID = TU.MAPID
+LEFT JOIN FLMD_VEHICLE VH ON TU.TRANSPORT_TYPE = 1 AND TU.UNIT_ID = VH.VEHICLE_ID
+LEFT JOIN FLMD_VHC_ENTITY_DETAIL ED ON ED.VEHICLE_ID = VH.VEHICLE_ID and ED.START_DATE <= SK.DOC_DATE and ED.END_DATE >= SK.DOC_DATE
+LEFT JOIN FIND_ENTITY EDCK ON EDCK.ENTITY_ID = ED.ENTITY_ID
+LEFT JOIN FLMD_L_TRAILER_TYPE TTYPE ON TTYPE.TRAILER_TYPE_ID = VH.TRAILER_TYPE_ID
+------------------------------------------------------------------------------------------------------------------
+LEFT JOIN LMSD_L_DRIVER LD ON LD.DRIVER_ID = SK.DRIVER_ID
+LEFT JOIN LMSD_L_LOCATION LL ON LL.LOCATION_ID = YK.LOAD_LOCATION_ID
+LEFT JOIN GNLD_CITY LLC ON LLC.CITY_ID = YK.LOAD_CITY_ID
+LEFT JOIN GNLD_TOWN LLT ON LLT.TOWN_ID = YK.LOAD_TOWN_ID
+LEFT JOIN LMSD_L_LOCATION UL ON UL.LOCATION_ID = YK.ULOAD_LOCATION_ID
+LEFT JOIN GNLD_CITY ULC ON ULC.CITY_ID = YK.ULOAD_CITY_ID
+LEFT JOIN GNLD_TOWN ULT ON ULT.TOWN_ID = YK.ULOAD_TOWN_ID
+LEFT JOIN FIND_ENTITY LCK ON LCK.ENTITY_ID = YK.LOAD_L_ENTITY_ID
+LEFT JOIN FIND_ENTITY UCK ON UCK.ENTITY_ID = YK.ULOAD_L_ENTITY_ID
+LEFT JOIN FIND_ENTITY YCK ON YCK.ENTITY_ID = YK.CUSTOMER_ID
+LEFT JOIN LMST_L_GOODS_ORDER GS ON GS.GOODS_ORDER_ID = YK.GOODS_ORDER_ID
+LEFT JOIN LMSD_L_GOODSPRICE_TYPE GT ON GT.GOODS_PRICE_TYPE_ID = YK.GOODS_PRICE_TYPE_ID
+LEFT JOIN LMST_L_GOODS_TRANSPLAN_DET GTD ON GTD.GOODS_ID = YK.GOODS_ID
+LEFT JOIN MUSTERI_HESAPLASMA MH ON MH.GOODS_ID = YK.GOODS_ID
+LEFT JOIN YUK_AMBALAJ YA ON YA.GOODS_ID = YK.GOODS_ID
+----------------------------------NOKTA SAYISI-------------------------------------------------------------------
+LEFT JOIN (SELECT  GTD.GOODS_ID,
+        COUNT(DISTINCT(GR.LOCATION_ID)) NOKTA_SAYISI
+FROM LMST_L_GOODS_ROUTE GR
+LEFT JOIN LMST_L_GOODS_TRANSPLAN_DET GTD ON GTD.GOODS_TRANSPLAN_ID = GR.GOODS_TRANSPLAN_ID
+LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = GTD.GOODS_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = YK.BRANCH_ID
+WHERE GR.TRANSPORT_ROUTE_TYPE = 3
+AND CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (YK.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY GTD.GOODS_ID) NKS ON NKS.GOODS_ID = YK.GOODS_ID
+-----------------------------YÜK FİYAT TOPLAMI------------------------------------------------------------------------
+LEFT JOIN (SELECT  GOD.GOODS_ID,
+        SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (2,4) THEN
+                 GOD.AMT
+        ELSE
+                0
+        END) YUK_SATIS_FIYAT_TOPLAM,
+        SUM(CASE WHEN GOD.PURCHASE_SALES_TYPE IN (1,3) THEN
+                 GOD.AMT
+          ELSE
+                0
+          END) YUK_SATIS_IADE_FIYAT_TOPLAM     
+FROM LMST_L_GOODS_OP_DET GOD
+LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = GOD.GOODS_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = YK.BRANCH_ID
+WHERE CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (YK.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY GOD.GOODS_ID) YFT ON YFT.GOODS_ID = YK.GOODS_ID
+------------------------------------SEVK FIYAT TOPLAMI-----------------------------------------------------------------
+LEFT JOIN (SELECT  TOD.TRANSPORT_ID,
+        SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (1,3) THEN
+                 TOD.AMT
+        ELSE
+                 0
+        END) / NVL(YS.YUK_ADEDI,1) SEVK_ALIS_FIYAT_TOPLAM,
+        SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (2,4) THEN
+                 TOD.AMT
+          ELSE
+                 0
+          END) / NVL(YS.YUK_ADEDI,1) SEVK_ALIS_IADE_FIYAT_TOPLAM    
+FROM LMST_L_TRANS_OP_DETAIL TOD
+LEFT JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TOD.TRANSPORT_ID
+LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD ON TGD.TRANSPORT_ID = SK.TRANSPORT_ID
+LEFT JOIN LMST_L_GOODS YK ON YK.GOODS_ID = TGD.GOODS_ID
+LEFT JOIN YUK_SAYISI YS ON YS.TRANSPORT_ID = SK.TRANSPORT_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = SK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = SK.BRANCH_ID
+WHERE CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (SK.TRANSPORT_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@TransportNo@'))) OR '@TransportNo@' = 'null')
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY TOD.TRANSPORT_ID,NVL(YS.YUK_ADEDI,1)) SFT ON SFT.TRANSPORT_ID = SK.TRANSPORT_ID
+----------------------------------------------------------------------------------------------------------------
+LEFT JOIN LMSD_L_AGR_PROJ_TYPE PJ ON PJ.PROJECT_ID = YK.PROJECT_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = YK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = YK.BRANCH_ID
+WHERE (PJ.PROJECT_CODE IN (SELECT CODE FROM TABLE(RP_SPLIT('@ProjectCodes@'))) OR '@ProjectCodes@' = 'null')
+AND (VH.VEHICLE_CODE IN (SELECT CODE FROM TABLE(RP_SPLIT('@VehicleCode@'))) OR '@VehicleCode@' = 'null')
+AND (YK.REFERENCE_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@ReferenceNo@'))) OR '@ReferenceNo@' = 'null')
+AND (SK.TRANSPORT_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@TransportNo@'))) OR '@TransportNo@' = 'null')
+AND CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND YK.IS_DOOR_TO_DOOR = 0
+AND ((YK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (YK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+UNION ALL
+SELECT  US.US_NAME || ' ' || US.US_SURNAME KULLANICI,
+        PJ.PROJECT_CODE PROJE_KODU,
+        SK.TRANSPORT_NO SEVK_NO,
+        SK.DOC_DATE     SEVK_TARIHI,
+        NULL YUK_NO,
+        NULL     YUK_TARIHI,
+        0 NOKTA_SAYISI,
+        TGD.TRAN_WAYBILL_DOC_NO SOZLESME_NO,
+        TGD.TRAN_WAYBILL_DOCDATE SOZLESME_TARIHI,
+        NULL MUSTERI_ADI, 
+        NULL as SEFER_TURU,
+        NULL AS SEFER_TIPI,
+        TTYPE.DESCRIPTION as ARAC_TIPI,
+        VH.LICENSE_PLATE PLAKA,
+        CASE  
+          WHEN SK.ZZ_GUEST = 1 THEN
+             'Misafir Araç'
+          WHEN ED.OWNERSHIP_STATUS = 1 THEN
+            'Kurum Malı'
+          WHEN ED.OWNERSHIP_STATUS = 2 THEN
+            'Kiralık'
+          WHEN ED.OWNERSHIP_STATUS = 3 AND ED.ZZ_KM = 1 THEN
+            'KM Araç'  
+          WHEN ED.OWNERSHIP_STATUS = 3 THEN
+            'Tedarikçi'
+        END      PLAKA_MULKIYET,
+        EDCK.ENTITY_NAME PLAKA_CARI_ADI,
+        LD.NAME || ' ' || LD.SURNAME SURUCU_ADI,
+        LD.MPHONE_NUMBER_1           SURUCU_TEL,
+        NULL YUKLEME_YER_KODU,
+        NULL   YUKLEME_YER_ADI,
+        NULL YUKLEME_SEHIR_ADI,
+        NULL YUKLEME_ILCE_ADI,
+        NULL YUKLEME_ADRESI,
+        NULL BOSALTMA_YER_KODU,
+        NULL   BOSALTMA_YER_ADI,
+        NULL BOSALTMA_SEHIR_ADI,
+        NULL BOSALTMA_ILCE_ADI,
+        NULL BOSALTMA_ADRESI,
+        NULL  SIPARIS_VEREN,
+        NULL SIPARIS_ALAN,
+        NULL     SIPARIS_NO,
+        NULL   SIPARIS_TARIHI,
+        NULL  SIPARIS_NOTLARI,
+        NULL GONDERICI_CARI_ADI,
+        NULL ALICI_CARI_ADI,        
+        NULL             MUSTERI_EVRAK_NO,
+        NULL YUK_FIYAT_TIP_KODU,
+        SK.END_KM VARIS_KM,
+        SK.RETURN_KM BOS_KM,
+        SK.ZZ_START_KM CIKIS_KM,
+        SKT.TRANSPORT_STATUS_CODE SEVK_DURUMU,  
+        (CASE WHEN (SELECT COUNT(*) FROM GNLD_UPLOAD_FILE A WHERE A.RELATION_OBJECT = 649146112 AND A.DOCUMENT_TYPE = 1 AND A.RELATION_ID = SK.TRANSPORT_ID) > 0 THEN
+          'Arşiv kaydı var'
+        ELSE
+          ''
+        END)  ARSIV_DURUMU,
+        NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) ALIS_TUTARI,
+        NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0) ALIS_IADE_TUTARI,
+        0 SATIS_TUTARI,
+        0 SATIS_IADE_TUTARI,
+        (NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) - NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0)) TOPLAM_ALIS,
+        0 TOPLAM_SATIS,        
+        - 1 * (NVL(SFT.SEVK_ALIS_FIYAT_TOPLAM,0) - NVL(SFT.SEVK_ALIS_IADE_FIYAT_TOPLAM,0)) TOPLAM_KAR_ZARAR,
+       NULL,
+        0     YUK_ID,
+        NVL(SK.TRANSPORT_ID,0) SEVK_ID,
+        0 BRUT_AGIRLIK,
+        NULL MAL_TIP
+FROM LMST_L_TRANSPORT SK
+LEFT JOIN LMST_L_TRANS_GOODS_DETAIL TGD ON TGD.TRANSPORT_ID = SK.TRANSPORT_ID
+LEFT JOIN LMSD_L_TRANSPORT_STATUS SKT ON SKT.TRANSPORT_STATUS_ID = SK.TRANSPORT_STATUS_ID
+LEFT JOIN USERS US ON US.US_ID = SK.CREATE_USER_ID
+------------PLAKA BİLGİSİ VE CARİSİNE AİT BİLGİ--------------------------------------------------------------------------
+LEFT JOIN LMSW_VIEW_TRANSPORT_UNITS TU ON SK.TRACTOR_UNIT_ID = TU.TRANSPORT_UNIT_ID AND SK.TRACTOR_MAPID = TU.MAPID
+LEFT JOIN FLMD_VEHICLE VH ON TU.TRANSPORT_TYPE = 1 AND TU.UNIT_ID = VH.VEHICLE_ID
+LEFT JOIN FLMD_VHC_ENTITY_DETAIL ED ON ED.VEHICLE_ID = VH.VEHICLE_ID and ED.START_DATE <= SK.DOC_DATE and ED.END_DATE >= SK.DOC_DATE
+LEFT JOIN FIND_ENTITY EDCK ON EDCK.ENTITY_ID = ED.ENTITY_ID
+LEFT JOIN FLMD_L_TRAILER_TYPE TTYPE ON TTYPE.TRAILER_TYPE_ID = VH.TRAILER_TYPE_ID
+------------------------------------------------------------------------------------------------------------------
+LEFT JOIN LMSD_L_DRIVER LD ON LD.DRIVER_ID = SK.DRIVER_ID
+------------------------------------SEVK FIYAT TOPLAMI-----------------------------------------------------------------
+LEFT JOIN (SELECT  TOD.TRANSPORT_ID,
+        SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (1,3) THEN
+                 TOD.AMT
+        ELSE
+                 0
+        END) SEVK_ALIS_FIYAT_TOPLAM,
+        SUM(CASE WHEN TOD.PURCHASE_SALES_TYPE IN (2,4) THEN
+                 TOD.AMT
+          ELSE
+                 0
+          END) SEVK_ALIS_IADE_FIYAT_TOPLAM    
+FROM LMST_L_TRANS_OP_DETAIL TOD
+LEFT JOIN LMST_L_TRANSPORT SK ON SK.TRANSPORT_ID = TOD.TRANSPORT_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = SK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = SK.BRANCH_ID
+WHERE CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND (SK.TRANSPORT_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@TransportNo@'))) OR '@TransportNo@' = 'null')
+AND ((SK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (SK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))
+GROUP BY TOD.TRANSPORT_ID) SFT ON SFT.TRANSPORT_ID = SK.TRANSPORT_ID
+----------------------------------------------------------------------------------------------------------------
+LEFT JOIN LMSD_L_AGR_PROJ_TYPE PJ ON PJ.PROJECT_ID = SK.PROJECT_ID
+LEFT JOIN GNLD_COMPANY CO ON CO.CO_ID = SK.CO_ID
+LEFT JOIN GNLD_BRANCH  BR ON BR.BRANCH_ID = SK.BRANCH_ID
+WHERE (PJ.PROJECT_CODE IN (SELECT CODE FROM TABLE(RP_SPLIT('@ProjectCodes@'))) OR '@ProjectCodes@' = 'null')
+AND (VH.VEHICLE_CODE IN (SELECT CODE FROM TABLE(RP_SPLIT('@VehicleCode@'))) OR '@VehicleCode@' = 'null')
+AND (SK.TRANSPORT_NO IN (SELECT CODE FROM TABLE(RP_SPLIT('@TransportNo@'))) OR '@TransportNo@' = 'null')
+AND CO.CO_CODE = '@CoCode@'
+AND BR.BRANCH_CODE = '@BranchCodes@'
+AND TGD.GOODS_ID = 0
+AND ((SK.DOC_DATE >=(CASE '@DocDateF@' WHEN CHR(64) || 'DocDateF' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE 
+                               TO_DATE('@DocDateF@', 'DD.MM.YYYY') END) OR '@DocDateF@' = 'null') 
+AND (SK.DOC_DATE <= (CASE '@DocDateL@' WHEN CHR(64) || 'DocDateL' || CHR(64) THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') WHEN 'null' THEN 
+                               TO_DATE('01.01.0001', 'DD.MM.YYYY') ELSE  
+                               TO_DATE('@DocDateL@', 'DD.MM.YYYY') END) OR '@DocDateL@' = 'null'))

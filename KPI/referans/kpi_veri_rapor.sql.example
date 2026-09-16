@@ -1,0 +1,13 @@
+-- =============================================================================
+-- Uyumsoft VERİ sayfası SQL — LojistikYükSevkKalemRaporu (ERP'deki asıl rapor)
+-- =============================================================================
+--
+-- Bu dosya repoda kayıtlıdır; kod SQL metnine alan eklemez/çıkarmaz.
+-- kpi_veri.py çalıştırma anında yalnızca @...@ parametrelerini ayarlardan doldurur:
+--   @CoCode@         → ayarlar.CO_CODE
+--   @BranchCodes@    → ayarlar.BRANCH_CODE
+--   @DocDateF@       → ayarlar.KPI_BASLANGIC_TARIHI
+--   @DocDateL@       → ayarlar.KPI_BITIS_TARIHI
+--   @ReferenceNo@, @TransportNo@, @ProjectCodes@, @VehicleCode@ → null (filtre yok)
+--
+-- Güncel SQL: referans/kpi_veri_rapor.sql
