@@ -1,14 +1,18 @@
-# KPI modulu — GitHub'dan guncelle
+# KPI modulu — GitHubdan guncelle
 #
 # Normal guncelleme (mevcut sablon + ayarlar korunur):
 #   powershell -ExecutionPolicy Bypass -File kpi_guncelle.ps1
 #
-# Yeni formullu sablon + guncel ayar bayraklari (ilk gecis / Ağustos 2026+ sablon):
+# Yeni formullu sablon + guncel ayar bayraklari (ilk gecis / Agustos 2026+ sablon):
 #   powershell -ExecutionPolicy Bypass -File kpi_guncelle.ps1 -YeniSablon
+#
+# kpi_kur.bat ile ayni is (pip + bekleme):
+#   powershell -ExecutionPolicy Bypass -File kpi_guncelle.ps1 -KurModu
 #
 param(
     [string]$Branch = "cursor/ozet-manuel-tablo-guncelle-0bd3",
-    [switch]$YeniSablon
+    [switch]$YeniSablon,
+    [switch]$KurModu
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +27,17 @@ if (Test-Path (Join-Path $ScriptDir "kpi_rapor_olustur.py")) {
 $Base = Split-Path -Parent $KpiDir
 $Temp = Join-Path $Base "izlog-kpi-temp"
 $Repo = "https://github.com/akinci79-dotcom/izlog-erp-otomasyon.git"
+
+$SablonYolu = Join-Path $KpiDir "referans\kpi_sablon.xlsx"
+if (-not $YeniSablon) {
+    if (-not (Test-Path $SablonYolu)) {
+        Write-Host "Sablon bulunamadi - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
+        $YeniSablon = $true
+    } elseif ((Get-Item $SablonYolu).Length -lt 900000) {
+        Write-Host "Eski sablon algilandi - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
+        $YeniSablon = $true
+    }
+}
 
 Write-Host ""
 Write-Host "=== IZLOG KPI GUNCELLEME ===" -ForegroundColor Cyan
@@ -101,7 +116,7 @@ if (Test-Path $AyarlarYedek) {
     Remove-Item $AyarlarYedek -Force
 } elseif (-not (Test-Path (Join-Path $KpiDir "ayarlar.py"))) {
     Copy-Item (Join-Path $KpiDir "ayarlar.example.py") (Join-Path $KpiDir "ayarlar.py") -Force
-    Write-Host "  ayarlar.py olusturuldu (ayarlar.example.py'den). DB sifresini doldurun." -ForegroundColor Yellow
+    Write-Host "  ayarlar.py olusturuldu (ayarlar.example.py dosyasindan). DB sifresini doldurun." -ForegroundColor Yellow
 }
 
 if ($YeniSablon) {
@@ -158,3 +173,16 @@ Write-Host ""
 Write-Host "Basarili ciktida su satiri gormelisiniz:"
 Write-Host "  BASARILI: KPI sablon raporu -> ..."
 Write-Host ""
+
+if ($KurModu) {
+    Write-Host "Python paketleri kontrol ediliyor..." -ForegroundColor Yellow
+    pip install -r requirements.txt -q
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "pip uyarisi: paket kurulumu basarisiz olabilir." -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "=== TAMAMLANDI ===" -ForegroundColor Green
+    Write-Host "Sonraki adim: kpi_rapor_olustur.bat veya python kpi_rapor_olustur.py"
+    Write-Host ""
+    Read-Host "Kapatmak icin Enter tusuna basin"
+}
