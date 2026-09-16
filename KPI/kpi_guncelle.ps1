@@ -177,6 +177,7 @@ if ($YeniSablon) {
                 $icerik += "`n$anahtar = $($bayraklar[$anahtar])`n"
             }
         }
+        $icerik = $icerik -replace '(?m)^\s*KPI_RAPOR_DOSYASI\s*=\s*["'']kpi_rapor\.xls[xm]["'']\s*\r?\n', ''
         Set-Content -Path $AyarlarDosya -Value $icerik -Encoding UTF8 -NoNewline
         Write-Host "  ayarlar.py: formullu sablon icin 3 bayrak False yapildi." -ForegroundColor Green
         Write-Host "    KPI_ZARAR_DETAY_GUNCELLE = False"

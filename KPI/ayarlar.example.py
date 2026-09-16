@@ -54,8 +54,11 @@ KPI_ALIS_SUTUN_HARFI = "C"
 KPI_ALIS_SUTUN_GENISLIK = 28
 # İsteğe bağlı: KPI_SUTUN_GENISLIK = {"D": 26, "E": 26}
 
-# Çıktı dosyası — boş bırakılırsa şablon uzantısı kullanılır (.xlsx veya .xlsm)
-# KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
+# Çıktı dosyası — varsayılan: KPI_DONEM'den otomatik (örn.
+# "9- Eylül 2026 İzlog Lojistik Raporları.xlsx"). Sabit isim istiyorsanız:
+# KPI_RAPOR_DOSYASI = "ozel_rapor.xlsx"
+# NOT: KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx" eski sabittir; otomatik adlandirma
+# icin tanimlamayin veya satiri silin.
 
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}

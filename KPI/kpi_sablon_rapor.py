@@ -155,12 +155,15 @@ def _cikti_yolu(sablon: Path | None = None, bas: str = "", bit: str = "") -> Pat
     """Çıktı dosyasının yolu. `KPI_RAPOR_DOSYASI` ayarlar.py'de tanımlıysa
     [kullanıcı isteğiyle KALDIRILMADI — elle sabit bir isim isteyen için hâlâ
     öncelikli] o kullanılır. Aksi halde [kullanıcı isteği]: dosya adı rapor
-    dönemine göre OTOMATİK üretilir — örn. tek ay için 'Ağustos 2026 İzlog
-    Lojistik Raporları.xlsx', tam yıl için '2026 İzlog Lojistik Raporları.xlsx',
-    aksi (aralık) durumda '01.08.2026 – 31.08.2026 İzlog Lojistik
-    Raporları.xlsx'. `bas`/`bit` verilmezse (örn. çok eski bir çağrı yeri)
-    eski sabit 'kpi_rapor.xlsx' adına düşer."""
+    dönemine göre OTOMATİK üretilir — örn. tek ay için
+    '8- Ağustos 2026 İzlog Lojistik Raporları.xlsx', tam yıl için
+    '2026 İzlog Lojistik Raporları.xlsx', aksi (aralık) durumda
+    '01.08.2026 – 31.08.2026 İzlog Lojistik Raporları.xlsx'. `bas`/`bit`
+    verilmezse (örn. çok eski bir çağrı yeri) eski sabit 'kpi_rapor.xlsx'
+    adına düşer."""
     dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", None)
+    if dosya and Path(str(dosya)).name.lower() in {"kpi_rapor.xlsx", "kpi_rapor.xlsm"}:
+        dosya = None
     if dosya:
         yol = Path(dosya)
         if yol.is_absolute():
@@ -1360,7 +1363,7 @@ def _donem_etiketi(bas: str, bit: str) -> str:
 
     son_gun = calendar.monthrange(bas_d.year, bas_d.month)[1]
     if bas_d.day == 1 and bit_d.day == son_gun and bas_d.month == bit_d.month and bas_d.year == bit_d.year:
-        return f"{ay_adlari[bas_d.month - 1]} {bas_d.year}"
+        return f"{bas_d.month}- {ay_adlari[bas_d.month - 1]} {bas_d.year}"
 
     return f"{bas} – {bit}"
 
