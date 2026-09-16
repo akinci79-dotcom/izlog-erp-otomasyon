@@ -536,6 +536,65 @@ def _com_sayfaya_yaz(
         return 0, esleme, eslesmeyen, kolon_sayisi, tablo_sol
 
     son_satir = baslik_satiri + len(matris)
+
+    # ⚠️ KÖK NEDEN DÜZELTMESİ — "Filo Detay'daki 'Genel Toplam' satırının
+    # üzerine yazılması" [kullanıcı ekran görüntüsüyle bildirdi]: `lo.Resize()`
+    # tabloyu DOĞRUDAN yeni (daha büyük) bir aralığa "yeniden boyutlandırır" —
+    # gerçek bir satır EKLEMEZ/kaydırmaz, sadece tablonun kapladığı ALANI
+    # yeniden tanımlar (bilinen Excel/VBA ListObject.Resize davranışı). Bu ay
+    # gelen satır sayısı (`len(matris)`) önceki kapasiteyi (`lo.ListRows.Count`
+    # — native Toplam Satırını SAYMAZ, bkz. Zarar Detay'daki aynı ders) aşarsa,
+    # eski Resize çağrısı tablonun eski sınırının HEMEN ALTINDA fiziksel olarak
+    # var olan her ne varsa (ör. şablonda elle konmuş bir 'Genel Toplam' satırı)
+    # tabloya "yutuyordu" ve hemen ardından `_com_araliga_yaz` bu YENİ TÜM
+    # aralığı toplu olarak gerçek veriyle EZİYORDU — eski içerik kalıcı olarak
+    # SİLİNİYORDU. Düzeltme: Resize'dan ÖNCE, eksik kadar satırı GERÇEK bir
+    # satır ekleme işlemiyle (bkz. `_com_tablo_satir_ekle` — Zarar Detay'daki
+    # KANITLANMIŞ desenle PAYLAŞILAN yardımcı) tablonun mevcut son veri
+    # satırının TAM ÜZERİNE ekliyoruz; bu, altındaki (varsa) 'Genel Toplam'
+    # gibi içeriği KAYBOLMADAN aşağı kaydırır. Ardından Resize + toplu yazım
+    # artık gerçekten "boş" satırların üzerine yazılıyor.
+    #
+    # NOT: Bu mantık VERİ sayfası için de (aynı fonksiyonu paylaştığı için)
+    # otomatik uygulanır — VERİ'nin altında korunması gereken bir içerik
+    # yoksa (genelde yok) satır ekleme ZARARSIZDIR (sadece kapasite gerçekten
+    # yetersiz kaldığında devreye girer). Tablo KÜÇÜLÜRSE (bu ay geçen aydan
+    # az satır) bu blok hiç tetiklenmez — eski Resize davranışı (kapasite
+    # dışında kalan eski satırlar fiziksel olarak silinmeden sayfada kalır)
+    # değişmeden korunur, bu senaryo bu düzeltmenin kapsamı DIŞINDA.
+    if lo is not None:
+        try:
+            mevcut_veri_satir_sayisi: int | None = int(lo.ListRows.Count)
+        except Exception:
+            mevcut_veri_satir_sayisi = None
+
+        if mevcut_veri_satir_sayisi is not None and len(matris) > mevcut_veri_satir_sayisi:
+            eksik = len(matris) - mevcut_veri_satir_sayisi
+            if eksik > _TABLO_OTOMATIK_SATIR_EKLEME_MAX:
+                _progress(
+                    f"  Uyarı: {sheet.Name} sayfasında {eksik} satır eklenmesi "
+                    f"gerekiyor — güvenlik sınırını ({_TABLO_OTOMATIK_SATIR_EKLEME_MAX}) "
+                    "aşıyor, otomatik satır ekleme ATLANDI (Resize altındaki içeriğin "
+                    "üzerine yazabilir, elle kontrol edin)."
+                )
+            else:
+                eski_veri_son_satir = baslik_satiri + mevcut_veri_satir_sayisi
+                _progress(
+                    f"  [Excel] {sheet.Name}: tablo kapasitesi yetersiz "
+                    f"({mevcut_veri_satir_sayisi} satır var, {len(matris)} gerekiyor) — "
+                    f"{eksik} satır otomatik ekleniyor (altındaki içerik korunacak)..."
+                )
+                try:
+                    _com_tablo_satir_ekle(
+                        sheet, lo, sheet.Name, baslik_satiri + 1, eski_veri_son_satir, eksik
+                    )
+                except Exception as exc:
+                    _progress(
+                        f"  Uyarı: {sheet.Name} sayfasında otomatik satır ekleme "
+                        f"başarısız oldu ({exc}) — tablo doğrudan Resize edilecek, "
+                        "altındaki içerik (varsa) üzerine yazılabilir."
+                    )
+
     hedef = sheet.Range(
         sheet.Cells(baslik_satiri + 1, tablo_sol),
         sheet.Cells(son_satir, tablo_sag),
@@ -815,7 +874,62 @@ _ZARAR_KIRALIK_TABLO_ADI_VARSAYILAN = "ZararKiralik"
 # döngü riski yok (tek seferlik bulk Insert), ama beklenmedik derecede büyük
 # (muhtemelen bir hesaplama hatasından kaynaklanan) bir istek varsa körü körüne
 # binlerce satır eklemek yerine net bir hata ile durup elle kontrole yönlendirir.
-_ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME = 20000
+# Zarar Detay VE VERİ/Filo Detay (_com_sayfaya_yaz) otomatik satır ekleme
+# mantığı bu ORTAK sınırı paylaşır (bkz. _com_tablo_satir_ekle).
+_TABLO_OTOMATIK_SATIR_EKLEME_MAX = 20000
+
+
+def _com_tablo_satir_ekle(
+    sheet,
+    lo,
+    tablo_adi: str,
+    veri_ilk_satir: int,
+    veri_son_satir: int,
+    eksik: int,
+) -> None:
+    """`eksik` adet GERÇEK satırı, tablonun mevcut SON VERİ satırının
+    ('veri_son_satir') TAM ÜZERİNE ekler — bu, Excel'in "bir aralığın İÇİNE
+    satır eklenirse ona bakan içerik/formüller de otomatik genişler/kayar,
+    aralığın TAM ALTINA eklenirse kaymaz" kuralını tetikler: tablonun hemen
+    ALTINDA fiziksel olarak var olan herhangi bir içerik (örn. bir 'Genel
+    Toplam' satırı, bir SUM formülü) KAYBOLMAZ, sadece `eksik` satır kadar
+    aşağı kayar.
+
+    Önce TEK bir bulk `sheet.Rows(...).Insert()` denenir (performans — `N`
+    satır gerekiyorsa `N` kere ayrı `Insert()`/`ListRows.Add()` çağrısı
+    YAPILMAZ, bkz. bu dosyadaki "hücre hücre yazma donması" dersi). Bu
+    başarısız olursa (örn. korumalı sayfa, birleştirilmiş hücre, beklenmedik
+    bir şablon durumu) Excel'in Tablo-farkında satır ekleme API'sine
+    (`lo.ListRows.Add(Position=..., AlwaysInsert=True)`, UI'daki "Tablo
+    Satırlarını Üstte Ekle" ile birebir aynı davranış) düşer. İkisi de
+    başarısız olursa iki hata mesajı birleştirilip `RuntimeError` fırlatılır.
+
+    Bu fonksiyon önceden SADECE Zarar Detay'a özgü `_com_zarar_detay_
+    kapasite_arttir` içinde vardı; artık VERİ/Filo Detay'ı yazan
+    `_com_sayfaya_yaz` ile de PAYLAŞILIYOR (kod tekrarını önlemek için buraya
+    çıkarıldı) — Zarar Detay tarafı bu satır ekleme adımından SONRA ayrıca
+    kendine özgü formül kopyalama + 'Ara Toplam' doğrulama adımlarını yapmaya
+    devam ediyor (bkz. `_com_zarar_detay_kapasite_arttir`).
+    """
+    if eksik <= 0:
+        return
+    try:
+        sheet.Rows(f"{veri_son_satir}:{veri_son_satir + eksik - 1}").Insert()
+        return
+    except Exception as ilk_hata:
+        try:
+            konum = veri_son_satir - veri_ilk_satir + 1
+            for _ in range(eksik):
+                lo.ListRows.Add(Position=konum, AlwaysInsert=True)
+        except Exception as ikinci_hata:
+            raise RuntimeError(
+                f"satır ekleme (Rows.Insert) başarısız: {ilk_hata}; alternatif "
+                f"yöntem (ListRows.Add) da başarısız: {ikinci_hata}"
+            ) from ikinci_hata
+        _progress(
+            f"  [Excel] {tablo_adi}: Rows.Insert başarısız oldu ({ilk_hata}), "
+            f"alternatif yöntemle (ListRows.Add) {eksik} satır eklendi."
+        )
 
 
 def _com_zarar_detay_ara_toplam_dogrula_ve_duzelt(
@@ -970,10 +1084,10 @@ def _com_zarar_detay_kapasite_arttir(
     if eksik <= 0:
         return kapasite, veri_son_satir
 
-    if eksik > _ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME:
+    if eksik > _TABLO_OTOMATIK_SATIR_EKLEME_MAX:
         raise RuntimeError(
             f"{eksik} satır isteniyor — güvenlik sınırını "
-            f"({_ZARAR_DETAY_MAX_OTOMATIK_SATIR_EKLEME}) aşıyor, beklenmedik "
+            f"({_TABLO_OTOMATIK_SATIR_EKLEME_MAX}) aşıyor, beklenmedik "
             "derecede büyük bir sıçrama görünüyor, elle kontrol edin."
         )
 
@@ -988,39 +1102,9 @@ def _com_zarar_detay_kapasite_arttir(
     kaynak_satir = veri_ilk_satir
     eski_veri_son_satir = veri_son_satir
 
-    # TEK bir Insert() çağrısıyla `eksik` satırı, mevcut son veri satırının TAM
-    # ÜZERİNE ekle (yukarıdaki docstring'deki "aralık içine ekleme" kuralı için).
-    # `sheet.Rows(...)` (EntireRow, TAM satır aralığı) kullanılıyor — sadece
-    # belirli sütunları kapsayan bir Range'e Insert çağırmak Excel'in Shift
-    # yönünü otomatik tahmin etmesini bazı durumlarda başarısız kılabiliyor;
-    # EntireRow bu belirsizliği tamamen ortadan kaldırıyor.
-    try:
-        sheet.Rows(f"{veri_son_satir}:{veri_son_satir + eksik - 1}").Insert()
-    except Exception as ilk_hata:
-        # GÜVENLİK AĞI [WebSearch ile teyit edilen ShowTotals düzeltmesine
-        # RAĞMEN beklenmedik bir Excel/şablon durumu için]: `Rows.Insert`
-        # yine de başarısız olursa, Excel'in kendi Tablo-farkında satır
-        # ekleme API'sine (`ListRows.Add`, UI'daki "Tablo Satırlarını Üstte
-        # Ekle" ile birebir aynı davranış — `AlwaysInsert=True` altındaki
-        # her şeyi aşağı kaydırır) düş. `Position`, eski son veri satırının
-        # ListRows'taki (1-tabanlı, başlık HARİÇ) konumuna sabitleniyor ki
-        # `eksik` adet yeni satır TAM ANA Insert() yolunun bıraktığı yere
-        # (eski son satırın YERİNE, eski veriyi aşağı iterek) eklensin —
-        # aşağıdaki formül kopyalama adımının satır aralığı beklentisiyle
-        # birebir uyumlu kalsın.
-        try:
-            konum = veri_son_satir - veri_ilk_satir + 1
-            for _ in range(eksik):
-                lo.ListRows.Add(Position=konum, AlwaysInsert=True)
-        except Exception as ikinci_hata:
-            raise RuntimeError(
-                f"satır ekleme (Rows.Insert) başarısız: {ilk_hata}; alternatif "
-                f"yöntem (ListRows.Add) da başarısız: {ikinci_hata}"
-            ) from ikinci_hata
-        _progress(
-            f"  [Excel] {tablo_adi}: Rows.Insert başarısız oldu ({ilk_hata}), "
-            f"alternatif yöntemle (ListRows.Add) {eksik} satır eklendi."
-        )
+    # Satır ekleme (TEK bulk Insert(), başarısız olursa ListRows.Add yedeği) —
+    # bkz. `_com_tablo_satir_ekle` (VERİ/Filo Detay ile PAYLAŞILAN yardımcı).
+    _com_tablo_satir_ekle(sheet, lo, tablo_adi, veri_ilk_satir, veri_son_satir, eksik)
 
     yeni_veri_son_satir = veri_son_satir + eksik
     yeni_kapasite = kapasite + eksik

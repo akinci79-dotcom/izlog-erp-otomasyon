@@ -181,6 +181,36 @@ raporun uyarı mesajında bu belirtilir) geri dönülür; rapor yine de başarı
 konsol logundaki hata mesajına bakıp tabloyu Excel'de elle büyütmeniz gerekebilir — ama normal
 şartlarda bu hiç gerekmemeli.
 
+### VERİ / Filo Detay sayfaları da artık kapasiteye göre otomatik büyüyor (altındaki içerik korunur)
+
+**Geçmişte olan sorun:** VERİ ve Filo Detay sayfalarına yazan `_com_sayfaya_yaz` fonksiyonu, tablonun
+sınırını `ListObject.Resize` ile doğrudan büyütüyordu. `Resize` gerçek bir satır **eklemez/kaydırmaz** —
+sadece tablonun kapladığı alanı yeniden tanımlar. Bu ay gelen araç/sevk satırı sayısı önceki ay
+kaydedilmiş kapasiteyi aşarsa (ör. Filo Detay'da 30 → 38 araca çıkması), tablonun eski sınırının
+**hemen altında** fiziksel olarak var olan herhangi bir içerik (ör. şablonda elle konmuş bir
+**"Genel Toplam"** satırı) tabloya "yutuluyor" ve hemen ardından gerçek veriyle **üzerine yazılıyordu**
+— bu, "Filo Detay sayfasını da bozmuş, genişletmek yerine toplam satırına bilgi basmış" şeklinde
+bildirilen sorunun kök nedeniydi.
+
+**Düzeltme:** Artık `_com_sayfaya_yaz`, `Resize` çağırmadan ÖNCE yazılacak satır sayısını
+(`ListObject.ListRows.Count` — native Toplam Satırını saymaz) mevcut kapasiteyle karşılaştırıyor;
+kapasite yetersizse (Zarar Detay'daki KANITLANMIŞ desenle **paylaşılan** `_com_tablo_satir_ekle`
+yardımcısıyla) eksik kadar satırı gerçek bir Excel satır ekleme işlemiyle (`Rows.Insert`, başarısız
+olursa `ListRows.Add(AlwaysInsert=True)` yedeği) tablonun mevcut son veri satırının tam üzerine ekler.
+Bu, tablonun **altındaki** her ne varsa (Genel Toplam satırı dahil) **kaybolmadan aşağı kaymasını**
+sağlar; ancak SONRA `Resize` + toplu veri yazımı yapılır, artık gerçekten "boş" satırların üzerine.
+
+Bu mantık VERİ sayfası için de otomatik uygulanır (aynı fonksiyonu paylaştığı için) — VERİ'nin altında
+korunması gereken bir içerik yoksa satır ekleme zararsızdır (sadece kapasite gerçekten yetersiz
+kaldığında devreye girer). Tablo **küçülürse** (bu ay geçen aydan az satır) bu mantık hiç tetiklenmez,
+eski `Resize` davranışı değişmeden kalır.
+
+Konsolda böyle bir büyütme olduğunda (Zarar Detay'dakine benzer) şu satırı görürsünüz, bu normaldir:
+
+```
+[Excel] Filo Detay: tablo kapasitesi yetersiz (30 satır var, 38 gerekiyor) — 8 satır otomatik ekleniyor (altındaki içerik korunacak)...
+```
+
 ## Eski analiz raporu (isteğe bağlı)
 
 ```powershell
