@@ -219,10 +219,11 @@ birebir bu genişliklerle açılır. Birden fazla sayfa için sözlüğe ek sayf
 
 Personel ERP'ye veri girerken bazı alanları atlayabiliyor; bu durumda pivot tablolarda
 "(boş)" diye bir kategori oluşuyor. Otomasyon, VERİ Oracle'dan çekildikten SONRA (SQL'e
-dokunmadan) şu iki alanı varsayılan bir değerle dolduruyor:
+dokunmadan) şu alanları varsayılan bir değerle dolduruyor:
 
 - **MÜLKİYET** (VERİ sayfası Z sütunu) boşsa → **Tedarikçi**
 - **Proje Kodu = "Konya"** VE **Yük Fiyat Tipi Kodu** (VERİ sayfası K sütunu) boşsa → **ŞARKÜTERİ**
+- **Araç Tipi** (VERİ sayfası X sütunu) boşsa → **Tır Frigorifik**
 
 `ayarlar.py` içinde ayarlanabilir:
 
@@ -230,6 +231,7 @@ dokunmadan) şu iki alanı varsayılan bir değerle dolduruyor:
 KPI_BOS_ALAN_VARSAYILARI = True                       # tamamen kapatmak için False
 KPI_MULKIYET_BOS_VARSAYILAN = "Tedarikçi"
 KPI_KONYA_YUK_FIYAT_TIPI_BOS_VARSAYILAN = "ŞARKÜTERİ"
+KPI_ARAC_TIPI_BOS_VARSAYILAN = "Tır Frigorifik"
 ```
 
 ## Sorun giderme

@@ -144,6 +144,10 @@ def _varsayilanlari_uygula(satirlar: list[dict[str, Any]]) -> list[dict[str, Any
     - Proje Kodu 'Konya' VE Yük Fiyat Tipi Kodu (YUK_FIYAT_TIP_KODU) boşsa
       -> 'ŞARKÜTERİ'. Konya şubesinin ağırlıklı kargo kategorisi bu olduğu
       için personel bu alanı atladığında varsayılan olarak bu kullanılıyor.
+    - Araç Tipi (ARAC_TIPI, Excel VERİ sayfasında X sütunu) boşsa -> 'Tır
+      Frigorifik' [kullanıcı isteğiyle eklendi]. Filonun ağırlıklı araç tipi
+      bu olduğu için personel bu alanı atladığında varsayılan olarak bu
+      kullanılıyor.
     """
     if getattr(ayarlar, "KPI_BOS_ALAN_VARSAYILARI", True) is False:
         return satirlar
@@ -152,6 +156,7 @@ def _varsayilanlari_uygula(satirlar: list[dict[str, Any]]) -> list[dict[str, Any
     konya_fiyat_tipi_varsayilan = getattr(
         ayarlar, "KPI_KONYA_YUK_FIYAT_TIPI_BOS_VARSAYILAN", "ŞARKÜTERİ"
     )
+    arac_tipi_varsayilan = getattr(ayarlar, "KPI_ARAC_TIPI_BOS_VARSAYILAN", "Tır Frigorifik")
 
     for satir in satirlar:
         if "PLAKA_MULKIYET" in satir and _bos_mu(satir.get("PLAKA_MULKIYET")):
@@ -164,6 +169,9 @@ def _varsayilanlari_uygula(satirlar: list[dict[str, Any]]) -> list[dict[str, Any
             and _bos_mu(satir.get("YUK_FIYAT_TIP_KODU"))
         ):
             satir["YUK_FIYAT_TIP_KODU"] = konya_fiyat_tipi_varsayilan
+
+        if "ARAC_TIPI" in satir and _bos_mu(satir.get("ARAC_TIPI")):
+            satir["ARAC_TIPI"] = arac_tipi_varsayilan
 
     return satirlar
 

@@ -90,6 +90,8 @@ KPI_BOS_ALAN_VARSAYILARI = True
 KPI_MULKIYET_BOS_VARSAYILAN = "Tedarikçi"
 # Proje Kodu "Konya" VE Yük Fiyat Tipi Kodu (K sütunu) boşsa:
 KPI_KONYA_YUK_FIYAT_TIPI_BOS_VARSAYILAN = "ŞARKÜTERİ"
+# Araç Tipi (X sütunu) boşsa:
+KPI_ARAC_TIPI_BOS_VARSAYILAN = "Tır Frigorifik"
 
 # Kapıdan kapıya yükleri hariç tut (rapor SQL'inde IS_DOOR_TO_DOOR = 0)
 KPI_KAPI_KAPI_HARIC = True
