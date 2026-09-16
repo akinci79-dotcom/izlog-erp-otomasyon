@@ -1,0 +1,4 @@
+# Repodaki kpi_sablon.xlsx surumu — kpi_guncelle.ps1 karsilastirmasi icin
+# Sablon degistiginde bu dosyayi da guncelleyin (kpi_sablon_surumu_guncelle.py)
+size=1249238
+sha256=a047d916721aee1011c2602d6fad72c4cea45f701f1dc4f0a63ff32e25f64b05

@@ -17,6 +17,33 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-SablonSurumu {
+    param([string]$Klasor)
+    $dosya = Join-Path $Klasor "referans\sablon_surumu.txt"
+    if (-not (Test-Path $dosya)) { return $null }
+    $size = $null
+    $sha256 = $null
+    foreach ($line in Get-Content $dosya) {
+        if ($line -match "^size=(\d+)$") { $size = [long]$matches[1] }
+        if ($line -match "^sha256=([0-9a-fA-F]+)$") { $sha256 = $matches[1].ToLower() }
+    }
+    if ($null -eq $size -or $null -eq $sha256) { return $null }
+    return @{ Size = $size; Sha256 = $sha256 }
+}
+
+function Test-SablonRepodaGuncel {
+    param(
+        [string]$SablonYolu,
+        $Beklenen
+    )
+    if ($null -eq $Beklenen) { return $false }
+    if (-not (Test-Path $SablonYolu)) { return $false }
+    $dosya = Get-Item $SablonYolu
+    if ($dosya.Length -ne $Beklenen.Size) { return $false }
+    $hash = (Get-FileHash -Path $SablonYolu -Algorithm SHA256).Hash.ToLower()
+    return ($hash -eq $Beklenen.Sha256)
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (Test-Path (Join-Path $ScriptDir "kpi_rapor_olustur.py")) {
     $KpiDir = $ScriptDir
@@ -27,27 +54,12 @@ if (Test-Path (Join-Path $ScriptDir "kpi_rapor_olustur.py")) {
 $Base = Split-Path -Parent $KpiDir
 $Temp = Join-Path $Base "izlog-kpi-temp"
 $Repo = "https://github.com/akinci79-dotcom/izlog-erp-otomasyon.git"
-
 $SablonYolu = Join-Path $KpiDir "referans\kpi_sablon.xlsx"
-if (-not $YeniSablon) {
-    if (-not (Test-Path $SablonYolu)) {
-        Write-Host "Sablon bulunamadi - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
-        $YeniSablon = $true
-    } elseif ((Get-Item $SablonYolu).Length -lt 900000) {
-        Write-Host "Eski sablon algilandi - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
-        $YeniSablon = $true
-    }
-}
 
 Write-Host ""
 Write-Host "=== IZLOG KPI GUNCELLEME ===" -ForegroundColor Cyan
 Write-Host "Hedef : $KpiDir"
 Write-Host "Branch: $Branch"
-if ($YeniSablon) {
-    Write-Host "Mod   : YeniSablon (repodaki kpi_sablon.xlsx + ayar bayraklari guncellenir)" -ForegroundColor Yellow
-} else {
-    Write-Host "Mod   : Standart (ayarlar.py + kpi_sablon.xlsx korunur)"
-}
 Write-Host ""
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -62,6 +74,29 @@ $Kaynak = Join-Path $Temp "KPI"
 if (-not (Test-Path $Kaynak)) {
     throw "Klonlanan repoda KPI klasoru yok: $Kaynak"
 }
+
+$RepoSablonSurumu = Get-SablonSurumu -Klasor $Kaynak
+if (-not $YeniSablon) {
+    if (-not (Test-SablonRepodaGuncel -SablonYolu $SablonYolu -Beklenen $RepoSablonSurumu)) {
+        if ($null -eq $RepoSablonSurumu) {
+            Write-Host "sablon_surumu.txt yok - eski sablon boyutu kontrolu yapiliyor." -ForegroundColor Yellow
+            if (-not (Test-Path $SablonYolu) -or ((Get-Item $SablonYolu).Length -lt 900000)) {
+                Write-Host "Eski veya eksik sablon - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
+                $YeniSablon = $true
+            }
+        } else {
+            Write-Host "Repodaki sablon surumu ile yerel dosya farkli - YeniSablon modu otomatik acildi." -ForegroundColor Yellow
+            $YeniSablon = $true
+        }
+    }
+}
+
+if ($YeniSablon) {
+    Write-Host "Mod   : YeniSablon (repodaki kpi_sablon.xlsx + ayar bayraklari guncellenir)" -ForegroundColor Yellow
+} else {
+    Write-Host "Mod   : Standart (ayarlar.py + kpi_sablon.xlsx korunur)"
+}
+Write-Host ""
 
 New-Item -ItemType Directory -Force -Path $KpiDir | Out-Null
 
