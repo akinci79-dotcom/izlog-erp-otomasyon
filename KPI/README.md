@@ -281,3 +281,20 @@ kaynaklanıyordu. Güncel kod artık (1) hedef hücreleri veri yazılmadan ÖNCE
 `NumberFormatLocal` ("gg.aa.yyyy") olarak biçimi uyguluyor ve sonucu doğruluyor. Rapor sonunda hâlâ
 bozuk görünüyorsa konsoldaki `Uyarı: ... tarih biçimi doğrulanamadı` satırını arayın — hangi kolonun
 sorunlu olduğunu doğrudan gösterir.
+
+**"Uyarı: ... tarih biçimi doğrulanamadı" — TÜM tarih sütunları AYNI ANDA başarısız görünüyor
+(veri doğru ama uyarı çıkıyor):** Bu, [WebSearch ile teyit edilen] bilinen bir Excel COM
+tuhaflığından kaynaklanan bir **YANLIŞ ALARM** idi, artık düzeltildi. Microsoft'un dokümantasyonu
+`.NumberFormat`'ın locale-bağımsız olacağını (her zaman `dd`/`mm`/`yyyy` gibi İngilizce kodlarla
+döneceğini) söylüyor, ama harici bir COM istemcisinden (bu projedeki Python/pywin32 gibi) sürülen
+otomasyonda, özellikle Excel arayüz dili Türkçe olduğunda, bu okuma bazen Türkçeleştirilmiş bir
+karşılığı (`gg`/`aa`/`yyyy`) döndürüyor. Eski doğrulama SADECE literal `"dd.mm.yyyy"` dizisine tam
+eşitlik arıyordu; format GERÇEKTE doğru uygulanmış olsa bile (Excel'de doğru görünüyor) bu Türkçe
+varyant döndüğünde HER ZAMAN "başarısız" sanılıyordu — 4 farklı tarih sütununun HEPSİNİN TEK SEFERDE
+başarısız olması da (veri/hücre bazlı bir sorun değil, doğrulama mantığı hatası olduğu için) bu
+teoriyle uyumluydu. Doğrulama artık `.NumberFormat`/`.NumberFormatLocal`'ın "gün.ay.yıl" YAPISINA
+uyup uymadığını kontrol ediyor (İngilizce **veya** Türkçe kod harfleri, `.`/`/`/`-` ayraçları, kaçışlı
+ayraçlar hepsi kabul ediliyor) — ama bilinen GERÇEKTEN bozuk `mm/\m\m/yyyy` kalıbı (gün bilgisi
+tamamen kayıp, ekranda "08.mm.2026" gibi görünen) hâlâ YAKALANIYOR (bu kalıp gün bileşeniyle
+BAŞLAMADIĞI için yapısal kontrolden geçemiyor). Güncel kodu çektiğiniz halde bu uyarı hâlâ çıkıyorsa,
+bu artık gerçek bir sorunun işaretidir — hücreyi Excel'de elle kontrol edin (bkz. yukarıdaki madde).
