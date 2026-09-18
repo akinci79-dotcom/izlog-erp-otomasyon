@@ -240,13 +240,69 @@ Konsolda böyle bir güncelleme olduğunda şunu görürsünüz:
 [Excel] Filo Analizi: Araç Tipi Performansı'na 2 yeni araç tipi eklendi (Lowbed, Panelvan).
 ```
 
-**Not — benzer risk taşıyabilecek diğer sayfalar:** Bu proje "statik kategori listesi + SUMIF, veri
-büyüdükçe büyümüyor" sınıfından bir sorunu şimdiye kadar üç kez (Zarar Detay, VERİ/Filo Detay tablo
-kapasitesi, şimdi Araç Tipi Performansı) çözdü. Workbook'ta ayrıca "Şube KZ", "Müşteri KZ", "Sakarya
-Özet", "Konya Özet", "Karaman Özet", "İzmir Özet", "İthalat-İhracat Özet" gibi sayfalar da var — bunlar
-da benzer bir statik kategori listesi + SUMIF deseni kullanıyorsa (yeni bir şube/müşteri çıktığında
-aynı risk), aynı yaklaşım (başlık arama + eksik kategori tespiti + satır ekleme) onlara da
-uygulanabilir. Bu henüz yapılmadı (kapsam dışı) — ihtiyaç olursa bildirin.
+### Yeni şablon (Ağustos 2026+) — Excel formülleri ile otomatik Özet + Zarar Detay
+
+Ağustos 2026 raporunda manuel tablolar **dinamik dizi formülleriyle** (LET, LAMBDA,
+MAP, TAKE, ANCHORARRAY) Tablo5'e bağlandı. Otomasyon artık yalnızca **VERİ + Filo
+Detay** yazar ve pivotları yeniler; Özet ve Zarar Detay Excel'de kendini günceller.
+
+| Blok | Nasıl çalışır |
+|---|---|
+| Şube Performansı | A7 — UNIQUE(PROJE_KODU) + SUMIF, Genel Toplam dahil |
+| Yönetim Alarmları | Zarar Detay!A5 spill'inden Kiralık/Tedarikçi toplamı |
+| Mülkiyet Performansı | COUNTIF/SUMIF(Tablo5[MÜLKİYET], …) |
+| En Kârlı Müşteriler | A43 — top-5 SORTBY kâr |
+| En Kârlı Rotalar | A52 + en büyük müşteri (B52), sefer/satış/kâr (C52 spill) |
+| Kritik Zarar Rotaları | H52 — rota+müşteri bazında en negatif top-5 |
+| Zarar Detay | A5 — SEVK_NO+MÜLKİYET birleştirme, sevk toplam kâr/zarar < 0 |
+
+**Gereksinim:** Microsoft 365 Excel (dinamik dizi formülleri). Eski Excel sürümlerinde
+çalışmaz.
+
+**ayarlar.py (yeni şablon için):**
+```python
+KPI_ZARAR_DETAY_GUNCELLE = False
+KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = False
+KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = False
+```
+
+Şablon dosyası: `referans/kpi_sablon.xlsx` (Ağustos 2026 raporundan türetildi).
+
+---
+
+### "Özet" sayfası manuel tablolar — ESKİ şablon (Python yedek yolu)
+
+**Geçmişte olan sorun:** "Özet" sayfasının alt bölümündeki tablolar (Şube Performansı, Mülkiyet
+Performansı, En Kârlı Müşteriler, Dönüş Yükü Katkısı, En Kârlı Rotalar, Kritik Zarar Rotaları)
+şablonda **elle yazılmış sabit listelerdi**. VERİ (Tablo5) her ay güncellenince:
+
+- Yeni bir **şube** (PROJE_KODU) listede yoksa o şubenin tüm verisi tablodan kayboluyordu.
+- Müşteri/rota tablolarındaki SUMIF formülleri **sabit müşteri/rota adlarına** bakıyordu — geçen ayın
+  top-5 listesi bu ayın verisini yansıtmıyordu; sefer sayıları bile bazen elle yazılmış sabit
+  rakamlardı.
+
+**Düzeltme:** `kpi_rapor_olustur.py` her çalıştığında `_com_ozet_manuel_tablolari_guncelle`:
+
+1. **Şube / Mülkiyet Performansı** — VERİ'deki benzersiz PROJE_KODU / PLAKA_MULKIYET değerlerini
+   mevcut listeyle karşılaştırır, eksik kategoriler için satır ekler ve COUNTIF/SUMIF formüllerini
+   kopyalar (Araç Tipi Performansı ile aynı desen).
+2. **Top-5 müşteri ve rota blokları** — Python'da VERİ satırlarından sıralama hesaplanır, etiket +
+   sefer/alış/satış/kâr-zarar değerleri doğrudan yazılır; Kâr % gibi türetilmiş sütunlar ilk
+   satırdan `FormulaR1C1` ile kopyalanır.
+
+Konsolda güncelleme olduğunda örnek:
+
+```
+[Excel] Özet/Şube Performansı: 1 yeni kategori eklendi (Adana).
+[Excel] Özet/En Kârlı Müşteriler: 5 satır VERİ analizine göre güncellendi.
+```
+
+`KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = False` ile kapatılabilir; top-N satır sayısı
+`KPI_OZET_SIRALAMA_SATIR_SAYISI` (varsayılan 5) ile ayarlanır.
+
+**Not — pivot özet sayfaları:** "Şube KZ", "Müşteri KZ", "Sakarya Özet", "Konya Özet" vb. sayfalar
+PivotTable çıktısıdır — Tablo5 yenilendiğinde `RefreshAll()` ile güncellenmeleri beklenir. Özet
+sayfasındaki **manuel** tablolar ise yukarıdaki adımla ayrıca yönetilir.
 
 ## Eski analiz raporu (isteğe bağlı)
 

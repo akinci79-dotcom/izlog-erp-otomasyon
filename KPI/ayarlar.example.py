@@ -54,8 +54,11 @@ KPI_ALIS_SUTUN_HARFI = "C"
 KPI_ALIS_SUTUN_GENISLIK = 28
 # İsteğe bağlı: KPI_SUTUN_GENISLIK = {"D": 26, "E": 26}
 
-# Çıktı dosyası — boş bırakılırsa şablon uzantısı kullanılır (.xlsx veya .xlsm)
-# KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx"
+# Çıktı dosyası — varsayılan: KPI_DONEM'den otomatik (örn.
+# "9- Eylül 2026 İzlog Lojistik Raporları.xlsx"). Sabit isim istiyorsanız:
+# KPI_RAPOR_DOSYASI = "ozel_rapor.xlsx"
+# NOT: KPI_RAPOR_DOSYASI = "kpi_rapor.xlsx" eski sabittir; otomatik adlandirma
+# icin tanimlamayin veya satiri silin.
 
 # Şablon başlığı ↔ Oracle kolon eşlemesi (gerekirse)
 # KPI_KOLON_ESLEME = {"Yük No": "YUK_NO", "Satış Tutar": "SATIS_TUTAR"}
@@ -67,12 +70,10 @@ KPI_ALIS_SUTUN_GENISLIK = 28
 #     "Özet": {"A": 14, "B": 32, "C": 28, "D": 18},
 # }
 
-# "Zarar Detay" sayfası (ZararTedarikci/ZararKiralik tabloları) — VERİ'den
-# hesaplanan zarar eden sevkleri her ay otomatik tazeler. Bu sayfa yoksa
-# (şablonunuzda tanımlı değilse) sessizce atlanır. "Özet" sayfasındaki
-# YÖNETİM ALARMLARI kutusu (Toplam zarar büyüklüğü vb.) bu tablolara bağlı
-# olduğu için kapatmanız önerilmez — sadece test amaçlı False yapın.
-KPI_ZARAR_DETAY_GUNCELLE = True
+# "Zarar Detay" sayfası — ESKİ şablonda ZararTedarikci/ZararKiralik tablolarına
+# Python ile yazım. YENİ şablonda (Ağustos 2026+) Zarar Detay!A5 dinamik dizi
+# formülü Tablo5'ten otomatik dolar — bu durumda False bırakın.
+KPI_ZARAR_DETAY_GUNCELLE = False
 # Sayfa/tablo adları farklıysa (varsayılan: "Zarar Detay" / "ZararTedarikci" / "ZararKiralik")
 # KPI_ZARAR_DETAY_SAYFA_ADLARI = ["Zarar Detay"]
 # KPI_ZARAR_TEDARIKCI_TABLO_ADI = "ZararTedarikci"
@@ -83,10 +84,18 @@ KPI_ZARAR_DETAY_GUNCELLE = True
 # aralığı) — VERİ'de o ay GERÇEKTEN görülen araç tiplerini bu listeyle
 # karşılaştırıp EKSİK olanları (ör. "Lowbed", "Panelvan") otomatik satır
 # ekleyerek tamamlar. Sayfa/blok bulunamazsa sessizce atlanır.
-KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = True
+# Yeni şablonda Lowbed/Panelvan zaten var; False = Python satır eklemez.
+KPI_ARAC_TIPI_PERFORMANS_GUNCELLE = False
 # Sayfa adı / blok başlık metni farklıysa (varsayılan: "Filo Analizi" / "Araç Tipi")
 # KPI_FILO_ANALIZ_SAYFA_ADLARI = ["Filo Analizi"]
 # KPI_ARAC_TIPI_PERFORMANS_BASLIK_METNI = "Araç Tipi"
+
+# "Özet" sayfası — ESKİ şablonda Python ile manuel tablo doldurma. YENİ şablonda
+# (Ağustos 2026+) LET/LAMBDA dinamik dizi formülleri Tablo5'ten otomatik
+# güncellenir — bu durumda False bırakın (Python yazımı formülleri bozar).
+KPI_OZET_MANUEL_TABLOLAR_GUNCELLE = False
+# KPI_OZET_SAYFA_ADLARI = ["Özet"]
+# KPI_OZET_SIRALAMA_SATIR_SAYISI = 5  # top-N satır sayısı (müşteri/rota blokları)
 
 # Firma / şube (Uyumsoft VERİ raporu @CoCode@ / @BranchCodes@ — zorunlu)
 CO_CODE = "IZLOG"

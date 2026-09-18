@@ -26,6 +26,14 @@ from openpyxl.worksheet.worksheet import Worksheet
 import ayarlar
 from kpi_kiralk_arac import FILO_DETAY_SUTUNLARI, kiralk_arac_detay_getir, kiralk_arac_semasi_hazir
 from kpi_veri import hucre_degeri, veri_satirlari_getir, veri_semasi_hazir, veri_sql_kaynak_bilgisi
+from kpi_ozet_analiz import (
+    donus_yuku_katki,
+    en_karli_musteriler,
+    en_karli_rotalar,
+    kritik_zarar_rotalari,
+    mulkiyet_kategorileri,
+    sube_kategorileri,
+)
 from kpi_zarar_detay import ZARAR_DETAY_METIN_SUTUNLARI, zarar_eden_sevkleri_hesapla
 from oracle_baglanti import baglanti_yonet
 
@@ -147,12 +155,15 @@ def _cikti_yolu(sablon: Path | None = None, bas: str = "", bit: str = "") -> Pat
     """Çıktı dosyasının yolu. `KPI_RAPOR_DOSYASI` ayarlar.py'de tanımlıysa
     [kullanıcı isteğiyle KALDIRILMADI — elle sabit bir isim isteyen için hâlâ
     öncelikli] o kullanılır. Aksi halde [kullanıcı isteği]: dosya adı rapor
-    dönemine göre OTOMATİK üretilir — örn. tek ay için 'Ağustos 2026 İzlog
-    Lojistik Raporları.xlsx', tam yıl için '2026 İzlog Lojistik Raporları.xlsx',
-    aksi (aralık) durumda '01.08.2026 – 31.08.2026 İzlog Lojistik
-    Raporları.xlsx'. `bas`/`bit` verilmezse (örn. çok eski bir çağrı yeri)
-    eski sabit 'kpi_rapor.xlsx' adına düşer."""
+    dönemine göre OTOMATİK üretilir — örn. tek ay için
+    '8- Ağustos 2026 İzlog Lojistik Raporları.xlsx', tam yıl için
+    '2026 İzlog Lojistik Raporları.xlsx', aksi (aralık) durumda
+    '01.08.2026 – 31.08.2026 İzlog Lojistik Raporları.xlsx'. `bas`/`bit`
+    verilmezse (örn. çok eski bir çağrı yeri) eski sabit 'kpi_rapor.xlsx'
+    adına düşer."""
     dosya = getattr(ayarlar, "KPI_RAPOR_DOSYASI", None)
+    if dosya and Path(str(dosya)).name.lower() in {"kpi_rapor.xlsx", "kpi_rapor.xlsm"}:
+        dosya = None
     if dosya:
         yol = Path(dosya)
         if yol.is_absolute():
@@ -1352,7 +1363,7 @@ def _donem_etiketi(bas: str, bit: str) -> str:
 
     son_gun = calendar.monthrange(bas_d.year, bas_d.month)[1]
     if bas_d.day == 1 and bit_d.day == son_gun and bas_d.month == bit_d.month and bas_d.year == bit_d.year:
-        return f"{ay_adlari[bas_d.month - 1]} {bas_d.year}"
+        return f"{bas_d.month}- {ay_adlari[bas_d.month - 1]} {bas_d.year}"
 
     return f"{bas} – {bit}"
 
@@ -1662,6 +1673,289 @@ def _com_arac_tipi_performans_guncelle(wb, veri_satirlari: list[dict[str, Any]])
     return uyarilar
 
 
+_OZET_SAYFA_ADLARI_VARSAYILAN = ["Özet", "Ozet", "OZET"]
+
+
+def _com_hucre_arama_icerir_bul(
+    sheet, arama_metni: str, max_satir: int = 300, max_sutun: int = 40
+) -> tuple[int, int] | None:
+    """Sayfada normalize edilmiş metni `arama_metni` İÇEREN ilk hücreyi arar."""
+    try:
+        blok = sheet.Range(sheet.Cells(1, 1), sheet.Cells(max_satir, max_sutun)).Value
+    except Exception:
+        return None
+    hedef = _normalize_kolon(arama_metni)
+    if not hedef or not blok:
+        return None
+    for r_ofs, satir in enumerate(blok):
+        if not satir:
+            continue
+        for c_ofs, deger in enumerate(satir):
+            if deger is None:
+                continue
+            hucre_norm = _normalize_kolon(str(deger))
+            if hedef in hucre_norm:
+                return r_ofs + 1, c_ofs + 1
+    return None
+
+
+def _com_baslik_satiri_kolon_indeksi(
+    sheet, header_row: int, baslik_metni: str, max_sutun: int = 60
+) -> int | None:
+    """`header_row` satırında normalize eşleşen sütun numarasını döner."""
+    hedef = _normalize_kolon(baslik_metni)
+    for col in range(1, max_sutun + 1):
+        try:
+            deger = sheet.Cells(header_row, col).Value
+        except Exception:
+            break
+        if deger is None:
+            continue
+        if _normalize_kolon(str(deger)) == hedef:
+            return col
+    return None
+
+
+def _com_kategori_blogu_guncelle(
+    sheet,
+    blok_adi: str,
+    baslik_metni: str,
+    veri_kategorileri: list[str],
+    toplam_etiketi: str = "Genel Toplam",
+) -> list[str]:
+    """Statik kategori listesi + COUNTIF/SUMIF formüllü bloğu VERİ'deki yeni
+    kategorilerle genişletir (Araç Tipi Performansı ile aynı desen)."""
+    uyarilar: list[str] = []
+
+    konum = _com_hucre_arama_baslik_bul(sheet, baslik_metni)
+    if konum is None:
+        return uyarilar
+    header_row, header_col = konum
+
+    kolon_sayisi = _com_baslik_satiri_sutun_sayisi(sheet, header_row, header_col)
+    if kolon_sayisi <= 1:
+        return uyarilar
+
+    veri_ilk_satir = header_row + 1
+    mevcut_liste, son_dolu_satir = _com_dikey_liste_oku(
+        sheet, veri_ilk_satir, header_col, max_satir=200
+    )
+    if not mevcut_liste:
+        uyarilar.append(f"{blok_adi}: mevcut kategori listesi boş — atlandı.")
+        return uyarilar
+
+    mevcut_norm = {_normalize_kolon(v) for v in mevcut_liste}
+    eksik = [k for k in veri_kategorileri if _normalize_kolon(k) not in mevcut_norm]
+    if not eksik:
+        return uyarilar
+
+    eksik_sayisi = len(eksik)
+    eski_veri_son_satir = son_dolu_satir
+    kaynak_satir = veri_ilk_satir
+
+    try:
+        _com_tablo_satir_ekle(
+            sheet, None, blok_adi, veri_ilk_satir, eski_veri_son_satir, eksik_sayisi
+        )
+    except Exception as exc:
+        uyarilar.append(
+            f"{blok_adi}: {eksik_sayisi} yeni kategori ({', '.join(eksik)}) "
+            f"eklenemedi ({exc})."
+        )
+        return uyarilar
+
+    yeni_veri_son_satir = eski_veri_son_satir + eksik_sayisi
+    isim_araligi = sheet.Range(
+        sheet.Cells(eski_veri_son_satir, header_col),
+        sheet.Cells(yeni_veri_son_satir - 1, header_col),
+    )
+    _com_araliga_yaz(isim_araligi, [(t,) for t in eksik])
+
+    formul_sol = header_col + 1
+    formul_sag = header_col + kolon_sayisi - 1
+    for col in range(formul_sol, formul_sag + 1):
+        try:
+            kaynak_formul = sheet.Cells(kaynak_satir, col).FormulaR1C1
+            sheet.Range(
+                sheet.Cells(eski_veri_son_satir, col),
+                sheet.Cells(yeni_veri_son_satir - 1, col),
+            ).FormulaR1C1 = kaynak_formul
+        except Exception as exc:
+            uyarilar.append(f"{blok_adi}: sütun {get_column_letter(col)} formül kopyalanamadı: {exc}")
+
+    try:
+        _com_alt_toplam_formulu_dogrula_ve_duzelt(
+            sheet, blok_adi, formul_sol, formul_sag,
+            eski_veri_son_satir, yeni_veri_son_satir, toplam_etiketi=toplam_etiketi,
+        )
+    except Exception as exc:
+        uyarilar.append(f"{blok_adi}: dip toplam formülü düzeltilemedi: {exc}")
+
+    _progress(f"  [Excel] {blok_adi}: {eksik_sayisi} yeni kategori eklendi ({', '.join(eksik)}).")
+    return uyarilar
+
+
+def _com_siralama_blogu_guncelle(
+    sheet,
+    blok_adi: str,
+    bolum_baslik: str,
+    etiket_baslik: str,
+    satirlar: list[dict[str, Any]],
+    *,
+    max_satir: int = 5,
+) -> list[str]:
+    """Top-N sıralama bloğunu VERİ analiziyle yeniden doldurur.
+
+    Şablondaki SUMIF formülleri müşteri/rota adını SABİT metin olarak içerdiği
+    için sadece etiket hücresini değiştirmek yetmez — etiket sütununa yeni
+    değerler yazılır, sayısal sütunlara Python'dan hesaplanan değerler basılır,
+    kalan formül sütunları (Kâr % vb.) ilk satırdan FormulaR1C1 ile kopyalanır.
+    """
+    uyarilar: list[str] = []
+
+    bolum = _com_hucre_arama_icerir_bul(sheet, bolum_baslik)
+    if bolum is None:
+        return uyarilar
+
+    bolum_satir, _ = bolum
+    header_row: int | None = None
+    header_col: int | None = None
+    for ara_satir in range(bolum_satir, min(bolum_satir + 6, 300)):
+        col = _com_baslik_satiri_kolon_indeksi(sheet, ara_satir, etiket_baslik)
+        if col is not None:
+            header_row = ara_satir
+            header_col = col
+            break
+    if header_row is None or header_col is None:
+        uyarilar.append(f"{blok_adi}: '{etiket_baslik}' sütun başlığı bulunamadı.")
+        return uyarilar
+
+    kolon_sayisi = _com_baslik_satiri_sutun_sayisi(sheet, header_row, header_col)
+    if kolon_sayisi <= 1:
+        return uyarilar
+
+    baslik_esleme: dict[str, int] = {}
+    for col in range(header_col, header_col + kolon_sayisi):
+        try:
+            baslik = sheet.Cells(header_row, col).Value
+        except Exception:
+            continue
+        if baslik is None:
+            continue
+        baslik_esleme[_normalize_kolon(str(baslik))] = col
+
+    veri_ilk_satir = header_row + 1
+    mevcut_liste, son_dolu_satir = _com_dikey_liste_oku(
+        sheet, veri_ilk_satir, header_col, max_satir=max_satir + 2
+    )
+    kapasite = max(len(mevcut_liste), max_satir) if mevcut_liste else max_satir
+    if not mevcut_liste and max_satir <= 0:
+        return uyarilar
+
+    kaynak_satir = veri_ilk_satir
+    sefer_col = baslik_esleme.get("SEFER")
+    alis_col = baslik_esleme.get("ALIS") or baslik_esleme.get("ALIS_TUTAR")
+    satis_col = baslik_esleme.get("SATIS") or baslik_esleme.get("SATIS_TUTAR")
+    kar_col = (
+        baslik_esleme.get("KAR_ZARAR")
+        or baslik_esleme.get("KAR_ZARAR_TUTAR")
+        or baslik_esleme.get("NET_KAR_ZARAR")
+    )
+
+    formul_sutunlari: list[int] = []
+    for col in range(header_col + 1, header_col + kolon_sayisi):
+        if col in (sefer_col, alis_col, satis_col, kar_col):
+            continue
+        formul_sutunlari.append(col)
+
+    yazilacak = satirlar[:kapasite]
+    for i in range(kapasite):
+        row = veri_ilk_satir + i
+        if i < len(yazilacak):
+            satir = yazilacak[i]
+            sheet.Cells(row, header_col).Value = satir.get("etiket")
+            if sefer_col:
+                sheet.Cells(row, sefer_col).Value = satir.get("sefer")
+            if alis_col:
+                sheet.Cells(row, alis_col).Value = satir.get("alis")
+            if satis_col:
+                sheet.Cells(row, satis_col).Value = satir.get("satis")
+            if kar_col:
+                sheet.Cells(row, kar_col).Value = satir.get("kar_zarar")
+        else:
+            sheet.Cells(row, header_col).Value = None
+            for col in (sefer_col, alis_col, satis_col, kar_col):
+                if col:
+                    sheet.Cells(row, col).Value = None
+
+        for col in formul_sutunlari:
+            try:
+                kaynak_formul = sheet.Cells(kaynak_satir, col).FormulaR1C1
+                if kaynak_formul:
+                    sheet.Cells(row, col).FormulaR1C1 = kaynak_formul
+            except Exception:
+                pass
+
+    _progress(
+        f"  [Excel] {blok_adi}: {len(yazilacak)} satır VERİ analizine göre güncellendi."
+    )
+    return uyarilar
+
+
+def _com_ozet_manuel_tablolari_guncelle(
+    wb, veri_satirlari: list[dict[str, Any]]
+) -> list[str]:
+    """Özet sayfasındaki manuel SUMIF/COUNTIF tablolarını VERİ'den tazeler."""
+    uyarilar: list[str] = []
+
+    if getattr(ayarlar, "KPI_OZET_MANUEL_TABLOLAR_GUNCELLE", True) is False:
+        return uyarilar
+
+    sayfa_adlari = getattr(ayarlar, "KPI_OZET_SAYFA_ADLARI", _OZET_SAYFA_ADLARI_VARSAYILAN)
+    ws = _excel_sayfa_bul(wb, sayfa_adlari)
+    if ws is None:
+        return uyarilar
+
+    top_n = int(getattr(ayarlar, "KPI_OZET_SIRALAMA_SATIR_SAYISI", 5))
+
+    try:
+        uyarilar.extend(
+            _com_kategori_blogu_guncelle(
+                ws, "Özet/Şube Performansı", "Şube", sube_kategorileri(veri_satirlari)
+            )
+        )
+    except Exception as exc:
+        uyarilar.append(f"Özet/Şube Performansı: {exc}")
+
+    try:
+        uyarilar.extend(
+            _com_kategori_blogu_guncelle(
+                ws, "Özet/Mülkiyet Performansı", "Mülkiyet",
+                mulkiyet_kategorileri(veri_satirlari), toplam_etiketi="Genel Toplam",
+            )
+        )
+    except Exception as exc:
+        uyarilar.append(f"Özet/Mülkiyet Performansı: {exc}")
+
+    siralama_bloklari = [
+        ("Özet/En Kârlı Müşteriler", "EN COK KAR", "Müşteri", en_karli_musteriler),
+        ("Özet/Dönüş Yükü Katkısı", "DONUS YUKU", "Müşteri", donus_yuku_katki),
+        ("Özet/En Kârlı Rotalar", "EN KARLI ROTA", "Rota", en_karli_rotalar),
+        ("Özet/Kritik Zarar Rotaları", "KRITIK ZARAR", "Rota", kritik_zarar_rotalari),
+    ]
+    for blok_adi, bolum, etiket, hesapla in siralama_bloklari:
+        try:
+            uyarilar.extend(
+                _com_siralama_blogu_guncelle(
+                    ws, blok_adi, bolum, etiket, hesapla(veri_satirlari, top_n), max_satir=top_n
+                )
+            )
+        except Exception as exc:
+            uyarilar.append(f"{blok_adi}: {exc}")
+
+    return uyarilar
+
+
 def _excel_uygulama_ac():
     import win32com.client  # type: ignore
 
@@ -1888,6 +2182,13 @@ def _excel_sablon_doldur(
             uyarilar.extend(arac_tipi_uyarilari)
         except Exception as exc:
             uyarilar.append(f"Filo Analizi Araç Tipi Performansı güncelleme: {exc}")
+
+        _progress("  [Excel] Özet sayfası manuel tablolar güncelleniyor...")
+        try:
+            ozet_uyarilari = _com_ozet_manuel_tablolari_guncelle(wb, veri_satirlari)
+            uyarilar.extend(ozet_uyarilari)
+        except Exception as exc:
+            uyarilar.append(f"Özet manuel tablolar güncelleme: {exc}")
 
         if pivot_yenile:
             _progress("  [Excel] Pivotlar yenileniyor...")
